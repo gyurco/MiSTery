@@ -102,10 +102,10 @@ end
 // ==================== output timing generation ====================
 // ==================================================================
 
-wire [10:0] hcnt_out_rst = (adjust_x > 0)?(adjust_x-10'd1):(hs_max+adjust_x);
+wire [10:0] hcnt_out_rst = (adjust_x < 0)?(10'd0-adjust_x-10'd1):(hs_max-adjust_x);
 reg [10:0] hcnt_out;
 
-wire [9:0] vcnt_out_rst = (adjust_y > 0)?(adjust_y-9'd1):(vs_max+adjust_y);
+wire [9:0] vcnt_out_rst = (adjust_y < 0)?(9'd0-adjust_y-9'd1):(vs_max-adjust_y);
 reg [9:0] vcnt_out;
 
 always @(posedge clk) begin
