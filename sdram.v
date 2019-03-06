@@ -27,7 +27,7 @@
 module sdram (
 
 	// interface to the MT48LC16M16 chip
-	inout [15:0]  		sd_data,    // 16 bit bidirectional data bus
+	inout  reg [15:0]	sd_data,    // 16 bit bidirectional data bus
 	output reg [12:0]	sd_addr,    // 13 bit multiplexed address bus
 	output reg [1:0] 	sd_dqm,     // two byte masks
 	output reg [1:0] 	sd_ba,      // two banks
@@ -118,9 +118,6 @@ assign sd_ras = sd_cmd[2];
 assign sd_cas = sd_cmd[1];
 assign sd_we  = sd_cmd[0];
 
-// drive ram data lines when writing, set them as inputs otherwise
-assign sd_data = we?din:16'bZZZZZZZZZZZZZZZZ;
-
 // 4 byte read burst goes through four addresses
 reg [1:0] burst_addr;
 
@@ -129,7 +126,7 @@ reg [15:0] data_latch;
 always @(posedge clk_128) begin
 	// permanently latch ram data to reduce delays
 	data_latch <= sd_data;
-	
+	sd_data <= 16'bZZZZZZZZZZZZZZZZ;
 	sd_cmd <= CMD_INHIBIT;  // default: idle
 
 	if(reset != 0) begin
@@ -171,6 +168,7 @@ always @(posedge clk_128) begin
 			// CAS phase 
 			if(t == STATE_CMD_CONT) begin
 				sd_cmd <= we?CMD_WRITE:CMD_READ;
+				if (we) sd_data <= din;
 				sd_addr <= { 4'b0010, addr[22], addr[7:0] };  // auto precharge
 			end
 			
