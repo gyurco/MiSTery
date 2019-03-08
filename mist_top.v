@@ -612,7 +612,7 @@ clock clock (
   .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
   .c0           (clk_128          ), // output clock c0 (128MHz)
   .c1           (clk_32           ), // output clock c1 (32MHz)
-  .c2           (SDRAM_CLK        ), // output clock c2 (128MHz)
+  .c3           (SDRAM_CLK        ), // output clock c3 (128MHz)
   .locked       (pll_locked       )  // pll locked output
 );
 
