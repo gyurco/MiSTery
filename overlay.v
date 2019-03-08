@@ -59,7 +59,8 @@ reg vsD, vsD2;
 reg [9:0] vs_low, vs_high;
 wire vs_pol = vs_high < vs_low;
 
-always @(posedge hs_in) begin
+always @(posedge pclk) begin
+  if(hsD && !hsD2) begin
 	// bring vsync into local clock domain
 	vsD <= vs_in;
 	vsD2 <= vsD; 
@@ -78,6 +79,7 @@ always @(posedge hs_in) begin
 	
 	else
 		v_cnt <= v_cnt + 10'd1;
+  end
 end
 
 parameter X = 13;

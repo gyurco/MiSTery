@@ -219,7 +219,6 @@ wire [3:0] sd_r, sd_g, sd_b;
 
 scandoubler scandoubler (
 	 .clk       ( clk_32     ), // 33.000 MHz
-	 .clk_16    ( clk_16     ),
 
 	 .scanlines ( scanlines  ),
 			 
@@ -253,8 +252,6 @@ wire vga_hs_pol, vga_vs_pol;
 // only use pal56 modes if the scandoubler is being used
 wire use_pal56 = pal56 && !scandoubler_disable;
 
-wire clk_16;
-   
 shifter shifter (
 	 .clk       ( clk_32        ), // 31.875 MHz
 	 .bus_cycle ( bus_cycle     ), // to sync memory access with cpu
@@ -285,7 +282,6 @@ shifter shifter (
 	 // sync polarity to be used on vga
 	 .vga_vs_pol ( vga_vs_pol   ),
 	 .vga_hs_pol ( vga_hs_pol   ),
-	 .clk_16     ( clk_16       ),
 
 	 // system config
 	 .pal56     ( use_pal56     ), // use VGA compatible 56hz for PAL

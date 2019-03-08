@@ -67,7 +67,7 @@ wire 		vs_pol = vs_high < vs_low;
 wire [10:0] 	dsp_height = vs_pol?vs_low:vs_high;
    
 reg hsD, vsD;
-always @(negedge clk) begin
+always @(posedge clk) begin
    // check if hsync has changed
    hsD <= hs;
    if(hsD != hs) begin

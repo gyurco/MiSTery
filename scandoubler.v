@@ -21,7 +21,6 @@
 module scandoubler (
   // system interface
   input 	   clk,     // 31.875 MHz
-  input            clk_16,  // from shifter
 
   // scanlines (00-none 01-25% 10-50% 11-75%)
   input [1:0] 	   scanlines,
@@ -95,11 +94,13 @@ reg [11:0]  sd_out;
 
 // 2 lines of 1024 pixels 3*4 bit RGB
 reg [11:0] sd_buffer [2047:0];
+reg        clk_16;
 
 // use alternating sd_buffers when storing/reading data   
 reg vsD;
 reg line_toggle;
-always @(negedge clk_16) begin
+always @(posedge clk) begin
+   clk_16 <= ~clk_16;
    vsD <= vs_in;
 
    if(vsD != vs_in) 
@@ -110,7 +111,7 @@ always @(negedge clk_16) begin
      line_toggle <= !line_toggle;
 end
    
-always @(negedge clk_16)
+always @(posedge clk)
    sd_buffer[{line_toggle, hcnt}] <= { r_in, g_in, b_in };
    
 // ==================================================================
@@ -126,19 +127,20 @@ reg [9:0] hs_rise;
 reg [9:0] hcnt;
 reg hsD;
    
-always @(negedge clk_16) begin
-   hsD <= hs_in;
+always @(posedge clk) begin
+    if (clk_16) begin
+        hsD <= hs_in;
 
-   // falling edge of hsync indicates start of line
-   if(hsD && !hs_in) begin
-      hs_max <= hcnt;
-      hcnt <= 10'd0;
-   end else
-     hcnt <= hcnt + 10'd1;
+        // falling edge of hsync indicates start of line
+        if(hsD && !hs_in) begin
+            hs_max <= hcnt;
+            hcnt <= 10'd0;
+        end else
+            hcnt <= hcnt + 10'd1;
 
-   // save position of rising edge
-   if(!hsD && hs_in)
-     hs_rise <= hcnt;
+        // save position of rising edge
+        if(!hsD && hs_in) hs_rise <= hcnt;
+    end
 end
    
 // ==================================================================

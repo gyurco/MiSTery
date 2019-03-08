@@ -53,7 +53,6 @@ module shifter (
 
   output 	    		vga_hs_pol, // sync polarity to be used on vga
   output 	    		vga_vs_pol,
-  output          	clk_16,     // 16Mhz clock for scan doubler
  
   // signals not affected by scan doubler for internal use like irqs
   output 	    		st_de,
@@ -80,9 +79,6 @@ always @(posedge clk) begin
      t <= t + 2'd1;
 end
 
-// give 16Mhz clock to scan doubler
-assign clk_16 = t[0];
-     
 // create internal bus_cycle signal which is stable on the positive clock
 // edge and extends the previous state by half a 32 Mhz clock cycle
 reg [3:0] bus_cycle_L;

@@ -67,7 +67,7 @@ reg [9:0] vs_fall;
 wire [10:0] hs_max = hs_fall;   
 wire [9:0] vs_max = vs_fall;   
 
-always @(negedge clk) begin
+always @(posedge clk) begin
    hsD <= hs_in;
    vsD <= vs_in;
 
