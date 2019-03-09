@@ -256,18 +256,20 @@ wire viking_enable = (system_ctrl[28] && viking_mem_ok) || steroids;
 // are considered a valid sign that the driver is working. Without driver
 // others may also probe that area which is why we want to see 256 accesses
 reg [7:0] viking_in_use;
+reg       viking_active;
 
 always @(posedge clk_32) begin
-	if(peripheral_reset)
+	if(peripheral_reset) begin
 		viking_in_use <= 8'h00;
-	else
+		viking_active <= 0;
+	end else begin
 		// cpu writes to $c0xxxx or $e80000
 		if(clkena && !br && (tg68_busstate == 2'b11) && viking_enable && 
 			(tg68_adr[23:18] == (steroids?6'b111010:6'b110000)) && (viking_in_use != 8'hff))
 			viking_in_use <= viking_in_use + 8'h01;
+		viking_active <= (viking_in_use == 8'hff);
+	end
 end
-
-wire viking_active = (viking_in_use == 8'hff);
 
 video video (
 	.clk_128      	(clk_128    ),
