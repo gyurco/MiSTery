@@ -58,12 +58,12 @@ reg [10:0] 	vcnt;
 
 reg [10:0] 	hs_high;
 reg [10:0] 	hs_low;
-wire 		hs_pol = hs_high < hs_low;
+reg         hs_pol;
 wire [10:0] 	dsp_width = hs_pol?hs_low:hs_high;
    
 reg [10:0] 	vs_high;
 reg [10:0] 	vs_low;
-wire 		vs_pol = vs_high < vs_low;
+reg         vs_pol;
 wire [10:0] 	dsp_height = vs_pol?vs_low:vs_high;
    
 reg hsD, vsD;
@@ -71,6 +71,10 @@ always @(posedge clk) begin
    // check if hsync has changed
    hsD <= hs;
    if(hsD != hs) begin
+      // this lags by one hsync, but registering it
+	  // gives better timing properties at 128MHz
+      hs_pol <= hs_high < hs_low;
+
       if(hs)  hs_low  <= hcnt;
       else    hs_high <= hcnt;
       hcnt <= 11'd0;
@@ -79,6 +83,7 @@ always @(posedge clk) begin
 	 // check if vsync has changed
 	 vsD <= vs;
 	 if(vsD != vs) begin
+	    vs_pol = vs_high < vs_low;
 	    if(vs)  vs_low  <= vcnt;
 	    else    vs_high <= vcnt;
 	    vcnt <= 11'd0;
@@ -140,8 +145,8 @@ end
 // ------------------------------- OSD position ------------------------------
 // ---------------------------------------------------------------------------
 
-wire expand_x = ((dsp_width > 1000)&&(dsp_height < 1000))?1:0;
-wire expand_y = (dsp_height > 400)?1:0;
+wire expand_x = ((dsp_width > 1000)&&(dsp_height < 1000));
+wire expand_y = (dsp_height > 400);
    
 wire [10:0] width  = expand_x?10'd512:10'd256;
 wire [10:0] height = expand_y?10'd128:10'd64;
