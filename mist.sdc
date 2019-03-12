@@ -109,6 +109,10 @@ set_multicycle_path -from {TG68KdotC_Kernel:tg68k|*} -hold 1
 set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 4
 set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 3
 
+# clk8 -> CPU 32 -> 2x
+set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -setup 2
+set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -hold 1
+
 #**************************************************************
 # Set Maximum Delay
 #**************************************************************

@@ -32,7 +32,7 @@ set_global_assignment -name DEVICE_FILTER_PIN_COUNT 144
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "NO HEAT SINK WITH STILL AIR"
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
 set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
-set_global_assignment -name FITTER_EFFORT "AUTO FIT"
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
 set_global_assignment -name STRATIX_CONFIGURATION_DEVICE EPCS4
 set_global_assignment -name CYCLONEII_RESERVE_NCEO_AFTER_CONFIGURATION "USE AS REGULAR IO"
 set_global_assignment -name RESERVE_ASDO_AFTER_CONFIGURATION "AS INPUT TRI-STATED"
@@ -123,7 +123,7 @@ set_location_assignment PIN_43 -to SDRAM_CLK
 set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE SPEED
 set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name ENABLE_SIGNALTAP OFF
-set_global_assignment -name USE_SIGNALTAP_FILE tg68k.stp
+set_global_assignment -name USE_SIGNALTAP_FILE out/dma.stp
 set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT NORMAL
@@ -313,6 +313,8 @@ set_instance_assignment -name CURRENT_STRENGTH_NEW 8MA -to AUDIO_L
 set_instance_assignment -name CURRENT_STRENGTH_NEW 8MA -to AUDIO_R
 
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to UART_RX
+set_location_assignment PLL_1 -to clock|altpll_component|auto_generated|pll1
+set_global_assignment -name VERILOG_FILE data_io.v
 set_global_assignment -name SYSTEMVERILOG_FILE rgb2ypbpr.sv
 set_global_assignment -name VERILOG_FILE sigma_delta_dac.v
 set_global_assignment -name SOURCE_FILE font8x8.memh
@@ -360,5 +362,7 @@ set_global_assignment -name SIGNALTAP_FILE cache.stp
 set_global_assignment -name VERILOG_FILE io_fifo.v
 set_global_assignment -name VERILOG_FILE mfp_hbit16.v
 set_global_assignment -name VERILOG_FILE audio.v
-set_location_assignment PLL_1 -to clock|altpll_component|auto_generated|pll1
+set_global_assignment -name SIGNALTAP_FILE out/clk.stp
+set_global_assignment -name SEED 1
+set_global_assignment -name SIGNALTAP_FILE out/dma.stp
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

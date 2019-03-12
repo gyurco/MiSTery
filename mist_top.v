@@ -549,6 +549,39 @@ audio audio (
 	.audio_l ( AUDIO_L )
 );
 
+wire        dio_addr_strobe;
+wire [31:0] dio_addr_reg;
+wire        dio_data_in_strobe;
+wire [15:0] dio_data_in_reg;
+wire        dio_data_out_strobe;
+wire [15:0] dio_data_out_reg;
+wire        dio_dma_ack;
+wire  [7:0] dio_dma_status;
+wire        dio_dma_nak;
+wire  [7:0] dio_status_in;
+wire  [4:0] dio_status_index;
+
+data_io data_io (
+	.sck		     ( SPI_SCK             ),
+	.ss			     ( SPI_SS2             ),
+	.sdi   		     ( SPI_DI              ),
+	.sdo             ( dio_sdo             ),
+	.clk		     ( clk_32              ),
+	.ctrl_out        ( system_ctrl         ),
+	.video_adj	     ( video_adj           ),
+	.addr_strobe     ( dio_addr_strobe     ),
+	.addr_reg        ( dio_addr_reg        ),
+	.data_in_strobe  ( dio_data_in_strobe  ),
+	.data_in_reg     ( dio_data_in_reg     ),
+	.data_out_strobe ( dio_data_out_strobe ),
+	.data_out_reg    ( dio_data_out_reg    ),
+	.dma_ack         ( dio_dma_ack         ),
+	.dma_status      ( dio_dma_status      ),
+	.dma_nak         ( dio_dma_nak         ),
+	.status_in       ( dio_status_in       ),
+	.status_index    ( dio_status_index    )
+);
+
 // floppy_sel is active low
 wire wr_prot = (floppy_sel == 2'b01)?system_ctrl[7]:system_ctrl[6];
 
@@ -564,15 +597,19 @@ dma dma (
 	.bus_cycle  (bus_cycle     ),
 	.irq      	(dma_irq     	),
 	.turbo		(1'b0				),
-	
-	.ctrl_out   (system_ctrl   ),
-	.video_adj	(video_adj		),
 
-	// spi
-	.sdi   		(SPI_DI			),
-	.sck  		(SPI_SCK			),
-	.ss    		(SPI_SS2			),
-	.sdo			(dma_sdo			),
+	// IO controller interface
+	.dio_addr_strobe     ( dio_addr_strobe     ),
+	.dio_addr_reg        ( dio_addr_reg        ),
+	.dio_data_in_strobe  ( dio_data_in_strobe  ),
+	.dio_data_in_reg     ( dio_data_in_reg     ),
+	.dio_data_out_strobe ( dio_data_out_strobe ),
+	.dio_data_out_reg    ( dio_data_out_reg    ),
+	.dio_dma_ack         ( dio_dma_ack         ),
+	.dio_dma_status      ( dio_dma_status      ),
+	.dio_dma_nak         ( dio_dma_nak         ),
+	.dio_status_in       ( dio_status_in       ),
+	.dio_status_index    ( dio_status_index    ),
 
 	// cpu interface
 	.cpu_din      (tg68_dat_out[15:0]),
@@ -582,13 +619,12 @@ dma dma (
 	.cpu_lds      (tg68_lds    ),
 	.cpu_rw       (tg68_rw     ),
 	.cpu_dout     (dma_data_out),
-	
+
 	// additional signals for floppy/acsi interface
 	.fdc_wr_prot (wr_prot),
 	.drv_sel  (floppy_sel  ),
 	.drv_side (floppy_side ),
 	.acsi_enable (system_ctrl[17:10]),
-
 
 	// ram interface
 	.ram_br        (dma_br     ),
@@ -1075,13 +1111,12 @@ sdram sdram (
 );
 
 // multiplex spi_do, drive it from user_io if that's selected, drive
-// it from minimig if it's selected and leave it open else (also
+// it from data_io if it's selected and leave it open else (also
 // to be able to monitor sd card data directly)
-wire dma_sdo;
 wire user_io_sdo;
 
 assign SPI_DO = (CONF_DATA0 == 1'b0)?user_io_sdo:
-	((SPI_SS2 == 1'b0)?dma_sdo:1'bZ);
+	((SPI_SS2 == 1'b0)?dio_sdo:1'bZ);
 
 wire [31:0] system_ctrl;
 
