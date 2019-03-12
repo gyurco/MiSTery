@@ -96,7 +96,7 @@ wire motor_on = (motor_on_counter != 0);
 wire motor_spin_up_done = motor_on && (motor_on_counter <= 16000000);
 wire motor_start_or_force = motor_start || motor_force_spinup;
 
-always @(posedge clk or posedge motor_start_or_force) begin
+always @(posedge clk) begin
    if(motor_start_or_force)
      // motor runs for 2 seconds if it was already on. it rus for one
      // more second if if wasn't on yet (spin up)
