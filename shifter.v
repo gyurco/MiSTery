@@ -70,7 +70,7 @@ localparam STATE_DISP   = 2'd3;
 // ---------------------------------------------------------------------------
 
 reg [1:0] 	    t;
-always @(posedge clk) begin
+always @(negedge clk) begin
    // 32Mhz counter synchronous to 8 Mhz clock
    // force counter to pass state 0 exactly after the rising edge of clk_reg (8Mhz)
    if(((t == 2'd3)  && ( cpu_clk == 0)) ||
@@ -100,8 +100,8 @@ always @(negedge clk)
 // of the line, so we delay by 28+4=32
 reg [31:0] st_de_delay;
 assign st_de = st_de_delay[31];
-always @(posedge t[1])
-   st_de_delay <= { st_de_delay[30:0], ~de };
+always @(posedge clk)
+   if (t==2'b01) st_de_delay <= { st_de_delay[30:0], ~de };
  
 always @(posedge clk) begin
    st_hs <= h_sync;
@@ -164,7 +164,7 @@ wire [9:0] t10_v_border_top  = config_string[19:10];
 wire [9:0] t11_v_end         = config_string[9:0];
 
 // default video mode is monochrome
-parameter DEFAULT_MODE = 3'd2;
+parameter DEFAULT_MODE = 2'd2;
 
 // shiftmode register
 reg [1:0] shmode;
@@ -250,7 +250,7 @@ end
 // STE video address write signal is evaluated inside memory engine
 wire ste_vaddr_write = ste && cpu_sel && !cpu_rw && !cpu_lds;
  
-always @(negedge cpu_clk) begin
+always @(posedge clk) begin
 	if(cpu_reset) begin
 		_v_bas_ad <= BASE_ADDR;
 		shmode <= DEFAULT_MODE;   // default video mode 2 => mono
@@ -358,10 +358,10 @@ wire [3:0] stvid_b = mono?mono_rgb:color_b;
 reg [15:0] shift_0, shift_1, shift_2, shift_3;
 
 // clock divider to generate the mid and low rez pixel clocks
-wire   pclk = low?t[1]:mid?t[0]:clk;
-
+wire   pclk_en = low?t==2'b10:mid?~t[0]:1'b1;
 // use variable dot clock
-always @(posedge pclk) begin
+always @(posedge clk) begin
+ if (pclk_en) begin
    hs <= ~h_sync;
    vs <= ~v_sync;
 
@@ -390,6 +390,7 @@ always @(posedge pclk) begin
 	shift_2 <= { shift_2[14:0], 1'b0 };
 	shift_3 <= { shift_3[14:0], 1'b0 };
    end
+ end
 end
 
 // ---------------------------------------------------------------------------
@@ -638,7 +639,8 @@ wire [9:0] v_event = t2_h_sync;
 
 reg v_sync, h_sync;
 
-always @(posedge pclk) begin
+always @(posedge clk) begin
+  if (pclk_en) begin
 	// ------------- horizontal ST timing generation -------------
 	// Run st timing at full speed if no scan doubler is being used. Otherwise run
 	// it at half speed
@@ -678,6 +680,7 @@ always @(posedge pclk) begin
 		if((vcnt == t7_v_blank_bot) || (vcnt == t9_v_blank_top))       v_state <= STATE_BLANK;
 		if( vcnt == de_v_start)                                        v_state <= STATE_DISP;
 	end
+  end
 end
 
 endmodule
