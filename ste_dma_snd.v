@@ -76,33 +76,40 @@ assign read = (bus_cycle == 0) && hsync && !fifo_full && dma_enable;
 // ---------------------------------------------------------------------------
 
 // dma sound internally works on a 2MHz clock
-reg [1:0] sclk;
-always @(posedge clk)
-	sclk <= sclk + 2'd1;
-
-wire clk_2 = sclk[1];  // 2Mhz
+reg       clk2_en;
+reg [3:0] sclk_cnt;
+always @(posedge clk32) begin
+	sclk_cnt <= sclk_cnt + 1'd1;
+	clk2_en <= !sclk_cnt;
+end
 
 // divide 8MHz down to sample rate base frequency of 55066hz
 reg a2base;
 reg [31:0] a2base_cnt;
+reg a2base_en;
 always @(posedge clk) begin
+   a2base_en <= 0;
    if(a2base_cnt < 32'd4000000)
      a2base_cnt <= a2base_cnt + 32'd50066;
    else begin
       a2base_cnt <= a2base_cnt - 32'd4000000 + 32'd50066;
       a2base <= !a2base;
+	  if (~a2base) a2base_en <= 1;
    end
 end
    
 // generate current audio clock
 reg [2:0] aclk_cnt;
-always @(posedge a2base)
-	aclk_cnt <= aclk_cnt + 3'd1;
+always @(posedge clk) if (a2base_en) aclk_cnt <= aclk_cnt + 3'd1;
 
-wire aclk =  (mode[1:0] == 2'b11)?a2base:        // 50 kHz
-				((mode[1:0] == 2'b10)?aclk_cnt[0]:  // 25 kHz
-				((mode[1:0] == 2'b01)?aclk_cnt[1]:  // 12.5 kHz
-					aclk_cnt[2]));                   // 6.25 kHz
+reg aclk_en;
+always @(posedge clk) begin
+	aclk_en <=  a2base_en & (
+				(mode[1:0] == 2'b11)?a2base_en:       // 50 kHz
+				((mode[1:0] == 2'b10)?!aclk_cnt[0]:   // 25 kHz
+				((mode[1:0] == 2'b01)?!aclk_cnt[1:0]: // 12.5 kHz
+					!aclk_cnt)));                     // 6.25 kHz
+end
 
 // ---------------------------------------------------------------------------
 // ------------------------------- irq generation ----------------------------
@@ -110,9 +117,9 @@ wire aclk =  (mode[1:0] == 2'b11)?a2base:        // 50 kHz
 
 // 74ls164
 reg [7:0] xsint_delay;
-always @(posedge clk_2 or negedge xsint) begin
+always @(posedge clk32 or negedge xsint) begin
 	if(!xsint) xsint_delay <= 8'h00;            // async reset
-	else       xsint_delay <= {xsint_delay[6:0], xsint};
+	else if (clk2_en) xsint_delay <= {xsint_delay[6:0], xsint};
 end
  
 assign xsint_d = xsint_delay[7];
@@ -271,11 +278,11 @@ wire [15:0] fifo_out = fifo[readP];
 wire [7:0] mono_byte = (!byte)?fifo_out[15:8]:fifo_out[7:0];
 
 // empty the fifo at the correct rate
-always @(posedge aclk) begin
+always @(posedge clk) begin
 	if(reset) begin
 		readP <= 2'd0;
 		fifo_underflow <= 12'd0;
-	end else begin
+	end else if (aclk_en) begin
 		// audio data in fifo? play it!
 		if(!fifo_empty) begin
 			if(!mode[2]) begin
