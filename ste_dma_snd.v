@@ -139,7 +139,7 @@ reg [15:0] mw_data_reg, mw_mask_reg;
 // ----------------------------- CPU register read ---------------------------
 // ---------------------------------------------------------------------------
 
-always @(sel, rw, addr, ctrl, snd_bas, snd_adr, snd_end, mode, mw_data_reg, mw_mask_reg) begin
+always @(sel, rw, addr, ctrl, snd_bas, snd_adr, snd_end, mode, mw_data_reg, mw_mask_reg, xsint) begin
 	dout = 16'h0000;
 	
 	if(sel && rw) begin

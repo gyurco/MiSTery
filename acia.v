@@ -137,8 +137,8 @@ assign irq = ikbd_irq || midi_irq;
 
 // ---------------- send acia data to io controller ------------
 
-always @(sel, ds, rw, addr, ikbd_rx_data_available, ikbd_rx_data, ikbd_irq, 
-		midi_rx_data, midi_rx_data_available, midi_tx_empty, midi_irq) begin
+always @(sel, ds, rw, addr, ikbd_status, ikbd_rx_data_available, ikbd_rx_data, ikbd_irq,
+		midi_status, midi_rx_data, midi_rx_data_available, midi_tx_empty, midi_irq) begin
 	dout = 8'h00;
 
 	if(sel && ~ds && rw) begin

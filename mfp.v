@@ -278,10 +278,7 @@ reg [6:0] uart_ctrl;
 reg [7:0] uart_sync_chr;
 
 // cpu read interface
-always @(iack, sel, ds, rw, addr, gpip_cpu_out, aer, ddr, ier, ipr, isr, imr, 
-	vr, serial_data_out_fifo_full, timera_dat_o, timerb_dat_o,
-	timerc_dat_o, timerd_dat_o, timera_ctrl_o, timerb_ctrl_o, timerc_ctrl_o, 
-	timerd_ctrl_o) begin
+always @(*) begin
 
 	dout = 8'd0;
 	if(sel && ~ds && rw) begin

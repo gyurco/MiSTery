@@ -55,10 +55,10 @@ assign cpu_dout = dma_status;
 
 wire [7:0] cmd_code = cmd_parameter[0];
 wire [3:0] parms =
-	((cmd_code >= 8'h00)&&(cmd_code <= 8'h1f))?5:
-	((cmd_code >= 8'h20)&&(cmd_code <= 8'h5f))?9:
-	((cmd_code >= 8'h80)&&(cmd_code <= 8'h9f))?15:
-	11;
+	((cmd_code >= 8'h00)&&(cmd_code <= 8'h1f))?4'd5:
+	((cmd_code >= 8'h20)&&(cmd_code <= 8'h5f))?4'd9:
+	((cmd_code >= 8'h80)&&(cmd_code <= 8'h9f))?4'd15:
+	4'd11;
    
 reg [2:0] target;
 reg [3:0] byte_counter;

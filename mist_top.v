@@ -1113,7 +1113,7 @@ sdram sdram (
 // multiplex spi_do, drive it from user_io if that's selected, drive
 // it from data_io if it's selected and leave it open else (also
 // to be able to monitor sd card data directly)
-wire user_io_sdo;
+wire user_io_sdo, dio_sdo;
 
 assign SPI_DO = (CONF_DATA0 == 1'b0)?user_io_sdo:
 	((SPI_SS2 == 1'b0)?dio_sdo:1'bZ);

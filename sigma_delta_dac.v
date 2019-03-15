@@ -54,7 +54,7 @@ end
 // linear interpolate
 localparam ID=4; // counter size, also 2^ID = interpolation rate
 reg  [ID+0-1:0] int_cnt = 0;
-always @ (posedge clk) int_cnt <= #1 int_cnt + 'd1;
+always @ (posedge clk) int_cnt <= #1 int_cnt + 1'd1;
 
 reg  [DW+0-1:0] ldata_cur=0, ldata_prev=0;
 reg  [DW+0-1:0] rdata_cur=0, rdata_prev=0;
@@ -116,8 +116,8 @@ assign sd_r_quant = {sd_r_ac2[DW+A2W+2-1], sd_r_ac2} + {{(DW+A2W+3-RW){seed_out[
 assign sd_l_er0 = sd_l_quant[DW+A2W+3-1] ? {1'b1, {(DW+2-1){1'b0}}} : {1'b0, {(DW+2-1){1'b1}}};
 assign sd_r_er0 = sd_r_quant[DW+A2W+3-1] ? {1'b1, {(DW+2-1){1'b0}}} : {1'b0, {(DW+2-1){1'b1}}};
 always @ (posedge clk) begin
-  sd_l_er0_prev <= #1 (&sd_l_er0) ? sd_l_er0 : sd_l_er0+1;
-  sd_r_er0_prev <= #1 (&sd_r_er0) ? sd_r_er0 : sd_r_er0+1;
+  sd_l_er0_prev <= #1 (&sd_l_er0) ? sd_l_er0 : sd_l_er0+1'd1;
+  sd_r_er0_prev <= #1 (&sd_r_er0) ? sd_r_er0 : sd_r_er0+1'd1;
 end
 
 // output

@@ -231,6 +231,6 @@ module hex2asc (
 );
    
 assign out = (in <= 9)?("0"+in):
-	     ("A"-10+in);
+	     ("A"-4'd10+in);
  
 endmodule

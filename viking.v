@@ -95,7 +95,7 @@ always @(negedge pclk)
 
 // --------------- horizontal timing -------------
 reg[10:0] h_cnt;   // 0..2047
-assign hs = ((h_cnt >= HBP1+H+HFP) && (h_cnt < HBP1+H+HFP+HS))?0:1;
+assign hs = ((h_cnt >= HBP1+H+HFP) && (h_cnt < HBP1+H+HFP+HS))?1'b0:1'b1;
 always@(posedge pclk) begin
 	if(h_cnt==HBP1+H+HFP+HS+HBP2-1) begin
 		// make sure a line starts with the "video" bus cyle (0)
@@ -103,16 +103,16 @@ always@(posedge pclk) begin
 		if(bus_cycle_L == { 2'd1, 4'd15 })
 			h_cnt<=0;
 	end else
-		h_cnt <= h_cnt + 1;
+		h_cnt <= h_cnt + 1'd1;
 end
 
 // --------------- vertical timing -------------
 reg[10:0] v_cnt;   // 0..2047
-assign vs = ((v_cnt >= V+VFP) && (v_cnt < V+VFP+VS))?0:1;
+assign vs = ((v_cnt >= V+VFP) && (v_cnt < V+VFP+VS))?1'b0:1'b1;
 always@(posedge pclk) begin
 	if(h_cnt==HBP1+H+HFP+HS+HBP2-1) begin
 		if(v_cnt==V+VFP+VS+VBP-1)  v_cnt <= 0; 
-		else 								v_cnt <= v_cnt+1;
+		else 								v_cnt <= v_cnt+1'd1;
 	end
 end
 

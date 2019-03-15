@@ -54,7 +54,7 @@ assign full = (readP == (writeP + 1));
 assign empty = (readP == writeP);
 assign data_available = (readP != writeP);
 
-assign space = readP - writeP - 1;
+assign space = readP - writeP - 1'd1;
 
 // the strobes may not be in the right clock domain, so bring them into the 
 // local clock domain
@@ -62,7 +62,7 @@ reg in_strobeD, in_strobeD2;
 reg out_strobeD, out_strobeD2;
 
 // present current value. If fifo is empty show last value
-assign out = data_available?fifo[readP]:fifo[readP-1];
+assign out = data_available?fifo[readP]:fifo[readP-1'd1];
 
 always @(posedge out_clk) begin
 	// bring strobes in local clock domain
@@ -74,7 +74,7 @@ always @(posedge out_clk) begin
 	else begin
 		// rising edge on fifo read strobe from io controller
 		if((out_strobeD && !out_strobeD2) || out_enable)
-			readP <= readP + 1;
+			readP <= readP + 1'd1;
 	end
 end
 
@@ -90,7 +90,7 @@ always @(posedge in_clk) begin
 		// or in_enable being true
 		if((in_strobeD && !in_strobeD2) || in_enable) begin
 			fifo[writeP] <= in;
-			writeP <= writeP + 1;
+			writeP <= writeP + 1'd1;
 		end
 	end
 end	
