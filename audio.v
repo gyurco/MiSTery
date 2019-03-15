@@ -68,14 +68,18 @@ reg [1:0] sclk;
 always @ (posedge clk_8)
 	sclk <= sclk + 2'd1;
 
-wire clk_2 = sclk[1];
-	
+wire clk2_en = !sclk;
+
 wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 assign floppy_side = port_a_out[0];
 assign floppy_sel = port_a_out[2:1];
 
 wire [9:0] ym_audio_out_l, ym_audio_out_r;
+wire [7:0] ym_a_out, ym_b_out, ym_c_out;
+
+assign ym_audio_out_l = psg_stereo ? ym_a_out + ym_b_out : ym_a_out + ym_b_out + ym_c_out;
+assign ym_audio_out_r = psg_stereo ? ym_c_out + ym_b_out : ym_a_out + ym_b_out + ym_c_out;
 
 // extra joysticks are wired to the printer port
 // using the "gauntlet2 interface", fire of 
@@ -88,41 +92,24 @@ assign dout = psg_sel?{psg_dout,8'hff}:ste_dma_snd_sel?ste_dma_snd_data_out:16'h
 wire [15:0] ste_dma_snd_data_out;
 wire [7:0] psg_dout;
 
-YM2149 ym2149 (
-	.I_DA						( din[15:8]					),
-	.O_DA						( psg_dout				   ),
-	.O_DA_OE_L           (								),
-
-	// control
-	.I_A9_L              ( 1'b0						),
-	.I_A8                ( 1'b1						),
-	.I_BDIR              ( psg_sel && !rw	      ),
-	.I_BC2               ( 1'b1						),
-	.I_BC1              	( psg_sel && !addr[1]   ),
-	.I_SEL_L             ( 1'b1						),
-
-	.O_AUDIO_L           (ym_audio_out_l			),
-	.O_AUDIO_R           (ym_audio_out_r			),
-
-	.stereo 					(psg_stereo	      		),
-	
-	// port a
-	.I_IOA           		( port_a_in 				),
-	.O_IOA              	( port_a_out				),
-	.O_IOA_OE_L      		(								),
-
-	// port b
-	.I_IOB               ( port_b_in					),
-	.O_IOB              	( port_b_out				),
-	.O_IOB_OE_L         	(								),
-  
-	//
-	.ENA                	( 1'b1						), 
-	.RESET_L            	( !reset 					),
-	.CLK                	( clk_2  					),	// 2 MHz
-	.CLK8              	( clk_8  					)	// 8 MHz CPU bus clock
+ym2149 ym2149 (
+	.CLK         ( clk_8              ),
+	.CE          ( clk2_en            ),
+	.RESET       ( reset              ),
+	.DI          ( din[15:8]          ),
+	.DO          ( psg_dout           ),
+	.CHANNEL_A   ( ym_a_out           ),
+	.CHANNEL_B   ( ym_b_out           ),
+	.CHANNEL_C   ( ym_c_out           ),
+	.BDIR        ( psg_sel & ~rw      ),
+	.BC          ( psg_sel & ~addr[1] ),
+	.MODE        ( 0                  ),
+	.SEL         ( 0                  ),
+	.IOA_in      ( port_a_in          ),
+	.IOA_out     ( port_a_out         ),
+	.IOB_in      ( port_b_in          ),
+	.IOB_out     ( port_b_out         )
 );
-
 wire parallel_fifo_full;
 
 // ------ fifo to store printer data coming from psg ---------
