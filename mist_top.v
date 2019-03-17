@@ -592,6 +592,7 @@ wire dma_br;
 
 dma dma (
 	// system interface
+	.clk_32     (clk_32         ),
 	.clk      	(clk_8       	),
 	.reset    	(reset       	),
 	.bus_cycle  (bus_cycle     ),

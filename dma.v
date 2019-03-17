@@ -57,6 +57,7 @@
 module dma (
 	    // clocks and system interface
 	input 		  clk,
+	input         clk_32,
 	input 		  reset,
 	input [1:0] 	  bus_cycle,
 	input 		  turbo,
@@ -286,16 +287,11 @@ end
 reg [15:0] fifo [15:0];
 reg [3:0] fifo_wptr;         // word pointers
 reg [3:0] fifo_rptr;
-wire [3:0] fifo_ptr_diff = fifo_wptr - fifo_rptr; 
-reg [2:0] fifo_read_cnt;     // fifo read transfer word counter
-reg [2:0] fifo_write_cnt;    // fifo write transfer word counter
-  
-// fifo is ready to be re-filled if it is empty
-// -> we don't use this as the fifo is not refilled fast enough in non-turbo
-wire    fifo_not_full  = fifo_ptr_diff < 4'd7; // (turbo?4'd1:4'd2);
+
+// stop reading from fifo if it is empty
+wire fifo_empty     = fifo_wptr == fifo_rptr;
 // fifo is considered full if 8 words (16 bytes) are present
 wire fifo_full      = (fifo_wptr - fifo_rptr) > 4'd7;
-
 // Reset fifo via the dma mode direction bit toggling or when
 // IO controller sets address
 wire fifo_reset = cpu_dma_mode_direction_toggle || io_addr_strobe;
@@ -309,47 +305,39 @@ always @(negedge clk)
 		ioc_br_clk <= ioc_br;
 
 // ============= FIFO WRITE ENGINE ==================
-// rising edge after ram has been read
-reg ram_read_done;
-always @(posedge clk) ram_read_done <= ram_read;
-
-// state machine for DMA ram read access
-// this runs on negative clk to generate a proper bus request
-// in the middle of the advance cycle
 
 // start condition for fifo write
 wire fifo_write_start = dma_in_progress && dma_direction_out && 
-     fifo_write_cnt == 0 && fifo_not_full;
+     !fifo_write_in_progress && !fifo_full;
 
-always @(negedge clk or posedge fifo_reset) begin
-   if(fifo_reset == 1'b1) begin
-      fifo_write_cnt <= 3'd0;
-      fifo_write_in_progress <= 1'b0;
-   end else begin
-      if(cycle_advance) begin      
-	 // start dma read engine if 8 more words can be stored
-	 if(fifo_write_start) begin
-	    fifo_write_cnt <= 3'd7;
-	    fifo_write_in_progress <= 1'b1;
-	 end else begin
-	    if(fifo_write_cnt != 0)
-	      fifo_write_cnt <= fifo_write_cnt - 3'd1;
-	    else
-	      fifo_write_in_progress <= 1'b0;
-	 end
-      end
-   end
+// state machine for DMA ram read access
+always @(posedge clk_32 or posedge fifo_reset) begin
+	if(fifo_reset == 1'b1) begin
+		fifo_write_in_progress <= 1'b0;
+	end else begin
+		if(cycle_advance) begin
+			// start dma read engine if 8 more words can be stored
+			if(fifo_write_start) fifo_write_in_progress <= 1'b1;
+			else if (fifo_full) fifo_write_in_progress <= 1'b0;
+		end
+	end
 end
    
 // ram control signals need to be stable over the whole 8 Mhz cycle
 always @(posedge clk)
-   ram_read <= (cycle_advance_L && fifo_write_in_progress)?1'b1:1'b0;
+   ram_read <= (cycle_advance_L && fifo_write_in_progress);
+
+wire ram_read_strobe = ~ram_readD & ram_read;
+wire ram_read_done   = ram_readD & ~ram_read;
+reg ram_readD;
+always @(posedge clk_32)
+	ram_readD <= ram_read;
 
 wire [15:0] fifo_data_in = dma_direction_out?ram_din:dio_data_in_reg;
 wire fifo_data_in_strobe = dma_direction_out?ram_read_done:io_data_in_strobe;
-   
+
 // write to fifo on rising edge of fifo_data_in_strobe
-always @(posedge clk or posedge fifo_reset) begin
+always @(posedge clk_32 or posedge fifo_reset) begin
    if(fifo_reset == 1'b1)
      fifo_wptr <= 4'd0;
    else if (fifo_data_in_strobe) begin
@@ -362,41 +350,39 @@ end
 
 // start condition for fifo read
 wire fifo_read_start = dma_in_progress && !dma_direction_out && 
-     fifo_read_cnt == 0 && fifo_full;
-   
+     !fifo_read_in_progress && fifo_full;
+
 // state machine for DMA ram write access
-always @(negedge clk or posedge fifo_reset) begin
-   if(fifo_reset == 1'b1) begin
-      // not reading from fifo, not writing into ram
-      fifo_read_cnt <= 3'd0;
-      fifo_read_in_progress <= 1'b0;
-   end else begin
-      if(cycle_advance) begin
-	 // start dma read engine if 8 more words can be stored
-	 if(fifo_read_start) begin 
-	    fifo_read_cnt <= 3'd7;
-	    fifo_read_in_progress <= 1'b1;
-	 end else begin
-	    if(fifo_read_cnt != 0)
-	      fifo_read_cnt <= fifo_read_cnt - 3'd1;
-	    else
-	      fifo_read_in_progress <= 1'b0;
-	 end
-      end
-   end
+always @(posedge clk_32 or posedge fifo_reset) begin
+	if(fifo_reset == 1'b1) begin
+		// not reading from fifo, not writing into ram
+		fifo_read_in_progress <= 1'b0;
+	end else begin
+		// start dma read engine if 8 more words can be stored
+		if(cycle_advance) begin
+			if (fifo_read_start) fifo_read_in_progress <= 1'b1;
+			if (fifo_empty) fifo_read_in_progress <= 1'b0;
+		end
+	end
 end
 
 // ram control signals need to be stable over the whole 8 Mhz cycle
 always @(posedge clk)
    ram_write <= (cycle_advance_L && fifo_read_in_progress);
 
-reg [15:0] fifo_data_out;
-wire fifo_data_out_strobe = dma_direction_out?io_data_out_strobe:ram_write;
+wire ram_write_strobe = ~ram_writeD & ram_write;
+wire ram_write_done   = ram_writeD & ~ram_write;
+reg ram_writeD;
+always @(posedge clk_32)
+	ram_writeD <= ram_write;
 
-always @(posedge clk)
+reg [15:0] fifo_data_out;
+wire fifo_data_out_strobe = dma_direction_out?io_data_out_strobe:ram_write_done;
+
+always @(posedge clk_32)
    fifo_data_out <= fifo[fifo_rptr];
 
-always @(posedge clk or posedge fifo_reset) begin
+always @(posedge clk_32 or posedge fifo_reset) begin
    if(fifo_reset == 1'b1)         fifo_rptr <= 4'd0;
    else if (fifo_data_out_strobe) fifo_rptr <= fifo_rptr + 4'd1;
 end
@@ -420,7 +406,7 @@ reg       sector_done;
 reg 	  sector_strobe;
 reg 	  sector_strobe_prepare;
 
-always @(posedge clk) begin
+always @(posedge clk_32) begin
    if(dma_scnt_write_strobe) begin
       word_cnt <= 8'd0;
       sector_strobe_prepare <= 1'b0;
@@ -441,7 +427,7 @@ always @(posedge clk) begin
       end
 
       // and ram read or write increases the word counter by one
-      if(ram_write || ram_read) begin
+      if(ram_write_strobe || ram_read_strobe) begin
 	 word_cnt <= word_cnt + 8'd1;
 	 if(word_cnt == 255) begin
 	    sector_done <= 1'b1;
@@ -463,7 +449,7 @@ wire [7:0] dma_scnt_next = sector_strobe_prepare?dma_scnt_dec:
 	   cpu_scnt_write_strobe?cpu_din[7:0]:dio_addr_reg[31:24];
 
 // cpu or io controller set the sector count register
-always @(posedge clk)
+always @(posedge clk_32)
 	if (dma_scnt_write_strobe) dma_scnt <= dma_scnt_next;
    
 // DMA in progress flag:
@@ -480,7 +466,7 @@ wire dma_stop = cpu_dma_mode_direction_toggle;
 wire cpu_starts_dma = cpu_scnt_write_strobe && (cpu_din[7:0] != 0) && !dma_mode[6];
 wire ioc_starts_dma = io_addr_strobe && (dio_addr_reg[31:24] != 0);
 
-always @(posedge clk or posedge dma_stop) begin
+always @(posedge clk_32 or posedge dma_stop) begin
    if(dma_stop) dma_in_progress <= 1'b0;
    else if (dma_scnt_write_strobe) dma_in_progress <= cpu_starts_dma || ioc_starts_dma || (sector_strobe && dma_scnt != 0);   
 end
@@ -493,7 +479,7 @@ wire dma_direction_set = io_addr_strobe || cpu_dma_mode_direction_toggle;
 wire dma_direction_out_next = cpu_mode_write_strobe?cpu_din[8]:dio_addr_reg[23];
 
 // cpu or io controller set the dma direction   
-always @(posedge clk)
+always @(posedge clk_32)
   if (dma_direction_set) dma_direction_out <= dma_direction_out_next;
 
 // ================================= DMA address ============================
@@ -510,8 +496,8 @@ reg [6:0] dma_addr_l;
 wire [22:0] dma_addr = { dma_addr_h, dma_addr_m, dma_addr_l };
 
 reg dma_addr_inc;
-always @(posedge clk)
-   dma_addr_inc <= ram_write || ram_read;
+always @(posedge clk_32)
+   dma_addr_inc <= ram_write_done || ram_read_done;
 
 wire dma_addr_write_strobe = dma_addr_inc || io_addr_strobe;
 
@@ -521,7 +507,7 @@ wire [22:0] dma_addr_next =
 	    io_addr_strobe?{ dio_addr_reg[22:0] }:
 	    (dma_addr + 23'd1);
 
-always @(posedge clk) begin
+always @(posedge clk_32) begin
 	if (dma_addr_write_strobe_l) dma_addr_l <= dma_addr_next[ 6: 0];
 	if (dma_addr_write_strobe_m) dma_addr_m <= dma_addr_next[14: 7];
 	if (dma_addr_write_strobe_h) dma_addr_h <= dma_addr_next[22:15];
@@ -580,7 +566,7 @@ reg dio_data_out_strobeD;
 reg dio_dma_ackD;
 reg dio_dma_nakD;
 
-always@(posedge clk) begin
+always@(posedge clk_32) begin
 	dio_addr_strobeD <= dio_addr_strobe;
 	dio_data_in_strobeD <= dio_data_in_strobe;
 	dio_data_out_strobeD <= dio_data_out_strobe;
