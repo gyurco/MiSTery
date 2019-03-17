@@ -64,9 +64,9 @@ module audio (
 );
 	
 // 2Mhz clock for PSG and STE DMA audio delay buffer
-reg [1:0] sclk;
-always @ (posedge clk_8)
-	sclk <= sclk + 2'd1;
+reg [3:0] sclk;
+always @ (posedge clk_32)
+	sclk <= sclk + 1'd1;
 
 wire clk2_en = !sclk;
 
@@ -93,7 +93,7 @@ wire [15:0] ste_dma_snd_data_out;
 wire [7:0] psg_dout;
 
 ym2149 ym2149 (
-	.CLK         ( clk_8              ),
+	.CLK         ( clk_32             ),
 	.CE          ( clk2_en            ),
 	.RESET       ( reset              ),
 	.DI          ( din[15:8]          ),
