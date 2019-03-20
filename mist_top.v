@@ -731,18 +731,11 @@ end
 
 wire mfp_irq;
 
-reg [2:0] ipl;
-always @(posedge clk_128) begin
-	if(reset)
-		ipl <= 3'b111;
- else begin
-		// ipl[0] is tied high on the atari
-		if(mfp_irq)   ipl <= 3'b001;  // mfp has IPL 6
-		else if(vbi)  ipl <= 3'b011;  // vbi has IPL 4
-		else if(hbi)  ipl <= 3'b101;  // hbi has IPL 2
-		else	   	  ipl <= 3'b111;
-	end
-end
+// ipl[0] is tied high on the atari
+wire [2:0] ipl = mfp_irq ? 3'b001: // mfp has IPL 6
+                 vbi     ? 3'b011: // vbi has IPL 4
+                 hbi     ? 3'b101: // hbi has IPL 2
+                           3'b111;
 
 /* -------------------------------------------------------------------------- */
 /* ------------------------------  TG68 CPU interface  ---------------------- */
