@@ -2,6 +2,9 @@
 /*                                          */
 /********************************************/
 
+// comment for building with the FX68K CPU
+`define TG68KCPU
+
 module mist_top ( 
   // clock inputs	
   input wire [ 2-1:0] 	CLOCK_27, // 27 MHz
@@ -137,14 +140,6 @@ wire br = dma_br || blitter_br; // dma/blitter are only other bus masters
 // combinatorics as it must be glitch free since the mfp does things on the
 // rising edge of iack. 
 reg mfp_iack;
-always @(posedge clk_32 or posedge reset) begin
-	if(reset)
-		mfp_iack <= 1'b0;
-	else begin
-		if(clk_cnt == 2)
-			mfp_iack <= cpu_cycle && cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
-	end
-end
 			
 // the tg68k core doesn't reliably support mixed usage of autovector and non-autovector
 // interrupts.
@@ -152,11 +147,8 @@ end
 // entirely to non-autovector interrupts. This means that we now have to provide
 // the vectors for those interrupts that oin the ST are autovector ones. This needs
 // to be done for IPL2 (hbi) and IPL4 (vbi)
-wire auto_iack = cpu_cycle && cpu2iack && tg68_as &&
-	((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010));
-wire [7:0] auto_vector_vbi = (auto_iack && (tg68_adr[3:1] == 3'b100))?8'h1c:8'h00;
-wire [7:0] auto_vector_hbi = (auto_iack && (tg68_adr[3:1] == 3'b010))?8'h1a:8'h00;
-wire [7:0] auto_vector = auto_vector_vbi | auto_vector_hbi;
+wire auto_iack;
+wire [7:0] auto_vector;
 
 // interfaces not implemented:
 // $fff00000 - $fff000ff  - IDE  
@@ -165,7 +157,7 @@ wire [7:0] auto_vector = auto_vector_vbi | auto_vector_hbi;
 // $fffffc20 - $fffffc3f  - RTC
 // $ffff8e00 - $ffff8e0f  - VME  (only fake implementation)
 
-wire io_sel = cpu_cycle && cpu2io && tg68_as ;
+wire io_sel;
 
 // romport interface at $fa0000 - $fbffff
 wire rom_sel_all = ethernec_present && cpu_cycle && tg68_as && tg68_rw && ({tg68_adr[23:17], 1'b0} == 8'hfa);
@@ -696,17 +688,6 @@ always @(posedge clk_128) begin
 	end
 end
 
-// tg68 bus interface. These are the signals which are latched
-// for the 8MHz bus.
-reg [15:0] tg68_dat_out;
-reg [31:0] tg68_adr;
-wire [2:0] tg68_IPL;
-wire       tg68_dtack;
-reg        tg68_uds;
-reg        tg68_lds;
-reg        tg68_rw;
-reg [2:0]  tg68_fc;
-
 wire reset = system_ctrl[0];
 
 // ------------- generate VBI (IPL = 4) --------------
@@ -745,10 +726,26 @@ wire [2:0] ipl = mfp_irq ? 3'b001: // mfp has IPL 6
                  hbi     ? 3'b101: // hbi has IPL 2
                            3'b111;
 
+// the tg68 can itself generate a reset signal
+wire tg68_reset;  
+wire peripheral_reset = reset || !tg68_reset;
+
 /* -------------------------------------------------------------------------- */
 /* ------------------------------  TG68 CPU interface  ---------------------- */
 /* -------------------------------------------------------------------------- */
-	 
+
+`ifdef TG68KCPU
+// tg68 bus interface. These are the signals which are latched
+// for the 8MHz bus.
+reg [15:0] tg68_dat_out;
+reg [31:0] tg68_adr;
+wire [2:0] tg68_IPL;
+wire       tg68_dtack;
+reg        tg68_uds;
+reg        tg68_lds;
+reg        tg68_rw;
+reg [2:0]  tg68_fc;
+
 reg clkena;
 reg iCacheStore;
 reg dCacheStore;
@@ -766,10 +763,6 @@ wire        tg68_lds_S;
 wire        tg68_rw_S;
 
 reg         tg68_as;
-
-// the tg68 can itself generate a reset signal
-wire tg68_reset;  
-wire peripheral_reset = reset || !tg68_reset;
 
 // generate signal indicating the CPU may run from cache (cpu is active, 
 // performs a read and the caches are able to provide the requested data)
@@ -894,6 +887,25 @@ TG68KdotC_Kernel #(2,2,2,2,2,2,2) tg68k (
 	.FC            (tg68_fc_S     )
 );
 
+// generate dtack (for st ram and rom on read, no dtack for rom write)
+assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack ) && !br;
+assign io_sel = cpu_cycle && cpu2io && tg68_as ;
+// simulate auto-vectoring
+assign auto_iack = cpu_cycle && cpu2iack && tg68_as &&
+	((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010));
+wire [7:0] auto_vector_vbi = (auto_iack && (tg68_adr[3:1] == 3'b100))?8'h1c:8'h00;
+wire [7:0] auto_vector_hbi = (auto_iack && (tg68_adr[3:1] == 3'b010))?8'h1a:8'h00;
+assign auto_vector = auto_vector_vbi | auto_vector_hbi;
+
+always @(posedge clk_32 or posedge reset) begin
+	if(reset)
+		mfp_iack <= 1'b0;
+	else begin
+		if(clk_cnt == 2)
+			mfp_iack <= cpu_cycle && cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
+	end
+end
+
 /* ------------------------------------------------------------------------------ */
 /* ---------------------------------- cpu cache --------------------------------- */
 /* ------------------------------------------------------------------------------ */
@@ -967,6 +979,104 @@ cache instruction_cache (
 	.din16         ( ram_data_in           )
 );
 
+`else
+/* ------------------------------------------------------------------------------ */
+/* -------------------------------- FX68K CPU ----------------------------------- */
+/* ------------------------------------------------------------------------------ */
+reg clkena;
+reg clkena_n;
+reg clkenaD;
+reg clr_berr;
+reg fx68_mem_dtack;
+
+assign auto_iack = 0;
+assign auto_vector = 0;
+
+assign tg68_clr_berr = clr_berr;
+
+always @(posedge clk_32) begin
+	reg fx68_berr1, fx68_berr2;
+	// default: cpu does not run
+	clkena <= 0;
+	clkena_n <= 0;
+
+	if (clk_cnt == 0) clkena <= 1;
+	if (clk_cnt == 3) clkena_n <= 1;
+	clkenaD <= clkena;
+
+	if (clkena) begin
+		clr_berr <= 0;
+		fx68_berr1 <= tg68_berr;
+		fx68_berr2 <= fx68_berr1;
+		if (fx68_berr2) clr_berr <= 1;
+	end
+
+	// SDRAM data valid after clk_cnt == 0
+	if (cpu2mem && (~tg68_uds | ~tg68_lds) && cpu_cycle && (clk_cnt == 2'b00)) fx68_mem_dtack <= 1;
+	if (fx68_as_n) fx68_mem_dtack <= 0;
+end
+
+always @(posedge clk_32 or posedge reset) begin
+	if(reset)
+		mfp_iack <= 1'b0;
+	else begin
+		mfp_iack <= cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
+	end
+end
+
+// generate dtack (for st ram and rom on read, no dtack for rom write)
+assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !br && !fx68_as_n;
+assign io_sel = cpu2io && tg68_as;
+
+wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility
+wire        fx68_as_n;
+// autovector if hbi or vbi
+wire        fx68_vpa_n = ~(cpu2iack && ((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010)));
+
+wire [15:0] cpu_data_in = system_data_out;
+wire [15:0] tg68_dat_out;
+wire [31:0] tg68_adr;
+wire  [2:0] tg68_IPL;
+wire        tg68_dtack;
+wire        tg68_uds;
+wire        tg68_lds;
+wire        tg68_rw = fx68_rw_n | (tg68_lds & tg68_uds);
+wire  [2:0] tg68_fc;
+wire        fx68_rw_n;
+
+fx68k fx68k (
+	.clk		( clk_32 ),
+	.extReset	( reset ),
+	.pwrUp		( reset ),
+	.enPhi1		( clkena ),
+	.enPhi2		( clkena_n ),
+
+	.eRWn		( fx68_rw_n ),
+	.ASn		( fx68_as_n ),
+	.LDSn		( tg68_lds ),
+	.UDSn		( tg68_uds ),
+	.E			(),
+	.VMAn		(),
+	.FC0		( tg68_fc[0] ),
+	.FC1		( tg68_fc[1] ),
+	.FC2		( tg68_fc[2] ),
+	.BGn		(),
+	.oRESETn	( tg68_reset ),
+	.oHALTEDn	(),
+	.DTACKn		( ~tg68_dtack ),
+	.VPAn		( fx68_vpa_n ),
+	.BERRn		( ~tg68_berr ),
+	.BRn		( 1 ),
+	.BGACKn		( 1 ),
+	.IPL0n		( ipl[0] ),
+	.IPL1n		( ipl[1] ),
+	.IPL2n		( ipl[2] ),
+	.iEdb		( cpu_data_in ),
+	.oEdb		( tg68_dat_out ),
+	.eab		( tg68_adr[23:1] )
+);
+
+`endif
 /* ------------------------------------------------------------------------------ */
 /* ----------------------------- memory area mapping ---------------------------- */
 /* ------------------------------------------------------------------------------ */
@@ -1016,9 +1126,6 @@ wire cpu2io = (tg68_adr[23:16] == 8'hff);
 
 // irq ack happens
 wire cpu2iack = (tg68_fc == 3'b111);
-
-// generate dtack (for st ram and rom on read, no dtack for rom write)
-assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack ) && !br;
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------- bus multiplexer ------------------------------ */
