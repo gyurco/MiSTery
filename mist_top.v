@@ -122,7 +122,7 @@ always @(posedge clk_32 or posedge berr_reset) begin
 			if(dtack_timeout != 4'd15) begin
 				if(bus_ok)
 					dtack_timeout <= 4'd0;
-				else if(clkcnt == 3) // increase timout at the end of the cpu cycle
+				else if(clk_cnt == 1) // increase timout at the end of the cpu cycle
 					dtack_timeout <= dtack_timeout + 4'd1;
 			end 
 		end
@@ -141,7 +141,7 @@ always @(posedge clk_32 or posedge reset) begin
 	if(reset)
 		mfp_iack <= 1'b0;
 	else begin
-		if(clkcnt == 0)
+		if(clk_cnt == 2)
 			mfp_iack <= cpu_cycle && cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
 	end
 end
@@ -763,17 +763,6 @@ reg         tg68_as;
 wire tg68_reset;  
 wire peripheral_reset = reset || !tg68_reset;
 
-// 32MHz counter running synchronous to the 8Mhz clock. This is used to
-// synchronize the 32MHz cpu to the 8MHz system bus
-reg [1:0] clkcnt;
-always @(posedge clk_32) begin
-	// count 0..3 within a 8MHz cycle 
-	if(((clkcnt == 3) && ( clk_8 == 0)) ||
-		((clkcnt == 0) && ( clk_8 == 1)) ||
-		((clkcnt != 3) && (clkcnt != 0)))
-			clkcnt <= clkcnt + 2'd1;
-end
-
 // generate signal indicating the CPU may run from cache (cpu is active, 
 // performs a read and the caches are able to provide the requested data)
 wire cacheReady = steroids && cache_hit;
@@ -799,7 +788,7 @@ always @(negedge clk_32) begin
 		tg68_as <= 1'b0;
 	else begin
 		// run cpu if it owns the bus
-		if(clkcnt == 3) begin
+		if(clk_cnt == 1) begin
 			// 8Mhz cycle must not start directly after the cpu has been clocked
 			// as the address may not be stable then
 
@@ -829,7 +818,7 @@ always @(negedge clk_32) begin
 		// cpu does internal processing -> let it do this immediately
 		// or cpu wants to read and the requested data is available from the cache -> run immediately
 		if((tg68_busstate == 2'b01) || ((tg68_busstate[0] == 1'b0) && cacheReady)) begin
-			if(steroids || ((clkcnt == 3) && (cpu_cycle || cpu_cycle_int))) begin
+			if(steroids || ((clk_cnt == 1) && (cpu_cycle || cpu_cycle_int))) begin
 				clkena <= 1'b1; 
 				cpuDoes8MhzCycle <= 1'b0;
 			end
@@ -842,8 +831,8 @@ always @(negedge clk_32) begin
 			// which is invalidated whenever the cpu uses a internal cycle or 
 			// runs from cache
  
-			// clkcnt == 3 -> clkena in cycle 0 -> cpu runs in cycle 0
-			if((clkcnt == 3) && cpuDoes8MhzCycle && cpu_cycle && (tg68_dtack || tg68_berr)) begin
+			// clk_cnt == 1 -> clkena in cycle 0 -> cpu runs in cycle 0
+			if((clk_cnt == 1) && cpuDoes8MhzCycle && cpu_cycle && (tg68_dtack || tg68_berr)) begin
 				clkena <= 1'b1;
 				cpuDoes8MhzCycle <= 1'b0;
 
