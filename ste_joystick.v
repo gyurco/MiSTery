@@ -22,6 +22,7 @@
 module ste_joystick (
 	// system interface
 	input clk,
+	input clk_en,
 	input reset,
   
 	// cpu register interface

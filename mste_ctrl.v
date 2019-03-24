@@ -22,6 +22,7 @@
 module mste_ctrl (
 	// cpu register interface
 	input 		 clk,
+	input        clk_en,
 	input 		 reset,
 	input [7:0] 	 din,
 	input 		 sel,
@@ -44,11 +45,11 @@ always @(sel, ds, rw, mste_config) begin
 		dout = mste_config;
 end
 
-always @(negedge clk) begin
+always @(posedge clk) begin
 	if(reset)
 		mste_config <= 8'h00;
 	else begin
-		if(sel && ~ds && ~rw)
+		if(clk_en && sel && ~ds && ~rw)
 			mste_config <= din;
 	end
 end

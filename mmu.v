@@ -1,6 +1,7 @@
 module mmu (
 	// cpu register interface
 	input 		 clk,
+	input        clk_en,
 	input 		 reset,
 	input [7:0] 	 din,
 	input 		 sel,
@@ -17,11 +18,11 @@ always @(sel, ds, rw, memconfig) begin
 		dout = memconfig;
 end
 
-always @(negedge clk) begin
+always @(posedge clk) begin
 	if(reset)
 		memconfig <= 8'h00;
 	else begin
-		if(sel && ~ds && ~rw)
+		if(clk_en && sel && ~ds && ~rw)
 			memconfig <= din;
 	end
 end

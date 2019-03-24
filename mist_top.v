@@ -327,7 +327,8 @@ video video (
 
 mmu mmu (
 	// cpu register interface
-	.clk      (clk_8       ),
+	.clk      (clk_32      ),
+	.clk_en   (clk_8_en    ),
 	.reset    (reset       ),
 	.din      (tg68_dat_out[7:0]),
 	.sel      (mmu_sel     ),
@@ -340,7 +341,8 @@ mmu mmu (
 wire enable_16mhz;
 mste_ctrl mste_ctrl (
 	// cpu register interface
-	.clk      (clk_8       ),
+	.clk      (clk_32      ),
+	.clk_en   (clk_8_en    ),
 	.reset    (reset       ),
 	.din      (tg68_dat_out[7:0]),
 	.sel      (mste_ctrl_sel ),
@@ -470,7 +472,8 @@ blitter blitter (
 );
    
 ste_joystick ste_joystick (
-	.clk      (clk_8       ),
+	.clk      (clk_32      ),
+	.clk_en   (clk_8_en    ),
 	.reset    (reset       ),
 	.din      (tg68_dat_out),
 	.sel      (ste_joy_sel ),
