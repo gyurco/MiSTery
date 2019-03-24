@@ -594,6 +594,7 @@ dma dma (
 	// system interface
 	.clk_32     (clk_32         ),
 	.clk      	(clk_8       	),
+	.clk_en     (clk_8_en       ),
 	.reset    	(reset       	),
 	.bus_cycle  (bus_cycle     ),
 	.irq      	(dma_irq     	),
@@ -645,6 +646,7 @@ wire pll_locked;
 wire clk_8;
 wire clk_32;
 wire clk_128;
+reg  clk_8_en;
      
 // use pll
 clock clock (
@@ -666,9 +668,12 @@ always @ (posedge clk_32, negedge pll_locked) begin
 		clk_cnt <= 2'd2;
 		bus_cycle <= 2'd0;
 	end else begin 
+		clk_8_en <= 0;
 		clk_cnt <= clk_cnt + 2'd1;
 		if(clk_cnt == 2'd1)
 			bus_cycle <= bus_cycle + 2'd1;
+		if(clk_cnt == 0)
+			clk_8_en <= 1;
 	end
 end
 

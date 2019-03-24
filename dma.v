@@ -58,6 +58,7 @@ module dma (
 	    // clocks and system interface
 	input 		  clk,
 	input         clk_32,
+	input         clk_en,
 	input 		  reset,
 	input [1:0] 	  bus_cycle,
 	input 		  turbo,
@@ -108,7 +109,7 @@ assign irq = fdc_irq || acsi_irq;
 
 // for debug: count irqs
 reg [7:0] fdc_irq_count;
-always @(posedge clk or posedge reset) begin
+always @(posedge clk_32 or posedge reset) begin
 	reg fdc_irqD;
 	if(reset) fdc_irq_count <= 8'd0;
 	else begin
@@ -118,7 +119,7 @@ always @(posedge clk or posedge reset) begin
 end
 
 reg [7:0] acsi_irq_count;
-always @(posedge clk or posedge reset) begin
+always @(posedge clk_32 or posedge reset) begin
 	reg acsi_irqD;
 	if(reset) acsi_irq_count <= 8'd0;
 	else begin
@@ -139,7 +140,9 @@ wire    fdc_irq;
 wire [7:0] fdc_status_byte;
 wire [7:0] fdc_dout;
    
-fdc fdc( .clk         ( clk                   ),  
+fdc fdc(
+	 .clk         ( clk_32                ),
+	 .clk_en      ( clk_en                ),
 	 .reset       ( reset                 ),
 	 
 	 .irq         ( fdc_irq               ),
@@ -170,7 +173,9 @@ wire    acsi_irq;
 wire [7:0] acsi_status_byte;
 wire [7:0] acsi_dout;
  
-acsi acsi(.clk        ( clk                   ),  
+acsi acsi(
+	 .clk         ( clk_32                ),
+	 .clk_en      ( clk_en                ),
 	 .reset       ( reset                 ),
 	 
 	 .irq         ( acsi_irq              ),
@@ -230,7 +235,7 @@ reg cpu_scnt_write_strobe;
 reg cpu_mode_write_strobe;  
 reg cpu_dma_mode_direction_toggle;
    
-always @(negedge clk) begin
+always @(posedge clk_32) begin
    if(reset) begin
       cpu_address_write_strobe <= 1'b0;      
       cpu_scnt_write_strobe <= 1'b0;      
@@ -243,7 +248,7 @@ always @(negedge clk) begin
       cpu_dma_mode_direction_toggle <= 1'b0;
 
       // cpu writes ...
-      if(cpu_sel && !cpu_rw && !cpu_lds) begin
+      if(clk_en && cpu_sel && !cpu_rw && !cpu_lds) begin
 
 	 // ... sector count register
 	 if((cpu_addr == 3'h2) && (dma_mode[4] == 1'b1))

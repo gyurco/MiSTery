@@ -22,6 +22,7 @@
 module fdc (
 	    // clocks and system interface
 	input 		 clk,
+	input        clk_en,
 	input 		 reset,
 
 	    // write protection of currently selected floppy
@@ -116,7 +117,7 @@ reg [31:0] index_pulse_cnt;
 always @(posedge clk) begin
    if(!motor_on)
      index_pulse_cnt <= 32'd0;
-   else begin
+   else if (clk_en) begin
       if(index_pulse_cnt != 0)
 			index_pulse_cnt <= index_pulse_cnt - 32'd1;
       else
@@ -144,7 +145,7 @@ assign cpu_dout =
 		data):8'h00;
 
 // CPU register write
-always @(negedge clk or posedge reset) begin
+always @(posedge clk or posedge reset) begin
    if(reset) begin
       // clear internal registers
       cmd <= 8'h00;
@@ -189,7 +190,7 @@ always @(negedge clk or posedge reset) begin
 		if(cpu_sel && (cpu_addr == 0))
 			irq <= 1'b0;
 	 
-		if(cpu_sel && !cpu_rw) begin
+		if(clk_en && cpu_sel && !cpu_rw) begin
 			// fdc register write
 			if(cpu_addr == 0) begin       // command register
 				cmd <= cpu_din;

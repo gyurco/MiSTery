@@ -22,6 +22,7 @@
 module acsi (
 	    // clocks and system interface
 	input 	     clk,
+	input        clk_en,
 	input 	     reset,
 
 	input [7:0]  enable,
@@ -81,7 +82,7 @@ assign status_byte =
     8'h00;
 
 // CPU write interface
-always @(negedge clk) begin
+always @(posedge clk) begin
    if(reset) begin
       target <= 3'd0;
       irq <= 1'b0;
@@ -104,7 +105,7 @@ always @(negedge clk) begin
 			irq <= 1'b0;
 	 
       // acsi register access
-      if(cpu_sel && !cpu_rw) begin
+      if(clk_en && cpu_sel && !cpu_rw) begin
 			if(!cpu_addr[0]) begin
 				// a0 == 0 -> first command byte
 				target <= cpu_din[7:5];
