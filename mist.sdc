@@ -97,7 +97,7 @@ set_false_path -to [get_ports {LED}]
 # Set Multicycle Path
 #**************************************************************
 
-# CPU 32 MHz to SDRAM 128 MHz -> 4x
+# SDRAM 128 MHz to CPU 32 MHz -> 4x
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -setup 4
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -hold 3
 
@@ -109,9 +109,9 @@ set_multicycle_path -from {TG68KdotC_Kernel:tg68k|*} -hold 1
 set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 4
 set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 3
 
-# clk8 -> CPU 32 -> 2x
-set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -setup 2
-set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -hold 1
+# CPU 32 to clk_8 -> 2x
+set_multicycle_path -to [get_clocks {clk_8}] -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -setup 2
+set_multicycle_path -to [get_clocks {clk_8}] -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -hold 1
 
 #**************************************************************
 # Set Maximum Delay
