@@ -63,9 +63,7 @@ module user_io(
 		output           ypbpr
 );
 
-// filter spi clock. the 8 bit gate delay is ~2.5ns in total
-wire [7:0] spi_sck_D = { spi_sck_D[6:0], SPI_CLK } /* synthesis keep */;
-wire spi_sck = (spi_sck && spi_sck_D != 8'h00) || (!spi_sck && spi_sck_D == 8'hff);
+wire spi_sck = SPI_CLK;
 
 reg [3:0] 			byte_cnt;
 reg [6:0]         sbuf;

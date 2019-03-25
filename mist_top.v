@@ -369,6 +369,8 @@ wire [1:0] mfp_timer_in = {!st_de, ste?ste_dma_snd_xsirq_delayed:!parallel_fifo_
 mfp mfp (
 	// cpu register interface
 	.clk      (clk_8       ),
+	.clk_32   (clk_32      ),
+	.clk_en   (clk_4_en    ),
 	.reset    (reset       ),
 	.din      (tg68_dat_out[7:0]),
 	.sel      (mfp_sel     ),

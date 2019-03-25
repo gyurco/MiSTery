@@ -22,6 +22,8 @@
 module mfp (
 	// cpu register interface
 	input 		 clk,
+	input 		 clk_32,
+	input        clk_en,
 	input 		 reset,
 	input [7:0]  din,
 	input 		 sel,
@@ -367,13 +369,8 @@ mfp_srff16 isr_latch (
 	.out		( isr					)
 );
 
-// this needs to happen at the same time the isr is set so it doesn't hurt
-// if a new irq arrives in between these two events and a different irq is
-// moved from ipr to isr than reported to the cpu
-always @(posedge iack)
-	irq_vec <= { vr[7:4], highest_irq_pending };
-
-always @(negedge clk) begin
+always @(posedge clk_32) begin
+	reg iackD;
 	ipr_reset <= 16'h0000; 
 	isr_reset <= 16'h0000; 
 
@@ -384,14 +381,15 @@ always @(negedge clk) begin
 		imr <= 16'h0000;
 		isr_set <= 16'h0000;
 	end else begin 
- 
+		iackD <= iack;
 		// remove active bit from ipr and set it in isr
-		if(iack) begin
+		if(~iackD & iack) begin
 			ipr_reset[highest_irq_pending] <= 1'b1;
 			isr_set <= (vr[3] && iack)?highest_irq_pending_mask:16'h0000;
+			irq_vec <= { vr[7:4], highest_irq_pending };
 		end
-			
-		if(sel && ~ds && ~rw) begin
+
+		if(clk_en && sel && ~ds && ~rw) begin
 			// -------- GPIO ---------
 			if(addr == 5'h00) gpip <= din;
 			if(addr == 5'h01)	aer <= din;
