@@ -3,7 +3,7 @@
 /********************************************/
 
 // comment for building with the FX68K CPU
-`define TG68KCPU
+//`define TG68KCPU
 
 module mist_top ( 
   // clock inputs	
@@ -203,7 +203,9 @@ wire mfp_sel  = io_sel && (tg68_lds == 1'd0) && ({tg68_adr[15:6], 6'd0} == 16'hf
 wire [7:0] mfp_data_out;
  
 // acia 8 bit interface at $fffc00 - $fffdff
-wire acia_sel = io_sel && ({tg68_adr[15:9], 9'd0} == 16'hfc00);  // fffc00-fffdff
+wire acia_addr = io_sel && ({tg68_adr[15:9], 9'd0} == 16'hfc00);  // fffc00-fffdff
+wire acia_sel = cpu_E && cpu_vma && acia_addr;
+
 wire [7:0] acia_data_out;
 
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
@@ -394,7 +396,8 @@ mfp mfp (
 
 acia acia (
 	// cpu interface
-	.clk      (clk_8       ),
+	.clk      (clk_32      ),
+	.E        (cpu_E       ),
 	.reset    (reset       ),
 	.din      (tg68_dat_out[15:8]),
 	.sel      (acia_sel    ),
@@ -642,6 +645,7 @@ wire clk_8;
 wire clk_32;
 wire clk_128;
 reg  clk_8_en;
+reg  clk_4_en;
      
 // use pll
 clock clock (
@@ -656,10 +660,11 @@ clock clock (
 //// 8MHz clock ////
 reg [1:0] clk_cnt;
 reg [1:0] bus_cycle;
-
+reg [2:0] clk_cnt2;
 
 always @ (posedge clk_32, negedge pll_locked) begin
 	if (!pll_locked) begin
+		clk_cnt2 <= 0;
 		clk_cnt <= 2'd2;
 		bus_cycle <= 2'd0;
 	end else begin 
@@ -667,8 +672,12 @@ always @ (posedge clk_32, negedge pll_locked) begin
 		clk_cnt <= clk_cnt + 2'd1;
 		if(clk_cnt == 2'd1)
 			bus_cycle <= bus_cycle + 2'd1;
-		if(clk_cnt == 0)
+		if(clk_cnt == 3)
 			clk_8_en <= 1;
+
+		clk_4_en <= 0;
+		clk_cnt2 <= clk_cnt2 + 1'd1;
+		if (!clk_cnt2) clk_4_en <= 1;
 	end
 end
 
@@ -866,6 +875,8 @@ wire [1:0] tg68_busstate;
 wire [15:0] cache_data_out = data_cache_hit?data_cache_data_out:inst_cache_data_out;
 wire [15:0] cpu_data_in = cacheRead?cache_data_out:system_data_out;
 
+wire cpu_E = !clk_8;
+wire cpu_vma = 1;
 
 TG68KdotC_Kernel #(2,2,2,2,2,2,2) tg68k (
 	.clk          	(clk_32 			),
@@ -988,6 +999,10 @@ reg clkena_n;
 reg clkenaD;
 reg clr_berr;
 reg fx68_mem_dtack;
+wire fx68_E;
+wire cpu_E = fx68_E;
+wire fx68_vma_n;
+wire cpu_vma = !fx68_vma_n;
 
 assign auto_iack = 0;
 assign auto_vector = 0;
@@ -1031,7 +1046,7 @@ assign io_sel = cpu2io && tg68_as;
 wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility
 wire        fx68_as_n;
 // autovector if hbi or vbi
-wire        fx68_vpa_n = ~(cpu2iack && ((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010)));
+wire        fx68_vpa_n = ~acia_addr && ~(cpu2iack && ((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010)));
 
 wire [15:0] cpu_data_in = system_data_out;
 wire [15:0] tg68_dat_out;
@@ -1055,8 +1070,8 @@ fx68k fx68k (
 	.ASn		( fx68_as_n ),
 	.LDSn		( tg68_lds ),
 	.UDSn		( tg68_uds ),
-	.E			(),
-	.VMAn		(),
+	.E			( fx68_E ),
+	.VMAn		( fx68_vma_n ),
 	.FC0		( tg68_fc[0] ),
 	.FC1		( tg68_fc[1] ),
 	.FC2		( tg68_fc[2] ),

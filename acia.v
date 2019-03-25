@@ -1,6 +1,7 @@
 module acia (
 	// cpu register interface
 	input clk,
+	input E,
 	input reset,
 	input [7:0] din,
 	input sel,
@@ -28,16 +29,21 @@ module acia (
    output [7:0] midi_data_out
 );
 
+reg E_d;
+always @(posedge clk) E_d <= E;
+wire clk_en = ~E_d & E;
+
+
 // --- ikbd output fifo ---
 // filled by the CPU when writing to the acia data register
 // emptied by the io controller when reading via SPI
 io_fifo ikbd_out_fifo (
 	.reset 				(reset),		
 
-	.in_clk   			(!clk),          // latch incoming data on negedge
+	.in_clk   			(clk),
 	.in 					(din),
 	.in_strobe 			(1'b0),
-	.in_enable			(sel && ~ds && ~rw && (addr == 2'd1)),   // ikbd acia data write
+	.in_enable			(clk_en && sel && ~ds && ~rw && (addr == 2'd1)),   // ikbd acia data write
 
 	.out_clk          (clk),
 	.out 					(ikbd_data_out),
@@ -53,12 +59,12 @@ io_fifo ikbd_out_fifo (
 io_fifo ikbd_in_fifo (
 	.reset 				(reset || (ikbd_cr[1:0] == 2'b11)),
 
-	.in_clk   			(!clk),          // latch incoming data on negedge
+	.in_clk   			(clk),          // latch incoming data on negedge
 	.in 					(ikbd_data_in),
 	.in_strobe 			(ikbd_strobe_in),
 	.in_enable			(1'b0),
 
-	.out_clk          (!clk),
+	.out_clk          (clk),
 	.out 					(ikbd_rx_data),
 	.out_strobe 		(1'b0),
 	.out_enable       (ikbd_cpu_data_read && ikbd_rx_data_available),
@@ -74,10 +80,10 @@ io_fifo ikbd_in_fifo (
 io_fifo midi_out_fifo (
 	.reset 				(reset),		
 
-	.in_clk   			(!clk),          // latch incoming data on negedge
+	.in_clk   			(clk),
 	.in 					(din),
 	.in_strobe 			(1'b0),
-	.in_enable			(sel && ~ds && ~rw && (addr == 2'd3)),  // midi acia data write
+	.in_enable			(clk_en && sel && ~ds && ~rw && (addr == 2'd3)),  // midi acia data write
 
 	.out_clk          (clk),
 	.out 					(midi_data_out),
@@ -87,7 +93,7 @@ io_fifo midi_out_fifo (
 	.data_available 	(midi_data_out_available)
 );
 // timer to let bytes arrive at a reasonable speed
-reg [13:0] readTimer;
+reg [15:0] readTimer;
 
 // delay the cpu read to be able to do things afterwards like e.g. incrementing 
 // the fifo pointers
@@ -97,16 +103,16 @@ reg ikbd_cpu_data_read;
 reg [7:0] ikbd_cr;
 reg [7:0] midi_cr;
 	
-always @(negedge clk) begin
+always @(posedge clk) begin
 	if(reset) begin
-		readTimer <= 14'd0;
+		readTimer <= 0;
 	end else begin
 		if(readTimer > 0)
-			readTimer <= readTimer - 14'd1;
+			readTimer <= readTimer - 1'd1;
 
 		// read on ikbd data register
 		ikbd_cpu_data_read <= 1'b0;
-		if(sel && ~ds && rw && (addr == 2'd1))
+		if(clk_en && sel && ~ds && rw && (addr == 2'd1))
 			ikbd_cpu_data_read <= 1'b1;
 
 		if(ikbd_cpu_data_read && ikbd_rx_data_available) begin
@@ -114,7 +120,7 @@ always @(negedge clk) begin
 			// The ikbd runs at 7812.5 bit/s 1 start + 8 data + 1 stop bit. 
 			// One byte is 1/718.25 seconds. A pause of ~1ms is thus required
 			// 8000000/718.25 = 11138.18
-			readTimer <= 14'd15000;
+			readTimer <= 16'd60000;
 		end
    end
 end 
@@ -162,9 +168,9 @@ wire [7:0] midi_status = { midi_irq, 1'b0 /* parity err */, midi_rx_overrun, mid
 // MIDI runs at 31250bit/s which is exactly 1/256 of the 8Mhz system clock
    
 // 8MHz/256 = 31250Hz -> MIDI bit rate
-reg [7:0] midi_clk;
+reg [9:0] midi_clk;
 always @(posedge clk)
-	midi_clk <= midi_clk + 8'd1;
+	midi_clk <= midi_clk + 1'd1;
 
 // --------------------------- midi receiver -----------------------------
 reg [7:0] midi_rx_cnt;         // bit + sub-bit counter
@@ -176,7 +182,7 @@ reg midi_rx_overrun;
 reg midi_rx_data_available;
 reg midi_in_filtered;
 
-always @(negedge clk) begin
+always @(posedge clk) begin
 	if(reset) begin
 		midi_rx_cnt <= 8'd0;
 		midi_rx_data_available <= 1'b0;
@@ -200,8 +206,8 @@ always @(negedge clk) begin
 			midi_rx_frame_error <= 1'b0;
 		end
 
-		// 1/16 system clock == 16 times midi clock
-		if(midi_clk[3:0] == 4'd0) begin
+		// 1/64 system clock == 16 times midi clock
+		if(midi_clk[5:0] == 4'd0) begin
 			midi_rx_filter <= { midi_rx_filter[2:0], midi_in};
 		
 			// midi input must be stable for 4 cycles to change state
@@ -254,10 +260,10 @@ reg [7:0] midi_tx_data;
 reg midi_tx_data_valid;
 reg [10:0] midi_tx_shift_reg;
   
-always @(negedge clk) begin
+always @(posedge clk) begin
 
 	// 16 times midi clock
-	if(midi_clk[3:0] == 4'd0) begin
+	if(midi_clk[5:0] == 4'd0) begin
 		if(midi_tx_cnt[3:0] == 4'h0) begin
 			// shift down one bit, fill with 1 bits
 			midi_tx_shift_reg <= { 1'b1, midi_tx_shift_reg[10:1] };
@@ -282,8 +288,7 @@ always @(negedge clk) begin
 		midi_tx_cnt <= 8'd0;
 		midi_tx_empty <= 1'b1;
 		midi_tx_data_valid <= 1'b0;
-   end else begin
-      if(sel && ~ds && ~rw) begin
+	end else if(clk_en && sel && ~ds && ~rw) begin
 
 			// write to ikbd control register
 			if(addr == 2'd0)
@@ -309,7 +314,6 @@ always @(negedge clk) begin
 					midi_tx_data_valid <= 1'b1;
 				end
 			end
-		end
    end
 end
    
