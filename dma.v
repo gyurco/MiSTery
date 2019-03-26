@@ -128,6 +128,10 @@ always @(posedge clk_32 or posedge reset) begin
 	end
 end
 
+reg cpu_selD;
+always @(posedge clk_32) if (clk_en) cpu_selD <= cpu_sel;
+wire cpu_req = ~cpu_selD & cpu_sel;
+
 // dma sector count and mode registers
 reg [7:0]  dma_scnt;   
 reg [15:0] dma_mode;
@@ -248,7 +252,7 @@ always @(posedge clk_32) begin
       cpu_dma_mode_direction_toggle <= 1'b0;
 
       // cpu writes ...
-      if(clk_en && cpu_sel && !cpu_rw && !cpu_lds) begin
+      if(clk_en && cpu_req && !cpu_rw && !cpu_lds) begin
 
 	 // ... sector count register
 	 if((cpu_addr == 3'h2) && (dma_mode[4] == 1'b1))
@@ -473,7 +477,7 @@ wire ioc_starts_dma = io_addr_strobe && (dio_addr_reg[31:24] != 0);
 
 always @(posedge clk_32 or posedge dma_stop) begin
    if(dma_stop) dma_in_progress <= 1'b0;
-   else if (dma_scnt_write_strobe) dma_in_progress <= cpu_starts_dma || ioc_starts_dma || (sector_strobe && dma_scnt != 0);   
+   else if (dma_scnt_write_strobe) dma_in_progress <= cpu_starts_dma || ioc_starts_dma || (sector_strobe && dma_scnt_next != 0);   
 end
 
 // ========================== DMA direction flag ============================

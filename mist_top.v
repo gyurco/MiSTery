@@ -1029,7 +1029,7 @@ always @(posedge clk_32) begin
 	end
 
 	// SDRAM data valid after clk_cnt == 0
-	if (cpu2mem && (~tg68_uds | ~tg68_lds) && cpu_cycle && (clk_cnt == 2'b00)) fx68_mem_dtack <= 1;
+	if (cpu2mem && (~tg68_uds | ~tg68_lds) && !br && cpu_cycle && (clk_cnt == 2'b00)) fx68_mem_dtack <= 1;
 	if (fx68_as_n) fx68_mem_dtack <= 0;
 end
 
@@ -1042,7 +1042,7 @@ always @(posedge clk_32 or posedge reset) begin
 end
 
 // generate dtack (for st ram and rom on read, no dtack for rom write)
-assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !br && !fx68_as_n;
+assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
 assign io_sel = cpu2io && tg68_as;
 
 wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility

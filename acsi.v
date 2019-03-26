@@ -45,6 +45,10 @@ module acsi (
 	output reg   irq		 
 );
 
+reg cpu_selD;
+always @(posedge clk) if (clk_en) cpu_selD <= cpu_sel;
+wire cpu_req = ~cpu_selD & cpu_sel;
+
 // acsi always returns dma status on cpu_read
 assign cpu_dout = dma_status;
 
@@ -99,17 +103,17 @@ always @(posedge clk) begin
       if(dma_nak)
 			busy <= 1'd0;
 
-      // cpu is accessing acsi bus -> clear acsi irq
-      // status itself is returned by the io controller with the dma_ack.
-		if(cpu_sel)
+		// cpu is accessing acsi bus -> clear acsi irq
+		// status itself is returned by the io controller with the dma_ack.
+		if(clk_en && cpu_req)
 			irq <= 1'b0;
-	 
-      // acsi register access
-      if(clk_en && cpu_sel && !cpu_rw) begin
+
+		// acsi register access
+		if(clk_en && cpu_req && !cpu_rw) begin
 			if(!cpu_addr[0]) begin
 				// a0 == 0 -> first command byte
 				target <= cpu_din[7:5];
-	
+
 				// icd command?
 				if(cpu_din[4:0] == 5'h1f)
 					byte_counter <= 3'd0;   // next byte will contain first command byte

@@ -44,6 +44,10 @@ module fdc (
 	output reg 	 irq		 
 );
 
+reg cpu_selD;
+always @(posedge clk) if (clk_en) cpu_selD <= cpu_sel;
+wire cpu_req = ~cpu_selD & cpu_sel;
+
 // fdc_busy is a counter. counts down from 2 to 0. stays at 3 since that
 // means that the fdc is waiting for the arm io controller
 localparam STATE_IDLE     = 2'd0;
@@ -102,7 +106,7 @@ always @(posedge clk) begin
      // motor runs for 2 seconds if it was already on. it rus for one
      // more second if if wasn't on yet (spin up)
      motor_on_counter <= (motor_on && !motor_force_spinup)?32'd16000000:32'd24000000;
-   else begin
+   else if (clk_en) begin
       // let "motor" run
       if(motor_on_counter != 0)
 			motor_on_counter <= motor_on_counter - 32'd1;
@@ -171,8 +175,8 @@ always @(posedge clk or posedge reset) begin
 				state <= STATE_IRQ;  // jump to end of busy phase
       end
       
-      // fdc may be waiting internally (e.g. for step completion)
-      if(state == STATE_INT_WAIT) begin
+		// fdc may be waiting internally (e.g. for step completion)
+		if(clk_en && state == STATE_INT_WAIT) begin
 			// count down and go into irq state if done
 			if(delay != 0)
 				delay <= delay - 32'd1;
@@ -187,10 +191,10 @@ always @(posedge clk or posedge reset) begin
 		end
 
 		// cpu is reading status register or writing command register -> clear fdc irq
-		if(cpu_sel && (cpu_addr == 0))
+		if(clk_en && cpu_req && (cpu_addr == 0))
 			irq <= 1'b0;
 	 
-		if(clk_en && cpu_sel && !cpu_rw) begin
+		if(clk_en && cpu_req && !cpu_rw) begin
 			// fdc register write
 			if(cpu_addr == 0) begin       // command register
 				cmd <= cpu_din;
