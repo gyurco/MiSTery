@@ -73,7 +73,7 @@ wire io_dtack = vreg_sel || mmu_sel || mfp_sel || mfp_iack ||
 // required to properly detect that a blitter is not present.
 // a bus error is now generated once no dtack is seen for 63 clock cycles.
 wire tg68_clr_berr;
-wire tg68_berr = (dtack_timeout == 4'd15);
+wire tg68_berr = &dtack_timeout;
 	
 // count bus errors for debugging purposes. we can thus trigger for a
 // certain bus error
@@ -110,7 +110,7 @@ always @(negedge clk_32) begin
 		berr_reset <= tg68_clr_berr;
 end
 
-reg [3:0] dtack_timeout;
+reg [4:0] dtack_timeout;
 always @(posedge clk_32 or posedge berr_reset) begin
 //	if(reset || tg68_clr_berr) begin
 	if(berr_reset) begin
@@ -122,7 +122,7 @@ always @(posedge clk_32 or posedge berr_reset) begin
 			
 			// also ram areas should never generate a
 			// bus error for reading. But rom does for writing
-			if(dtack_timeout != 4'd15) begin
+			if(!(&dtack_timeout)) begin
 				if(bus_ok)
 					dtack_timeout <= 4'd0;
 				else if(clk_cnt == 1) // increase timout at the end of the cpu cycle
