@@ -63,7 +63,7 @@ wire st_de, st_hs, st_vs;
 wire [15:0] video_adj;
 
 // generate dtack for all implemented peripherals
-wire io_dtack = vreg_sel || mmu_sel || mfp_sel || mfp_iack || 
+wire io_dtack = vreg_sel || mmu_sel || mfp_dtack || mfp_iack || 
      acia_sel || psg_sel || dma_sel || auto_iack || blitter_sel || 
 	  ste_joy_sel || ste_dma_snd_sel || mste_ctrl_sel || vme_sel || 
 	  rom_sel[1] || rom_sel[0]; 
@@ -365,6 +365,7 @@ wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy0[4];
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
 wire [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
 wire [1:0] mfp_timer_in = {!st_de, ste?ste_dma_snd_xsirq_delayed:!parallel_fifo_full};
+wire       mfp_dtack;
 
 mfp mfp (
 	// cpu register interface
@@ -377,9 +378,10 @@ mfp mfp (
 	.ds       (tg68_lds    ),
 	.rw       (tg68_rw     ),
 	.dout     (mfp_data_out),
-	.irq	    (mfp_irq     ),
-	.iack	    (mfp_iack    ),
-	
+	.irq      (mfp_irq     ),
+	.iack     (mfp_iack    ),
+	.dtack    (mfp_dtack   ),
+
 	// serial/rs232 interface io-controller<->mfp
 	.serial_data_out_available 	(serial_data_from_mfp_available),
 	.serial_strobe_out 				(serial_strobe_from_mfp),

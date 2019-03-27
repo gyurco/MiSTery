@@ -32,6 +32,7 @@ module mfp (
 	output reg [7:0] dout,
 	output 		 irq,
 	input 		 iack,
+	output		 dtack,
 
 	// serial rs232 connection to io controller
 	output 		 serial_data_out_available,
@@ -113,7 +114,10 @@ always @(posedge clk) begin
 	end
 end
 
-wire write = clk_en && sel && ~ds && ~rw;
+reg selD;
+always @(posedge clk) if (clk_en) selD <= sel;
+wire write = ~selD & sel & ~ds && ~rw;
+assign dtack = selD & sel;
 
 // timer a/b is in pulse mode
 wire [1:0] pulse_mode;
