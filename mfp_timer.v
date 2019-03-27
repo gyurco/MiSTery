@@ -22,8 +22,9 @@
 
 
 module mfp_timer(
-		 input 	      CLK,
-		 input 	      RST, 
+	input        CLK,
+	input        CLK_EN,
+	input        RST, 
                  
        input 	     DAT_WE,
        input [7:0]  DAT_I,
@@ -73,7 +74,7 @@ reg xclk_r, xclk_r2;
 // counters work on the negative clock edge. we latch them
 // on the positive edge for stable cpu read
 always @(posedge CLK)
-  cur_counter <= down_counter;
+  if (CLK_EN) cur_counter <= down_counter;
 
 // generate clock from async clock input
 always @(posedge XCLK_I) begin
@@ -95,7 +96,7 @@ always @(posedge CLK) begin
 		T_O_PULSE <= 1'b1;
 end
 
-always @(negedge CLK) begin
+always @(posedge CLK) begin
       
 	if (RST === 1'b1) begin
       T_O     <= 1'b0;

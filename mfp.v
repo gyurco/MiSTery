@@ -22,7 +22,6 @@
 module mfp (
 	// cpu register interface
 	input 		 clk,
-	input 		 clk_32,
 	input        clk_en,
 	input 		 reset,
 	input [7:0]  din,
@@ -60,10 +59,10 @@ wire serial_data_out_fifo_full;
 io_fifo mfp_out_fifo (
 	.reset 				(reset),		
 
-	.in_clk   			(!clk),          // latch incoming data on negedge
+	.in_clk   			(clk),
 	.in 					(din),
 	.in_strobe 			(1'b0),
-	.in_enable			(sel && ~ds && ~rw && (addr == 5'h17)),
+	.in_enable			(write && (addr == 5'h17)),
 
 	.out_clk          (clk),
 	.out 					(serial_data_out),
@@ -80,12 +79,12 @@ io_fifo mfp_out_fifo (
 io_fifo mfp_in_fifo (
 	.reset 				(reset),		
 
-	.in_clk   			(!clk),          // latch incoming data on negedge
+	.in_clk   			(clk),
 	.in 					(serial_data_in),
 	.in_strobe 			(serial_strobe_in),
 	.in_enable			(1'b0),
 
-	.out_clk          (!clk),
+	.out_clk          (clk),
 	.out 					(serial_data_in_cpu),
 	.out_strobe 		(1'b0),
 	.out_enable 		(serial_cpu_data_read && serial_data_in_available),
@@ -103,16 +102,18 @@ wire [7:0] serial_data_in_cpu;
 wire serial_data_in_empty;
 wire [3:0] serial_data_in_space;
 
-always @(negedge clk) begin
-	serial_cpu_data_readD <= serial_cpu_data_read;
-
-	// read on uart data register
+always @(posedge clk) begin
 	serial_cpu_data_read <= 1'b0;
-	if(sel && ~ds && rw && (addr == 5'h17))
-		serial_cpu_data_read <= 1'b1;
-end 
+	if (clk_en) begin
+		serial_cpu_data_readD <= serial_cpu_data_read;
 
-wire write = sel && ~ds && ~rw;
+		// read on uart data register
+		if(sel && ~ds && rw && (addr == 5'h17))
+			serial_cpu_data_read <= 1'b1;
+	end
+end
+
+wire write = clk_en && sel && ~ds && ~rw;
 
 // timer a/b is in pulse mode
 wire [1:0] pulse_mode;
@@ -123,6 +124,7 @@ wire [3:0] timera_ctrl_o;
 
 mfp_timer timer_a (
 	.CLK 			(clk),
+	.CLK_EN			(clk_en),
 	.XCLK_I		(clk_ext),
 	.RST 			(reset),
    .CTRL_I		(din[4:0]),
@@ -142,6 +144,7 @@ wire [3:0] timerb_ctrl_o;
 
 mfp_timer timer_b (
 	.CLK 			(clk),
+	.CLK_EN			(clk_en),
 	.XCLK_I		(clk_ext),
 	.RST 			(reset),
    .CTRL_I		(din[4:0]),
@@ -161,6 +164,7 @@ wire [3:0] timerc_ctrl_o;
 
 mfp_timer timer_c (
 	.CLK 			(clk),
+	.CLK_EN			(clk_en),
 	.XCLK_I		(clk_ext),
 	.RST 			(reset),
    .CTRL_I		({2'b00, din[6:4]}),
@@ -179,6 +183,7 @@ wire [7:0] timerd_set_data;
 
 mfp_timer timer_d (
 	.CLK 			(clk),
+	.CLK_EN			(clk_en),
 	.XCLK_I		(clk_ext),
 	.RST 			(reset),
    .CTRL_I		({2'b00, din[2:0]}),
@@ -350,7 +355,7 @@ wire [15:0]	ipr_set = {
 };
 
 mfp_srff16 ipr_latch (
-	.clk	(clk_32),
+	.clk	(clk),
 	.set    	( ipr_set       	),
 	.mask   	( ier	            ),
 	.reset	( ipr_reset			),
@@ -364,14 +369,14 @@ reg [15:0] isr_set;
 
 // move highest pending irq into isr when s bit set and iack raises
 mfp_srff16 isr_latch (
-	.clk	(clk_32),
+	.clk	(clk),
 	.set    	( isr_set			),
 	.mask   	( 16'hffff			),
 	.reset	( isr_reset			),
 	.out		( isr					)
 );
 
-always @(posedge clk_32) begin
+always @(posedge clk) begin
 	reg iackD;
 	ipr_reset <= 16'h0000; 
 	isr_reset <= 16'h0000; 
@@ -391,7 +396,7 @@ always @(posedge clk_32) begin
 			irq_vec <= { vr[7:4], highest_irq_pending };
 		end
 
-		if(clk_en && sel && ~ds && ~rw) begin
+		if(write) begin
 			// -------- GPIO ---------
 			if(addr == 5'h00) gpip <= din;
 			if(addr == 5'h01)	aer <= din;
