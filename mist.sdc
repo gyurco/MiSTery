@@ -113,6 +113,12 @@ set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_com
 set_multicycle_path -to [get_clocks {clk_8}] -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -setup 2
 set_multicycle_path -to [get_clocks {clk_8}] -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -hold 1
 
+# FX68K
+set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 2
+set_multicycle_path -start -hold -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 1
+set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|nanoAddr[*]] 2
+set_multicycle_path -start -hold -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|nanoAddr[*]] 1
+
 #**************************************************************
 # Set Maximum Delay
 #**************************************************************
