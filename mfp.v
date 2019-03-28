@@ -116,8 +116,13 @@ end
 
 reg selD;
 always @(posedge clk) if (clk_en) selD <= sel;
-wire write = ~selD & sel & ~ds && ~rw;
-assign dtack = selD & sel;
+wire write = ~selD & sel & ~ds & ~rw;
+
+reg iackD;
+always @(posedge clk) if (clk_en) iackD <= iack;
+wire iack_sel = clk_en & ~iackD & iack & ~ds;
+
+assign dtack = (selD & sel) || (iackD & iack);
 
 // timer a/b is in pulse mode
 wire [1:0] pulse_mode;
@@ -381,7 +386,6 @@ mfp_srff16 isr_latch (
 );
 
 always @(posedge clk) begin
-	reg iackD;
 	ipr_reset <= 16'h0000; 
 	isr_reset <= 16'h0000; 
 
@@ -392,9 +396,8 @@ always @(posedge clk) begin
 		imr <= 16'h0000;
 		isr_set <= 16'h0000;
 	end else begin 
-		iackD <= iack;
 		// remove active bit from ipr and set it in isr
-		if(~iackD & iack) begin
+		if(iack_sel) begin
 			ipr_reset[highest_irq_pending] <= 1'b1;
 			isr_set <= (vr[3] && iack)?highest_irq_pending_mask:16'h0000;
 			irq_vec <= { vr[7:4], highest_irq_pending };

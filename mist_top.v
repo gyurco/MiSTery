@@ -63,7 +63,7 @@ wire st_de, st_hs, st_vs;
 wire [15:0] video_adj;
 
 // generate dtack for all implemented peripherals
-wire io_dtack = vreg_sel || mmu_sel || mfp_dtack || mfp_iack || 
+wire io_dtack = vreg_sel || mmu_sel || mfp_dtack ||
      acia_sel || psg_sel || dma_sel || auto_iack || blitter_sel || 
 	  ste_joy_sel || ste_dma_snd_sel || mste_ctrl_sel || vme_sel || 
 	  rom_sel[1] || rom_sel[0]; 
@@ -136,11 +136,6 @@ end
 // much more than halting the cpu by suppressing 
 wire br = dma_br || blitter_br; // dma/blitter are only other bus masters
 
-// request interrupt ack from mfp for IPL == 6. This must not be done by 
-// combinatorics as it must be glitch free since the mfp does things on the
-// rising edge of iack. 
-reg mfp_iack;
-			
 // the tg68k core doesn't reliably support mixed usage of autovector and non-autovector
 // interrupts.
 // For the atari we've fixed the non-autovector support inside the kernel and switched
@@ -911,6 +906,11 @@ wire [7:0] auto_vector_vbi = (auto_iack && (tg68_adr[3:1] == 3'b100))?8'h1c:8'h0
 wire [7:0] auto_vector_hbi = (auto_iack && (tg68_adr[3:1] == 3'b010))?8'h1a:8'h00;
 assign auto_vector = auto_vector_vbi | auto_vector_hbi;
 
+// request interrupt ack from mfp for IPL == 6. This must not be done by 
+// combinatorics as it must be glitch free since the mfp does things on the
+// rising edge of iack. 
+reg mfp_iack;
+
 always @(posedge clk_32 or posedge reset) begin
 	if(reset)
 		mfp_iack <= 1'b0;
@@ -1034,13 +1034,7 @@ always @(posedge clk_32) begin
 	if (fx68_as_n) fx68_mem_dtack <= 0;
 end
 
-always @(posedge clk_32 or posedge reset) begin
-	if(reset)
-		mfp_iack <= 1'b0;
-	else begin
-		mfp_iack <= cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
-	end
-end
+wire mfp_iack = cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
 
 // generate dtack (for st ram and rom on read, no dtack for rom write)
 assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
