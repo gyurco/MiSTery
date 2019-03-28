@@ -509,9 +509,11 @@ wire ste_dma_snd_read;
 
 audio audio (
 	// system interface
-	.reset 		( reset 			),
-	.clk_32 		( clk_32 		),
-	.clk_8 		( clk_8 			),
+	.reset      ( reset         ),
+	.clk_32     ( clk_32        ),
+	.clk_8 		( clk_8         ),
+	.clk_2_en   ( clk_2_en      ),
+	.clk_8_en   ( clk_8_en      ),
 	.bus_cycle 	( bus_cycle		),
 
 	// cpu register interface(s)
@@ -647,9 +649,7 @@ wire pll_locked;
 wire clk_8;
 wire clk_32;
 wire clk_128;
-reg  clk_8_en;
-reg  clk_4_en;
-     
+
 // use pll
 clock clock (
   .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
@@ -660,32 +660,32 @@ clock clock (
 );
 
 
-//// 8MHz clock ////
-reg [1:0] clk_cnt;
-reg [1:0] bus_cycle;
-reg [2:0] clk_cnt2;
+//// clock enables ////
+reg  [1:0] bus_cycle;
+reg  [3:0] clk_counter;
+wire [1:0] clk_cnt = clk_counter[1:0];
+reg        clk_8_en;
+reg        clk_4_en;
+reg        clk_2_en;
 
 always @ (posedge clk_32, negedge pll_locked) begin
 	if (!pll_locked) begin
-		clk_cnt2 <= 0;
-		clk_cnt <= 2'd2;
+		clk_counter <= 4'd2;
 		bus_cycle <= 2'd0;
 	end else begin 
 		clk_8_en <= 0;
-		clk_cnt <= clk_cnt + 2'd1;
-		if(clk_cnt == 2'd1)
-			bus_cycle <= bus_cycle + 2'd1;
-		if(clk_cnt == 3)
-			clk_8_en <= 1;
-
 		clk_4_en <= 0;
-		clk_cnt2 <= clk_cnt2 + 1'd1;
-		if (!clk_cnt2) clk_4_en <= 1;
+		clk_2_en <= 0;
+		clk_counter <= clk_counter + 1'd1;
+		if(clk_counter[1:0] == 1) bus_cycle <= bus_cycle + 1'd1;
+		if(clk_counter[1:0] == 3) clk_8_en <= 1;
+		if(!clk_counter[2:0])     clk_4_en <= 1;
+		if(!clk_counter)          clk_2_en <= 1;
 	end
 end
 
 assign clk_8 = clk_cnt[1];
- 
+
 // MFP clock
 // required: 2.4576 MHz
 // mfp clock is clk_128*2457600/128000000 -> 12/625 -> toggle at 24/625

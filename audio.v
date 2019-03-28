@@ -23,7 +23,9 @@ module audio (
 	// system interface
 	input  	reset,
 	input 	clk_32,      // 32 MHz
-	input 	clk_8,       
+	input 	clk_8,
+	input   clk_8_en,
+	input   clk_2_en,
 	input [1:0] bus_cycle,   // bus-cycle for sync
 	
 
@@ -63,13 +65,6 @@ module audio (
 	output audio_l
 );
 	
-// 2Mhz clock for PSG and STE DMA audio delay buffer
-reg [3:0] sclk;
-always @ (posedge clk_32)
-	sclk <= sclk + 1'd1;
-
-wire clk2_en = !sclk;
-
 wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 assign floppy_side = port_a_out[0];
@@ -94,7 +89,7 @@ wire [7:0] psg_dout;
 
 ym2149 ym2149 (
 	.CLK         ( clk_32             ),
-	.CE          ( clk2_en            ),
+	.CE          ( clk_2_en           ),
 	.RESET       ( reset              ),
 	.DI          ( din[15:8]          ),
 	.DO          ( psg_dout           ),
@@ -136,6 +131,7 @@ wire [7:0] ste_audio_out_l;
 ste_dma_snd ste_dma_snd (
 	// cpu interface
 	.clk      	(clk_8             ),
+	.clk_2_en   (clk_2_en          ),
 	.reset    	(reset             ),
 	.din      	(din               ),
 	.sel      	(ste_dma_snd_sel   ),

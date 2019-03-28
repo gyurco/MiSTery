@@ -22,6 +22,7 @@
 module ste_dma_snd (
 	// system interface
 	input             clk,
+	input             clk_2_en,
 	input             reset,
   
 	// cpu register interface
@@ -75,14 +76,6 @@ assign read = (bus_cycle == 0) && hsync && !fifo_full && dma_enable;
 // ------------------------------ clock generation ---------------------------
 // ---------------------------------------------------------------------------
 
-// dma sound internally works on a 2MHz clock
-reg       clk2_en;
-reg [3:0] sclk_cnt;
-always @(posedge clk32) begin
-	sclk_cnt <= sclk_cnt + 1'd1;
-	clk2_en <= !sclk_cnt;
-end
-
 // divide 8MHz down to sample rate base frequency of 55066hz
 reg a2base;
 reg [31:0] a2base_cnt;
@@ -119,9 +112,9 @@ end
 reg [7:0] xsint_delay;
 always @(posedge clk32 or negedge xsint) begin
 	if(!xsint) xsint_delay <= 8'h00;            // async reset
-	else if (clk2_en) xsint_delay <= {xsint_delay[6:0], xsint};
+	else if (clk_2_en) xsint_delay <= {xsint_delay[6:0], xsint};
 end
- 
+
 assign xsint_d = xsint_delay[7];
 
 // dma sound  

@@ -46,7 +46,7 @@ create_clock -name {SPI_SCK}  -period 41.666 -waveform { 20.8 41.666 } [get_port
 #**************************************************************
 
 derive_pll_clocks
-create_generated_clock -name clk_8 -source [get_pins {clock|altpll_component|auto_generated|pll1|clk[1]}] -divide_by 4 [get_registers {clk_cnt[1]}]
+create_generated_clock -name clk_8 -source [get_pins {clock|altpll_component|auto_generated|pll1|clk[1]}] -divide_by 4 [get_registers {clk_counter[1]}]
 #**************************************************************
 # Set Clock Latency
 #**************************************************************
