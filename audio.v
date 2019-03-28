@@ -111,12 +111,12 @@ wire parallel_fifo_full;
 io_fifo #(.DEPTH(4)) parallel_out_fifo (
 	.reset 				(reset),		
 
-	.in_clk  			(clk_8),
+	.in_clk  			(clk_32),
 	.in 					(port_b_out),
 	.in_strobe 			(port_a_out[5]),
 	.in_enable		 	(1'b0),
 
-	.out_clk  			(clk_8),
+	.out_clk  			(clk_32),
 	.out 					(parallel_data_out),
 	.out_strobe 		(parallel_strobe_out),
 	.out_enable		 	(1'b0),
@@ -130,27 +130,28 @@ wire [7:0] ste_audio_out_l;
 
 ste_dma_snd ste_dma_snd (
 	// cpu interface
-	.clk      	(clk_8             ),
-	.clk_2_en   (clk_2_en          ),
-	.reset    	(reset             ),
-	.din      	(din               ),
-	.sel      	(ste_dma_snd_sel   ),
-	.addr     	(addr[5:1]         ),
-	.uds      	(uds          ),
-	.lds      	(lds          ),
-	.rw       	(rw           ),
-	.dout     	(ste_dma_snd_data_out),
+	.clk32      (clk_32          ),
+	.clk_8_en   (clk_8_en        ),
+	.reset      (reset           ),
+	.din        (din             ),
+	.sel        (ste_dma_snd_sel ),
+	.addr       (addr[5:1]       ),
+	.uds        (uds             ),
+	.lds        (lds             ),
+	.rw         (rw              ),
+	.dout       (ste_dma_snd_data_out),
 
 	// memory interface
-	.clk32	  	(clk_32            ),
-	.bus_cycle 	(bus_cycle         ),
-	.hsync		(hsync             ),
-	.saddr      (dma_addr  ),
-	.read       (dma_read  ),
-	.data       (dma_data  ),
+	.clk        (clk_8           ),
+	.clk_2_en   (clk_2_en        ),
+	.bus_cycle 	(bus_cycle       ),
+	.hsync      (hsync           ),
+	.saddr      (dma_addr        ),
+	.read       (dma_read        ),
+	.data       (dma_data        ),
 
-	.audio_l    (ste_audio_out_l   ),
-	.audio_r    (ste_audio_out_r	 ),
+	.audio_l    (ste_audio_out_l ),
+	.audio_r    (ste_audio_out_r ),
 
 	.xsint     	( xsint ),
 	.xsint_d   	( xsint_d )   // 4 usec delayed

@@ -36,6 +36,7 @@ module ste_dma_snd (
 
 	// memory interface
 	input 				clk32,     // 32 MHz
+	input               clk_8_en,
 	input [1:0] 		bus_cycle, // bus-cycle
 	input					hsync,     // to synchronize with video
 	output            read,
@@ -166,6 +167,9 @@ end
 // ---------------------------------------------------------------------------
 // ----------------------------- CPU register write --------------------------
 // ---------------------------------------------------------------------------
+reg selD;
+always @(posedge clk32) if (clk_8_en) selD <= sel;
+wire req = ~selD & sel;
 
 reg [6:0] mw_cnt;   // micro wire shifter counter
 
@@ -176,16 +180,16 @@ reg mw_done;
 
 reg dma_start;
 
-always @(negedge clk) begin
+always @(posedge clk32) begin
 	if(reset) begin
 		ctrl <= 2'b00;         // default after reset: dma off
 		mw_cnt <= 7'h00;        // no micro wire transfer in progress
 		dma_start <= 1'b0;
 	end else begin
 		// writing bit 0 of the ctrl register to 1 starts the dma engine
-		dma_start <= sel && !rw && !lds && (addr == 5'h00) && din[0];
-	
-		if(sel && !rw) begin	
+		dma_start <= clk_8_en && req && !rw && !lds && (addr == 5'h00) && din[0];
+
+		if(clk_8_en && req && !rw) begin
 			if(!lds) begin
 				// control register
 				if(addr == 5'h00) ctrl <= din[1:0];
@@ -214,14 +218,14 @@ always @(negedge clk) begin
 	// ----------- micro wire interface -----------
 	
 	// writing the data register triggers the transfer
-	if((sel && !rw && (addr == 5'h11)) || (mw_cnt != 0)) begin
+	if(clk_8_en && ((req && !rw && (addr == 5'h11)) || (mw_cnt != 0))) begin
 
 		// decrease shift counter. Do this before the register write as
 		// register write has priority and should reload the counter
 		if(mw_cnt != 0) 
 			mw_cnt <= mw_cnt - 7'd1;
 
-		if(sel && !rw && (addr == 5'h11)) begin
+		if(req && !rw && (addr == 5'h11)) begin
 			// first bit is evaluated imediately					
 			mw_data_reg <= { din[14:0], 1'b0 }; 
 			mw_data <= din[15];
@@ -233,7 +237,7 @@ always @(negedge clk) begin
 		end
 
 		// rotate mask on first access and on every further 8 clocks 
-		if((sel && !rw && (addr == 5'h11)) || (mw_cnt[2:0] == 3'b000)) begin
+		if((req && !rw && (addr == 5'h11)) || (mw_cnt[2:0] == 3'b000)) begin
 			mw_mask_reg <= { mw_mask_reg[14:0], mw_mask_reg[15]}; 
 			// notify client of valid bits
 			mw_clk <= mw_mask_reg[15];
