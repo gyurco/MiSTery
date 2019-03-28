@@ -27,8 +27,10 @@ module blitter (
 		input [1:0] 			bus_cycle,
 
 		// cpu register interface
-		input 		  			clk,
-		input 		  			reset,
+		input               clk,
+		input               clk_32,
+		input               clk_en,
+		input               reset,
 
 		input 		  			sel,
 		input [4:0] 			addr,
@@ -99,7 +101,10 @@ always @(negedge clk) begin
 end
 
 // ------------------ cpu interface --------------------
- 
+reg selD;
+always @(posedge clk_32) if (clk_en) selD <= sel;
+wire req = ~selD & sel;
+
 // CPU READ
 always @(sel, rw, addr, src_y_inc, src_x_inc, src_addr, endmask1, endmask2, endmask3, 
 		dst_x_inc, dst_y_inc, dst_addr, x_count, y_count, hop, op, busy, hog,
@@ -160,15 +165,15 @@ always @(posedge clk)
 	if(cycle_readL)
 		bm_data_in_latch <= bm_data_in;
 
-always @(negedge clk) begin
+always @(posedge clk_32) begin
 
 	// ---------- blitter cpu register write interfce ............
 	if(reset) begin
 		busy <= 1'b0; 
 		state <= 2'd0;
 		wait4bus <= 1'b0;
-   end else begin
-      if(sel && ~rw) begin
+	end else begin
+		if(clk_en && req && ~rw) begin
 			// ------ 16/32 bit registers, not byte adressable ----------
 			if((addr >= 5'h00) && (addr <= 5'h0f))	halftone_ram[addr] <= din;
 
@@ -227,7 +232,7 @@ always @(negedge clk) begin
 				fxsr <= din[7];
 			end 
 		end
-   end
+	end
 	
 	// ----------------------------------------------------------------------------------
 	// -------------------------- blitter state machine ---------------------------------
@@ -235,7 +240,7 @@ always @(negedge clk) begin
 
 	// entire state machine advances in bus_cycle 0
 	// (the cycle before the one being used by the cpu/blitter for memory access)
-	if(cycle_advance) begin
+	if(clk_en && cycle_advance) begin
 
 		// grab bus if blitter is supposed to run (busy == 1) and we're not waiting for the bus
 		br_out <= busy && (!wait4bus || (wait4bus && (bus_coop_cnt == 0)));
