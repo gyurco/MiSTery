@@ -69,7 +69,7 @@ wire      pulse_mode;
 reg trigger_r, trigger_r2;
 
 // async clock edge detect
-reg xclk_r, xclk_r2;
+reg xclk, xclk_r, xclk_r2;
 
 // counters work on the negative clock edge. we latch them
 // on the positive edge for stable cpu read
@@ -81,9 +81,10 @@ always @(posedge XCLK_I) begin
 	if(RST === 1'b1) 
       prescaler_counter <= 8'd0;
 	else begin
- 		if(prescaler_counter >= prescaler)
+		if(prescaler_counter >= prescaler) begin
 			prescaler_counter <= 8'd0;
-		else
+			xclk <= ~xclk;
+		end else
 			prescaler_counter <= prescaler_counter + 8'd1;
 	end
 end
@@ -104,31 +105,30 @@ always @(posedge CLK) begin
       data    <= 8'd0;
       down_counter <= 8'd0;
       count <= 1'b0;
-   end else begin
-	 
-      // bring trigger/xclk edges into our clock domain.
-      trigger_r <= T_I;
-      trigger_r2 <= trigger_r;
+	end else begin
 
-		xclk_r <= (prescaler_counter === 8'd0);
+		// bring trigger/xclk edges into our clock domain.
+		trigger_r <= T_I;
+		trigger_r2 <= trigger_r;
+
+		xclk_r <= xclk;
 		xclk_r2 <= xclk_r;
 
-      // if a write request comes from the main unit
-      // then write the data to the appropriate register.
-      if(DAT_WE) begin
-         data <= DAT_I;
+		// if a write request comes from the main unit
+		// then write the data to the appropriate register.
+		if(DAT_WE) begin
+			data <= DAT_I;
 			// the counter itself is only loaded here if it's stopped
 			if(!started)
-           down_counter <= DAT_I;
-      end
+				down_counter <= DAT_I;
+		end
 
 		if(CTRL_WE) begin
-         control <= CTRL_I[3:0];
-	       
-         if (CTRL_I[4] == 1'b1)
-            T_O <= 1'b0;
-      end 
-         
+			control <= CTRL_I[3:0];
+			if (CTRL_I[4] == 1'b1)
+				T_O <= 1'b0;
+		end 
+
 		if (started) begin
 			count <= 1'b0;
 
@@ -139,12 +139,12 @@ always @(posedge CLK) begin
 	    
 			// handle delay mode
 			if (delay_mode === 1'b1)
-				if ((~xclk_r2 & xclk_r) === 1'b1)
+				if (xclk_r2 ^ xclk_r)
 					count <= 1'b1;
 
 			// handle pulse mode
 			if (pulse_mode === 1'b1)
-				if (((~xclk_r2 & xclk_r) === 1'b1) && T_I)
+				if ((xclk_r2 ^ xclk_r) && T_I)
 					count <= 1'b1;
 	    
 			if (count) begin
