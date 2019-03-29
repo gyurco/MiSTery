@@ -77,27 +77,22 @@ assign read = (bus_cycle == 0) && hsync && !fifo_full && dma_enable;
 // ------------------------------ clock generation ---------------------------
 // ---------------------------------------------------------------------------
 
-// divide 8MHz down to sample rate base frequency of 55066hz
+// base clock is 8MHz/160 (32MHz/640)
 reg a2base;
-reg [31:0] a2base_cnt;
+reg [9:0] a2base_cnt;
 reg a2base_en;
-always @(posedge clk) begin
-   a2base_en <= 0;
-   if(a2base_cnt < 32'd4000000)
-     a2base_cnt <= a2base_cnt + 32'd50066;
-   else begin
-      a2base_cnt <= a2base_cnt - 32'd4000000 + 32'd50066;
-      a2base <= !a2base;
-	  if (~a2base) a2base_en <= 1;
-   end
+always @(posedge clk32) begin
+	a2base_cnt <= a2base_cnt + 1'd1;
+	if(a2base_cnt == 639) a2base_cnt <= 0;
+	a2base_en <= (!a2base_cnt);
 end
-   
+
 // generate current audio clock
 reg [2:0] aclk_cnt;
-always @(posedge clk) if (a2base_en) aclk_cnt <= aclk_cnt + 3'd1;
+always @(posedge clk32) if (a2base_en) aclk_cnt <= aclk_cnt + 3'd1;
 
 reg aclk_en;
-always @(posedge clk) begin
+always @(posedge clk32) begin
 	aclk_en <=  a2base_en & (
 				(mode[1:0] == 2'b11)?a2base_en:       // 50 kHz
 				((mode[1:0] == 2'b10)?!aclk_cnt[0]:   // 25 kHz
@@ -275,7 +270,7 @@ wire [15:0] fifo_out = fifo[readP];
 wire [7:0] mono_byte = (!byte)?fifo_out[15:8]:fifo_out[7:0];
 
 // empty the fifo at the correct rate
-always @(posedge clk) begin
+always @(posedge clk32) begin
 	if(reset) begin
 		readP <= 2'd0;
 		fifo_underflow <= 12'd0;
@@ -323,7 +318,7 @@ reg dma_enable;  // flag indicating dma engine is active
 // the "dma_enable" signal is permanently active while playing. The adress counter will
 // reach snd_end, but this will not generate a bus transfer and thus xsint is
 // released for that event
-always @(posedge clk)
+always @(posedge clk32)
 	xsint <= dma_enable && (snd_adr != snd_end_latched);
 
 // assign xsint = dma_enable && (snd_adr != snd_end_latched);
