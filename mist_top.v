@@ -1009,6 +1009,7 @@ wire cpu_E = fx68_E;
 wire fx68_vma_n;
 wire cpu_vma = !fx68_vma_n;
 
+reg         fx68_mem_data_valid;
 reg         fx68_mem_latch_valid;
 reg  [15:0] fx68_mem_latch;
 wire [15:0] fx68_data_in = cpu2mem?(fx68_mem_latch_valid?fx68_mem_latch:ram_data_out):io_data_out;
@@ -1023,6 +1024,11 @@ always @(posedge clk_32) begin
 	// default: cpu does not run
 	clkena <= 0;
 	clkena_n <= 0;
+	if ((mste && enable_16mhz) || steroids) begin
+		// 16MHZ clock
+		if (clk_cnt == 2) clkena <= 1;
+		if (clk_cnt == 1) clkena_n <= 1;
+	end
 	if (clk_cnt == 0) clkena <= 1;
 	if (clk_cnt == 3) clkena_n <= 1;
 	clkenaD <= clkena;
@@ -1035,14 +1041,16 @@ always @(posedge clk_32) begin
 	end
 
 	if (cpu2mem && (~tg68_uds | ~tg68_lds) && !br && cpu_cycle) begin
-		// SDRAM data valid after clk_cnt == 0
-		if (clk_cnt == 2'b00) fx68_mem_dtack <= 1;
+		if (clk_cnt == 2'b10) fx68_mem_data_valid <= 1;
+		// SDRAM data valid after clk_cnt == 0, if the read cycle started at 2
+		if (clk_cnt == 2'b00 && fx68_mem_data_valid) fx68_mem_dtack <= 1;
 		if (clk_cnt == 2'b01) begin
 			fx68_mem_latch_valid <= 1;
 			fx68_mem_latch <= ram_data_out;
 		end
 	end
 	if (fx68_as_n) begin
+		fx68_mem_data_valid <= 0;
 		fx68_mem_latch_valid <= 0;
 		fx68_mem_dtack <= 0;
 	end
