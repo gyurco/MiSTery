@@ -1009,6 +1009,10 @@ wire cpu_E = fx68_E;
 wire fx68_vma_n;
 wire cpu_vma = !fx68_vma_n;
 
+reg         fx68_mem_latch_valid;
+reg  [15:0] fx68_mem_latch;
+wire [15:0] fx68_data_in = cpu2mem?(fx68_mem_latch_valid?fx68_mem_latch:ram_data_out):io_data_out;
+
 assign auto_iack = 0;
 assign auto_vector = 0;
 
@@ -1019,7 +1023,6 @@ always @(posedge clk_32) begin
 	// default: cpu does not run
 	clkena <= 0;
 	clkena_n <= 0;
-
 	if (clk_cnt == 0) clkena <= 1;
 	if (clk_cnt == 3) clkena_n <= 1;
 	clkenaD <= clkena;
@@ -1031,10 +1034,20 @@ always @(posedge clk_32) begin
 		if (fx68_berr2) clr_berr <= 1;
 	end
 
-	// SDRAM data valid after clk_cnt == 0
-	if (cpu2mem && (~tg68_uds | ~tg68_lds) && !br && cpu_cycle && (clk_cnt == 2'b00)) fx68_mem_dtack <= 1;
-	if (fx68_as_n) fx68_mem_dtack <= 0;
+	if (cpu2mem && (~tg68_uds | ~tg68_lds) && !br && cpu_cycle) begin
+		// SDRAM data valid after clk_cnt == 0
+		if (clk_cnt == 2'b00) fx68_mem_dtack <= 1;
+		if (clk_cnt == 2'b01) begin
+			fx68_mem_latch_valid <= 1;
+			fx68_mem_latch <= ram_data_out;
+		end
+	end
+	if (fx68_as_n) begin
+		fx68_mem_latch_valid <= 0;
+		fx68_mem_dtack <= 0;
+	end
 end
+
 
 wire mfp_iack = cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
 
@@ -1085,7 +1098,7 @@ fx68k fx68k (
 	.IPL0n		( ipl[0] ),
 	.IPL1n		( ipl[1] ),
 	.IPL2n		( ipl[2] ),
-	.iEdb		( cpu_data_in ),
+	.iEdb		( fx68_data_in ),
 	.oEdb		( tg68_dat_out ),
 	.eab		( tg68_adr[23:1] )
 );
@@ -1149,8 +1162,9 @@ wire dma_has_bus = dma_br;
 wire blitter_has_bus = blitter_br;
 
 // singnal indicating if cpu should use a second cpu slot for 16Mhz like operation
+// ROM is not shared with Shifter, so give a second slot to it
 // steroids (STEroid) always runs at max speed
-wire second_cpu_slot = (mste && enable_16mhz) || steroids;
+wire second_cpu_slot = (mste && enable_16mhz) || steroids || cpu2rom;
 
 // Two of the four cycles are being used. One for video (+STE audio) and one for
 // cpu, DMA and Blitter. A third is optionally being used for faster CPU
@@ -1168,7 +1182,7 @@ wire [22:0] ram_address = video_cycle?video_cycle_addr:cpu_cycle_addr;
 // memory access during the video cycle is shared between video and ste_dma_snd
 wire video_cycle_oe = ste_dma_has_bus?ste_dma_snd_read:video_read;
 // memory access during the cpu cycle is shared between blitter and cpu
-wire cpu_cycle_oe = dma_has_bus?dma_read:(blitter_has_bus?blitter_master_read:(cpu_cycle && tg68_as && tg68_rw && cpu2mem));
+wire cpu_cycle_oe = dma_has_bus?dma_read:(blitter_has_bus?blitter_master_read:(cpu_cycle && tg68_as && tg68_rw && cpu2mem && !tg68_dtack));
 wire ram_oe = video_cycle?video_cycle_oe:(cpu_cycle?cpu_cycle_oe:1'b0);
 
 // ----------------- RAM write -----------------
