@@ -23,7 +23,7 @@
 
 module mfp_timer(
 	input        CLK,
-	input        CLK_EN,
+	input        DS,
 	input        RST, 
                  
        input 	     DAT_WE,
@@ -71,14 +71,14 @@ reg trigger_r, trigger_r2;
 // async clock edge detect
 reg xclk, xclk_r, xclk_r2;
 
-// counters work on the negative clock edge. we latch them
-// on the positive edge for stable cpu read
+// from datasheet: 
+// read value when the DS pin last gone high prior to the current read cycle
 always @(posedge CLK)
-  if (CLK_EN) cur_counter <= down_counter;
+  if (DS) cur_counter <= down_counter;
 
 // generate clock from async clock input
 always @(posedge XCLK_I) begin
-	if(RST === 1'b1) 
+	if(RST | !started)
       prescaler_counter <= 8'd0;
 	else begin
 		if(prescaler_counter >= prescaler) begin
