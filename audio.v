@@ -22,8 +22,7 @@
 module audio (
 	// system interface
 	input  	reset,
-	input 	clk_32,      // 32 MHz
-	input 	clk_8,
+	input 	clk,      // 32 MHz
 	input   clk_8_en,
 	input   clk_2_en,
 	input [1:0] bus_cycle,   // bus-cycle for sync
@@ -88,7 +87,7 @@ wire [15:0] ste_dma_snd_data_out;
 wire [7:0] psg_dout;
 
 ym2149 ym2149 (
-	.CLK         ( clk_32             ),
+	.CLK         ( clk                ),
 	.CE          ( clk_2_en           ),
 	.RESET       ( reset              ),
 	.DI          ( din[15:8]          ),
@@ -111,13 +110,13 @@ wire parallel_fifo_full;
 io_fifo #(.DEPTH(4)) parallel_out_fifo (
 	.reset 				(reset),		
 
-	.in_clk  			(clk_32),
-	.in 					(port_b_out),
+	.in_clk  			(clk),
+	.in 				(port_b_out),
 	.in_strobe 			(port_a_out[5]),
 	.in_enable		 	(1'b0),
 
-	.out_clk  			(clk_32),
-	.out 					(parallel_data_out),
+	.out_clk  			(clk),
+	.out 				(parallel_data_out),
 	.out_strobe 		(parallel_strobe_out),
 	.out_enable		 	(1'b0),
 
@@ -130,7 +129,7 @@ wire [7:0] ste_audio_out_l;
 
 ste_dma_snd ste_dma_snd (
 	// cpu interface
-	.clk32      (clk_32          ),
+	.clk        (clk             ),
 	.clk_8_en   (clk_8_en        ),
 	.reset      (reset           ),
 	.din        (din             ),
@@ -142,7 +141,6 @@ ste_dma_snd ste_dma_snd (
 	.dout       (ste_dma_snd_data_out),
 
 	// memory interface
-	.clk        (clk_8           ),
 	.clk_2_en   (clk_2_en        ),
 	.bus_cycle 	(bus_cycle       ),
 	.hsync      (hsync           ),
@@ -177,7 +175,7 @@ wire [14:0] audio_mix_r =
 	{ ste_audio_out_r_signed[7], ste_audio_out_r_signed, ste_audio_out_r_signed[7:2] };
 
 sigma_delta_dac sigma_delta_dac (
-	.clk 		 ( clk_32      ),	// bus clock
+	.clk      ( clk         ),	// bus clock
 	.ldatasum ( audio_mix_l ),	// left channel data
 	.rdatasum ( audio_mix_r ),	// right channel data
 	.left   	 ( audio_l     ),	// left bitstream output

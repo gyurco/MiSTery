@@ -21,7 +21,7 @@
 
 module ste_dma_snd (
 	// system interface
-	input             clk,
+	input             clk,     // 32 MHz
 	input             clk_2_en,
 	input             reset,
   
@@ -35,7 +35,6 @@ module ste_dma_snd (
 	output reg [15:0] dout,
 
 	// memory interface
-	input 				clk32,     // 32 MHz
 	input               clk_8_en,
 	input [1:0] 		bus_cycle, // bus-cycle
 	input					hsync,     // to synchronize with video
@@ -50,25 +49,6 @@ module ste_dma_snd (
 	output reg			xsint,
 	output 				xsint_d
 );
-// ---------------------------------------------------------------------------
-// --------------------------- internal state counter ------------------------
-// ---------------------------------------------------------------------------
-
-reg [1:0] t;
-always @(posedge clk32) begin
-	// 32Mhz counter synchronous to 8 Mhz clock
-	// force counter to pass state 0 exactly after the rising edge of clk (8Mhz)
-	if(((t == 2'd3)  && ( clk == 0)) ||
-		((t == 2'd0) && ( clk == 1)) ||
-		((t != 2'd3) && (t != 2'd0)))
-			t <= t + 2'd1;
-end
-
-// create internal bus_cycle signal which is stable on the positive clock
-// edge and extends the previous state by half a 32 Mhz clock cycle
-reg [3:0] bus_cycle_L;
-always @(negedge clk32)
-	bus_cycle_L <= { bus_cycle, t };
 
 assign saddr = snd_adr;   // drive data
 assign read = (bus_cycle == 0) && hsync && !fifo_full && dma_enable;
@@ -81,7 +61,7 @@ assign read = (bus_cycle == 0) && hsync && !fifo_full && dma_enable;
 reg a2base;
 reg [9:0] a2base_cnt;
 reg a2base_en;
-always @(posedge clk32) begin
+always @(posedge clk) begin
 	a2base_cnt <= a2base_cnt + 1'd1;
 	if(a2base_cnt == 639) a2base_cnt <= 0;
 	a2base_en <= (!a2base_cnt);
@@ -89,10 +69,10 @@ end
 
 // generate current audio clock
 reg [2:0] aclk_cnt;
-always @(posedge clk32) if (a2base_en) aclk_cnt <= aclk_cnt + 3'd1;
+always @(posedge clk) if (a2base_en) aclk_cnt <= aclk_cnt + 3'd1;
 
 reg aclk_en;
-always @(posedge clk32) begin
+always @(posedge clk) begin
 	aclk_en <=  a2base_en & (
 				(mode[1:0] == 2'b11)?a2base_en:       // 50 kHz
 				((mode[1:0] == 2'b10)?!aclk_cnt[0]:   // 25 kHz
@@ -106,7 +86,7 @@ end
 
 // 74ls164
 reg [7:0] xsint_delay;
-always @(posedge clk32 or negedge xsint) begin
+always @(posedge clk or negedge xsint) begin
 	if(!xsint) xsint_delay <= 8'h00;            // async reset
 	else if (clk_2_en) xsint_delay <= {xsint_delay[6:0], xsint};
 end
@@ -163,7 +143,7 @@ end
 // ----------------------------- CPU register write --------------------------
 // ---------------------------------------------------------------------------
 reg selD;
-always @(posedge clk32) if (clk_8_en) selD <= sel;
+always @(posedge clk) if (clk_8_en) selD <= sel;
 wire req = ~selD & sel;
 
 reg [6:0] mw_cnt;   // micro wire shifter counter
@@ -175,7 +155,7 @@ reg mw_done;
 
 reg dma_start;
 
-always @(posedge clk32) begin
+always @(posedge clk) begin
 	if(reset) begin
 		ctrl <= 2'b00;         // default after reset: dma off
 		mw_cnt <= 7'h00;        // no micro wire transfer in progress
@@ -270,7 +250,7 @@ wire [15:0] fifo_out = fifo[readP];
 wire [7:0] mono_byte = (!byte)?fifo_out[15:8]:fifo_out[7:0];
 
 // empty the fifo at the correct rate
-always @(posedge clk32) begin
+always @(posedge clk) begin
 	if(reset) begin
 		readP <= 2'd0;
 		fifo_underflow <= 12'd0;
@@ -318,14 +298,14 @@ reg dma_enable;  // flag indicating dma engine is active
 // the "dma_enable" signal is permanently active while playing. The adress counter will
 // reach snd_end, but this will not generate a bus transfer and thus xsint is
 // released for that event
-always @(posedge clk32)
+always @(posedge clk)
 	xsint <= dma_enable && (snd_adr != snd_end_latched);
 
 // assign xsint = dma_enable && (snd_adr != snd_end_latched);
 
 reg [7:0] frame_cnt;
 
-always @(posedge clk32) begin
+always @(posedge clk) begin
 	if(reset) begin
 		dma_enable <= 1'b0;
 		writeP <= 2'd0;
@@ -350,8 +330,8 @@ always @(posedge clk32) begin
 			end else begin
 
 				// fifo not full? read something during hsync using the video cycle
-				// bus_cycle_L = 3 is the end of the video cycle
-				if(!fifo_full && hsync && (bus_cycle_L == 3)) begin
+				// clk_8_en is at the end of the 8 MHz cycle
+				if(!fifo_full && hsync && clk_8_en && (bus_cycle == 0)) begin
 						
  					if(snd_adr != snd_end_latched) begin
 						// read right word from ram using the 64 bit memory interface

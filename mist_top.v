@@ -507,8 +507,7 @@ wire ste_dma_snd_read;
 audio audio (
 	// system interface
 	.reset      ( reset         ),
-	.clk_32     ( clk_32        ),
-	.clk_8 		( clk_8         ),
+	.clk        ( clk_32        ),
 	.clk_2_en   ( clk_2_en      ),
 	.clk_8_en   ( clk_8_en      ),
 	.bus_cycle 	( bus_cycle		),
@@ -675,7 +674,7 @@ always @ (posedge clk_32, negedge pll_locked) begin
 		clk_2_en <= 0;
 		clk_counter <= clk_counter + 1'd1;
 		if(clk_counter[1:0] == 1) bus_cycle <= bus_cycle + 1'd1;
-		if(clk_counter[1:0] == 3) clk_8_en <= 1;
+		if(&clk_counter[1:0])     clk_8_en <= 1;
 		if(!clk_counter[2:0])     clk_4_en <= 1;
 		if(!clk_counter)          clk_2_en <= 1;
 	end
