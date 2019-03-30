@@ -1037,7 +1037,8 @@ always @(posedge clk_32) begin
 	if (cpu2mem && (~tg68_uds | ~tg68_lds) && !br && cpu_cycle) begin
 		if (clk_cnt == 2'b10) fx68_mem_data_valid <= 1;
 		// SDRAM data valid after clk_cnt == 0, if the read cycle started at 2
-		if (clk_cnt == 2'b00 && fx68_mem_data_valid) fx68_mem_dtack <= 1;
+		// issue DTACK for writes early
+		if ((clk_cnt == 2'b00 && fx68_mem_data_valid) || (clk_cnt == 2'b10 && !fx68_rw_n)) fx68_mem_dtack <= 1;
 		if (clk_cnt == 2'b01) begin
 			fx68_mem_latch_valid <= 1;
 			fx68_mem_latch <= ram_data_out;
