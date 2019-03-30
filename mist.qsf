@@ -315,6 +315,7 @@ set_instance_assignment -name CURRENT_STRENGTH_NEW 8MA -to AUDIO_R
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to UART_RX
 set_location_assignment PLL_1 -to clock|altpll_component|auto_generated|pll1
 set_global_assignment -name SEED 1
+set_global_assignment -name QIP_FILE pll_mfp1.qip
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/uaddrPla.sv
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/fx68kAlu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE fx68k/fx68k.sv
@@ -328,7 +329,6 @@ set_global_assignment -name VERILOG_FILE font.v
 set_global_assignment -name VERILOG_FILE scandoubler.v
 set_global_assignment -name VERILOG_FILE shifter.v
 set_global_assignment -name VERILOG_FILE sync_adjust.v
-set_global_assignment -name QIP_FILE pll_mfp1.qip
 set_global_assignment -name VERILOG_FILE acsi.v
 set_global_assignment -name VERILOG_FILE fdc.v
 set_global_assignment -name VERILOG_FILE mfp_srff16.v
@@ -369,4 +369,5 @@ set_global_assignment -name SIGNALTAP_FILE out/clk.stp
 set_global_assignment -name SIGNALTAP_FILE out/dma.stp
 set_global_assignment -name SIGNALTAP_FILE out/dmasnd.stp
 set_global_assignment -name SIGNALTAP_FILE out/fx68.stp
+set_global_assignment -name SIGNALTAP_FILE out/stedma.stp
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

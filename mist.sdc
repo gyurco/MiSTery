@@ -80,6 +80,7 @@ set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|
 
 set_clock_groups -asynchronous -group [get_clocks {SPI_SCK}] -group [get_clocks {clock|altpll_component|auto_generated|pll1|clk[*]}]
 set_clock_groups -asynchronous -group [get_clocks {SPI_SCK}] -group [get_clocks {clk_8}]
+set_clock_groups -asynchronous -group [get_clocks {pll_mfp1|altpll_component|auto_generated|pll1|clk[0]}] -group [get_clocks {clock|altpll_component|auto_generated|pll1|clk[*]}]
 
 #**************************************************************
 # Set False Path

@@ -685,17 +685,11 @@ assign clk_8 = clk_cnt[1];
 
 // MFP clock
 // required: 2.4576 MHz
-// mfp clock is clk_128*2457600/128000000 -> 12/625 -> toggle at 24/625
-reg clk_mfp;
-reg [9:0] clk_mfp_div;
-always @(posedge clk_128) begin
-	if(clk_mfp_div < 625)
-		clk_mfp_div <= clk_mfp_div + 10'd24;
-	else begin
-		clk_mfp_div <= clk_mfp_div - 10'd625 + 10'd24;
-		clk_mfp <= ~clk_mfp;
-	end
-end
+wire clk_mfp;
+pll_mfp1 pll_mfp1 (
+  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
+  .c0           (clk_mfp          )  // output clock c0 (2.4576MHz)
+);
 
 wire reset = system_ctrl[0];
 
