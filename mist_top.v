@@ -1058,6 +1058,7 @@ assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
 assign io_sel = cpu2io && tg68_as;
 
 wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility
+wire  [1:0] tg68_busstate = tg68_rw ? 2'b00 : 2'b11;
 wire        fx68_as_n;
 // autovector if hbi or vbi
 wire        fx68_vpa_n = ~acia_addr && ~(cpu2iack && ((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010)));
