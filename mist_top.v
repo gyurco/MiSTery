@@ -328,6 +328,7 @@ mmu mmu (
 
 // mega ste cache/cpu clock controller
 wire enable_16mhz;
+wire enable_cache;
 mste_ctrl mste_ctrl (
 	// cpu register interface
 	.clk      (clk_32      ),
@@ -339,7 +340,7 @@ mste_ctrl mste_ctrl (
 	.rw       (tg68_rw     ),
 	.dout     (mste_ctrl_data_out),
 	
-	.enable_cache (),
+	.enable_cache (enable_cache),
 	.enable_16mhz (enable_16mhz)
 );
 
@@ -1033,7 +1034,7 @@ always @(posedge clk_32) begin
 		if (fx68_berr2) clr_berr <= 1;
 	end
 
-	if (cpu2mem && (~tg68_uds | ~tg68_lds) && !br && cpu_cycle) begin
+	if (cpu2mem && tg68_as && !br && cpu_cycle) begin
 		if (clk_cnt == 2'b10) fx68_mem_data_valid <= 1;
 		// SDRAM data valid after clk_cnt == 0, if the read cycle started at 2
 		// issue DTACK for writes early
@@ -1167,7 +1168,7 @@ wire blitter_has_bus = blitter_br;
 // singnal indicating if cpu should use a second cpu slot for 16Mhz like operation
 // ROM is not shared with Shifter, so give a second slot to it
 // steroids (STEroid) always runs at max speed
-wire second_cpu_slot = (mste && enable_16mhz) || steroids || cpu2rom;
+wire second_cpu_slot = (mste && enable_cache) || steroids || cpu2rom;
 
 // Two of the four cycles are being used. One for video (+STE audio) and one for
 // cpu, DMA and Blitter. A third is optionally being used for faster CPU
