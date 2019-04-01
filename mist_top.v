@@ -64,7 +64,7 @@ wire [15:0] video_adj;
 
 // generate dtack for all implemented peripherals
 wire io_dtack = vreg_sel || mmu_sel || mfp_dtack ||
-     acia_sel || psg_sel || dma_sel || auto_iack || blitter_sel || 
+      psg_sel || dma_sel || auto_iack || blitter_sel || 
 	  ste_joy_sel || ste_dma_snd_sel || mste_ctrl_sel || vme_sel || 
 	  rom_sel[1] || rom_sel[0]; 
 
@@ -893,7 +893,7 @@ TG68KdotC_Kernel #(2,2,2,2,2,2,2) tg68k (
 );
 
 // generate dtack (for st ram and rom on read, no dtack for rom write)
-assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack ) && !br;
+assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack || acia_sel ) && !br;
 assign io_sel = cpu_cycle && cpu2io && tg68_as ;
 // simulate auto-vectoring
 assign auto_iack = cpu_cycle && cpu2iack && tg68_as &&
