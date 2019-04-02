@@ -153,6 +153,7 @@ wire [7:0] auto_vector;
 // $ffff8e00 - $ffff8e0f  - VME  (only fake implementation)
 
 wire io_sel;
+wire cpuio_sel;
 
 // romport interface at $fa0000 - $fbffff
 wire rom_sel_all = ethernec_present && cpu_cycle && tg68_as && tg68_rw && ({tg68_adr[23:17], 1'b0} == 8'hfa);
@@ -177,7 +178,7 @@ wire vme_sel = !steroids && mste && io_sel && ({tg68_adr[15:4], 4'd0} == 16'h8e0
 
 // shifter 16 bit interface at $ff8200 - $ff820d and $ff8240 - $ff827f
 // STE shifter also has registers at ff820f and ff8265
-wire vreg_sel = io_sel && (
+wire vreg_sel = cpuio_sel && (
  	 ({tg68_adr[15:3], 3'd0} == 16'h8200) ||           // ff8200-ff8207
 	 ({tg68_adr[15:2], 2'd0} == 16'h8208) ||           // ff8208-ff820b
 	 ({tg68_adr[15:1], 1'd0} == 16'h820c) ||           // ff820c-ff820d	
@@ -895,6 +896,7 @@ TG68KdotC_Kernel #(2,2,2,2,2,2,2) tg68k (
 // generate dtack (for st ram and rom on read, no dtack for rom write)
 assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack || acia_sel ) && !br;
 assign io_sel = cpu_cycle && cpu2io && tg68_as ;
+assign cpuio_sel = io_sel;
 // simulate auto-vectoring
 assign auto_iack = cpu_cycle && cpu2iack && tg68_as &&
 	((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010));
@@ -1003,6 +1005,7 @@ wire cpu_E = fx68_E;
 wire fx68_vma_n;
 wire cpu_vma = !fx68_vma_n;
 
+reg         fx68_cpuio;
 reg         fx68_mem_data_valid;
 reg         fx68_mem_latch_valid;
 reg  [15:0] fx68_mem_latch;
@@ -1044,10 +1047,18 @@ always @(posedge clk_32) begin
 			fx68_mem_latch <= ram_data_out;
 		end
 	end
+
+	// for IO cycle which starts at a CPU RAM cycle (Shifter)
+	if (io_sel && bus_cycle == 2'b10) begin
+		fx68_cpuio <= 1;
+	end
+
+	// end of READ or WRITE cycle
 	if (fx68_as_n) begin
 		fx68_mem_data_valid <= 0;
 		fx68_mem_latch_valid <= 0;
 		fx68_mem_dtack <= 0;
+		fx68_cpuio <= 0;
 	end
 end
 
@@ -1057,6 +1068,7 @@ wire mfp_iack = cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
 // generate dtack (for st ram and rom on read, no dtack for rom write)
 assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
 assign io_sel = cpu2io && tg68_as;
+assign cpuio_sel = (io_sel && bus_cycle == 2'b10) || fx68_cpuio;
 
 wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility
 wire  [1:0] tg68_busstate = tg68_rw ? 2'b00 : 2'b11;
