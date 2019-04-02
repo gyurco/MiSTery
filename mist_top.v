@@ -64,7 +64,7 @@ wire [15:0] video_adj;
 
 // generate dtack for all implemented peripherals
 wire io_dtack = vreg_sel || mmu_sel || mfp_dtack ||
-      psg_sel || dma_sel || auto_iack || blitter_sel || 
+      psg_dtack || dma_sel || auto_iack || blitter_sel || 
 	  ste_joy_sel || ste_dma_snd_sel || mste_ctrl_sel || vme_sel || 
 	  rom_sel[1] || rom_sel[0]; 
 
@@ -148,7 +148,7 @@ wire [7:0] auto_vector;
 // $fffffc20 - $fffffc3f  - RTC
 // $ffff8e00 - $ffff8e0f  - VME  (only fake implementation)
 
-wire io_sel;
+wire io_sel, io_sel_1ws;
 wire cpuio_sel;
 
 // romport interface at $fa0000 - $fbffff
@@ -206,6 +206,7 @@ wire [15:0] blitter_data_out;
 
 //  psg 8 bit interface at $ff8800 - $ff88ff
 wire psg_sel  = io_sel && ({tg68_adr[15:8], 8'd0} == 16'h8800);
+wire psg_dtack = io_sel_1ws && ({tg68_adr[15:8], 8'd0} == 16'h8800);
 wire [15:0] audio_data_out;
 
 //  dma 16 bit interface at $ff8604 - $ff8607 (word only) and $ff8606 - $ff860d (STE - ff860f)
@@ -892,6 +893,7 @@ TG68KdotC_Kernel #(2,2,2,2,2,2,2) tg68k (
 // generate dtack (for st ram and rom on read, no dtack for rom write)
 assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack || acia_sel ) && !br;
 assign io_sel = cpu_cycle && cpu2io && tg68_as ;
+assign io_sel_1ws = io_sel;
 assign cpuio_sel = io_sel;
 // simulate auto-vectoring
 assign auto_iack = cpu_cycle && cpu2iack && tg68_as &&
@@ -1065,6 +1067,10 @@ wire mfp_iack = cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
 assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
 assign io_sel = cpu2io && tg68_as;
 assign cpuio_sel = (io_sel && bus_cycle == 2'b10) || fx68_cpuio;
+
+reg tg68_asD;
+always @(posedge clk_32) if (clkena) tg68_asD <= tg68_as;
+assign io_sel_1ws = cpu2io && tg68_asD && !fx68_as_n;
 
 wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility
 wire  [1:0] tg68_busstate = tg68_rw ? 2'b00 : 2'b11;
