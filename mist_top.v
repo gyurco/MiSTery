@@ -187,7 +187,7 @@ wire ste_joy_sel = ste && io_sel && ({tg68_adr[15:6], 6'd0} == 16'h9200);
 wire [15:0] ste_joy_data_out;
 
 // ste dma snd 8 bit interface at $ff8900 - $ff893f
-wire ste_dma_snd_sel = ste && io_sel && ({tg68_adr[15:6], 6'd0} == 16'h8900);
+wire ste_dma_snd_sel = ste && cpuio_sel && ({tg68_adr[15:6], 6'd0} == 16'h8900);
 wire [15:0] ste_dma_snd_data_out;
 
 // mfp 8 bit interface at $fffa00 - $fffa3f, odd byte and word only

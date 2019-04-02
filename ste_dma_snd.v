@@ -143,7 +143,7 @@ end
 // ----------------------------- CPU register write --------------------------
 // ---------------------------------------------------------------------------
 reg selD;
-always @(posedge clk) if (clk_8_en) selD <= sel;
+always @(posedge clk) selD <= sel;
 wire req = ~selD & sel;
 
 reg [6:0] mw_cnt;   // micro wire shifter counter
@@ -162,9 +162,9 @@ always @(posedge clk) begin
 		dma_start <= 1'b0;
 	end else begin
 		// writing bit 0 of the ctrl register to 1 starts the dma engine
-		dma_start <= clk_8_en && req && !rw && !lds && (addr == 5'h00) && din[0];
+		dma_start <= req && !rw && !lds && (addr == 5'h00) && din[0];
 
-		if(clk_8_en && req && !rw) begin
+		if(req && !rw) begin
 			if(!lds) begin
 				// control register
 				if(addr == 5'h00) ctrl <= din[1:0];
