@@ -94,12 +94,11 @@ always @(negedge clk_8) begin
 	end
 end
 
-reg bus_ok, cpu_cycle_L;
+reg bus_ok;
 always @(negedge clk_8) begin
 	// bus error if cpu owns bus, but no dtack, nor ram access,
 	// nor fast cpu cycle nor cpu does internsal processing
 	bus_ok <= tg68_dtack || br || cpu2mem || (tg68_busstate == 2'b01);
-	cpu_cycle_L <= cpu_cycle;
 end
 
 reg berr_reset;
@@ -112,26 +111,23 @@ end
 
 reg [4:0] dtack_timeout;
 always @(posedge clk_32 or posedge berr_reset) begin
-//	if(reset || tg68_clr_berr) begin
 	if(berr_reset) begin
 		dtack_timeout <= 4'd0;
 	end else begin
-		if(cpu_cycle_L) begin
-			// timeout only when cpu owns the bus and when
-			// neither dtack nor another bus master are active
-			
-			// also ram areas should never generate a
-			// bus error for reading. But rom does for writing
-			if(!(&dtack_timeout)) begin
-				if(bus_ok)
-					dtack_timeout <= 4'd0;
-				else if(clk_cnt == 1) // increase timout at the end of the cpu cycle
-					dtack_timeout <= dtack_timeout + 4'd1;
-			end 
+		// timeout only when cpu owns the bus and when
+		// neither dtack nor another bus master are active
+
+		// also ram areas should never generate a
+		// bus error for reading. But rom does for writing
+		if(!(&dtack_timeout)) begin
+			if(bus_ok)
+				dtack_timeout <= 4'd0;
+			else if(cpu_cycle && clk_cnt == 1) // increase timout at the end of the cpu cycle
+				dtack_timeout <= dtack_timeout + 4'd1;
 		end
 	end 
 end
- 
+
 // no tristate busses exist inside the FPGA. so bus request doesn't do
 // much more than halting the cpu by suppressing 
 wire br = dma_br || blitter_br; // dma/blitter are only other bus masters
