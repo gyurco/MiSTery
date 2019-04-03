@@ -70,7 +70,7 @@ localparam VFP  = 9;
 localparam VS   = 4;
 localparam VBP  = 9;
 
-assign read = (bus_cycle == 2) && me;  // memory enable can directly be used as a ram read signal
+assign read = (bus_cycle == 3) && me;  // memory enable can directly be used as a ram read signal
 
 // ---------------------------------------------------------------------------
 // --------------------------- internal state counter ------------------------
@@ -99,8 +99,8 @@ assign hs = ((h_cnt >= HBP1+H+HFP) && (h_cnt < HBP1+H+HFP+HS))?1'b0:1'b1;
 always@(posedge pclk) begin
 	if(h_cnt==HBP1+H+HFP+HS+HBP2-1) begin
 		// make sure a line starts with the "video" bus cyle (0)
-		// cpu has cycles 1 and 3
-		if(bus_cycle_L == { 2'd1, 4'd15 })
+		// cpu has cycles 1 and 2
+		if(bus_cycle_L == { 2'd2, 4'd15 })
 			h_cnt<=0;
 	end else
 		h_cnt <= h_cnt + 1'd1;
@@ -124,13 +124,13 @@ always@(posedge pclk) begin
 	// last line on screen
 	if(v_cnt == V+VFP+VS+VBP-2)
 		addr <= himem?BASE_HI:BASE;
-	else if(me && bus_cycle_L == 6'h30)   // directly after read 
+	else if(me && bus_cycle_L == 6'h00)   // directly after read 
 		addr <= addr + 23'd4;              // advance 4 words (64 bits)
 		
-	if(me && (bus_cycle_L == 6'h2f))
+	if(me && (bus_cycle_L == 6'h3f))
 		input_latch <= data;
 		
-	if(bus_cycle_L == 6'h3f)
+	if(bus_cycle_L == 6'h0f)
 		// reorder words 1:2:3:4 -> 4:3:2:1
 		shift_register <= 
 			{  input_latch[15:0], input_latch[31:16], 

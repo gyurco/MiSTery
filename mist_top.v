@@ -455,16 +455,16 @@ blitter blitter (
 	.bm_write	(blitter_master_write),
 	.bm_data_out (blitter_master_data_out),
 	.bm_read    (blitter_master_read),
-   .bm_data_in (ram_data_out),
+	.bm_data_in (ram_data_out),
 
 	.br_in     (dma_br           ),
 	.br_out    (blitter_br       ),
 	.bg        (blitter_bg       ),
 	.irq       (blitter_irq      ),
-	
-	.turbo     (steroids         )
+
+	.turbo     (0                )
 );
-   
+
 ste_joystick ste_joystick (
 	.clk      (clk_32      ),
 	.clk_en   (clk_8_en    ),
@@ -1046,8 +1046,8 @@ always @(posedge clk_32) begin
 		end
 	end
 
-	// for IO cycle which starts at a CPU RAM cycle (Shifter)
-	if (io_sel && bus_cycle == 2'b10) begin
+	// for IO cycle which starts at a CPU RAM cycle (Shifter + DMA audio)
+	if (io_sel && cpu_cycle) begin
 		fx68_cpuio <= 1;
 	end
 
@@ -1060,13 +1060,12 @@ always @(posedge clk_32) begin
 	end
 end
 
-
 wire mfp_iack = cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
 
 // generate dtack (for st ram and rom on read, no dtack for rom write)
 assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
 assign io_sel = cpu2io && tg68_as;
-assign cpuio_sel = (io_sel && bus_cycle == 2'b10) || fx68_cpuio;
+assign cpuio_sel = (io_sel && cpu_cycle) || fx68_cpuio;
 
 reg tg68_asD;
 always @(posedge clk_32) if (clkena) tg68_asD <= tg68_as;
@@ -1179,16 +1178,13 @@ wire cpu2iack = (tg68_fc == 3'b111);
 wire dma_has_bus = dma_br;
 wire blitter_has_bus = blitter_br;
 
-// singnal indicating if cpu should use a second cpu slot for 16Mhz like operation
-// ROM is not shared with Shifter, so give a second slot to it
-// steroids (STEroid) always runs at max speed
-wire second_cpu_slot = (mste && enable_cache) || steroids || cpu2rom;
-
-// Two of the four cycles are being used. One for video (+STE audio) and one for
-// cpu, DMA and Blitter. A third is optionally being used for faster CPU
-wire video_cycle = (bus_cycle == 0)||(bus_cycle == 2);
-wire cpu_cycle = (bus_cycle == 1) || (second_cpu_slot && (bus_cycle == 3));
-wire cpu_cycle_int = (bus_cycle == 3);
+// 250 ns (two cycles) are used for CPU (+DMA, blitter) access. As these slots are adjacent,
+// only of of them will be used in each READ or WRITE cycle. The CPU will align itself
+// to 4 cycle boundary, thus 0 wait state for most of the operations.
+// A third slot is used for video + STE audio, and fourth is for the Viking monitor.
+wire video_cycle = (bus_cycle == 0) || (bus_cycle == 3);
+wire cpu_cycle   = (bus_cycle == 1) || (bus_cycle == 2);
+wire cpu_cycle_int = (bus_cycle == 2);
 
 // ----------------- RAM address --------------
 wire ste_dma_has_bus = (bus_cycle == 0) && st_hs && ste;
