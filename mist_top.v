@@ -261,6 +261,7 @@ end
 video video (
 	.clk_128      	(clk_128    ),
 	.clk_32      	(clk_32     ),
+	.clk_8_en       (clk_8_en   ),
 	.bus_cycle   	(bus_cycle  ),
 	
 	// spi for OSD
@@ -269,7 +270,6 @@ video video (
    .ss            (SPI_SS3   	),
 
 	// cpu register interface
-	.cpu_clk      (clk_8       ),
 	.cpu_reset    (reset       ),
 	.cpu_din      (tg68_dat_out),
 	.cpu_sel      (vreg_sel    ),

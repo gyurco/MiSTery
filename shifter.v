@@ -22,6 +22,7 @@
 module shifter (
   // system interface
   input 	    			clk, // 32.000 MHz
+  input 				clk_8_en,
   input [1:0] 	    	bus_cycle, // bus-cycle for sync
 
   // memory interface
@@ -30,7 +31,6 @@ module shifter (
   input [63:0] 	   data, // video data read
   
   // cpu register interface
-  input 	    			cpu_clk,
   input 	    			cpu_reset,
   input [15:0] 	   cpu_din,
   input 	    			cpu_sel,
@@ -70,13 +70,8 @@ localparam STATE_DISP   = 2'd3;
 // ---------------------------------------------------------------------------
 
 reg [1:0] 	    t;
-always @(negedge clk) begin
-   // 32Mhz counter synchronous to 8 Mhz clock
-   // force counter to pass state 0 exactly after the rising edge of clk_reg (8Mhz)
-   if(((t == 2'd3)  && ( cpu_clk == 0)) ||
-      ((t == 2'd0) && ( cpu_clk == 1)) ||
-      ((t != 2'd3) && (t != 2'd0)))
-     t <= t + 2'd1;
+always @(posedge clk) begin
+	if (clk_8_en) t <= 0; else t <= t + 1'd1;
 end
 
 // create internal bus_cycle signal which is stable on the positive clock
@@ -102,7 +97,7 @@ reg [31:0] st_de_delay;
 assign st_de = st_de_delay[31];
 always @(posedge clk)
    if (t==2'b01) st_de_delay <= { st_de_delay[30:0], ~de };
- 
+
 always @(posedge clk) begin
    st_hs <= h_sync;
    
@@ -246,9 +241,12 @@ end
 // ---------------------------------------------------------------------------
 // ----------------------------- CPU register write --------------------------
 // ---------------------------------------------------------------------------
+reg cpu_selD;
+always @(posedge clk) cpu_selD <= cpu_sel;
+wire cpu_req = !cpu_selD && cpu_sel;
 
 // STE video address write signal is evaluated inside memory engine
-wire ste_vaddr_write = ste && cpu_sel && !cpu_rw && !cpu_lds;
+wire ste_vaddr_write = ste && cpu_req && !cpu_rw && !cpu_lds;
  
 always @(posedge clk) begin
 	if(cpu_reset) begin
@@ -265,7 +263,7 @@ always @(posedge clk) begin
         
 	end else begin
 		// write registers
-		if(cpu_sel && !cpu_rw) begin
+		if(cpu_req && !cpu_rw) begin
 			if(!cpu_lds) begin
 			
 				// video base address hi/mid (ST and STE)
@@ -607,12 +605,11 @@ always @(posedge clk) begin
 			vaddr <= vaddr + line_offset;
 
 		// STE vaddr write handling
-		// bus_cycle 6 is in the middle of a cpu cycle
-		if((bus_cycle_L == 6) && ste_vaddr_write) begin
+		if(ste_vaddr_write) begin
 			if(cpu_addr == 6'h02) vaddr[22:15] <= cpu_din[7:0];
 			if(cpu_addr == 6'h03) vaddr[14: 7] <= cpu_din[7:0];
 			if(cpu_addr == 6'h04) vaddr[ 6: 0] <= cpu_din[7:1];
-		end 
+		end
 	end
 end
 

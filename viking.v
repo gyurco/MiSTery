@@ -28,7 +28,7 @@ module viking (
 
 		// memory interface
 		input 				himem,      // use memory behind rom
-	   input 				bclk,     	// 8 MHz bus clock
+		input 				clk_8_en,     	// 8 MHz bus clock
 		input [1:0] 		bus_cycle,	// bus-cycle for bus access sync
 		output reg [22:0]	addr,   		// video word address
 		output          	read,    	// video read cycle
@@ -78,12 +78,11 @@ assign read = (bus_cycle == 3) && me;  // memory enable can directly be used as 
 
 reg [3:0] t;
 always @(posedge pclk) begin
-	// 128 Mhz counter synchronous to 8 Mhz clock
-	// force counter to pass state 0 exactly after the rising edge of clk_reg (8Mhz)
-	if(((t == 4'd15) && ( bclk == 0)) ||
-		((t == 4'd0)  && ( bclk == 1)) ||
-		((t != 4'd15) && (t != 4'd0)))
-			t <= t + 4'd1;
+	reg clk_8_enD;
+
+	clk_8_enD <= clk_8_en;
+	// clk_8_en is at the middle of the cycle
+	if (~clk_8_enD & clk_8_en) t <= 4'h9; else t <= t + 1'd1;
 end
 
 // create internal bus_cycle signal which is stable on the positive clock

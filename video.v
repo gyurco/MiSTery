@@ -20,6 +20,7 @@ module video (
   // system interface
   input 	clk_128,     // 127.5 MHz
   input 	clk_32,      // 31.875 MHz
+  input     clk_8_en,
   input [1:0] 	bus_cycle,   // bus-cycle for sync
 
   // SPI interface for OSD
@@ -33,7 +34,6 @@ module video (
   input [63:0] 	data, // video data read
   
   // cpu register interface
-  input 	cpu_clk,
   input 	cpu_reset,
   input [15:0] 	cpu_din,
   input 	cpu_sel,
@@ -254,6 +254,7 @@ wire use_pal56 = pal56 && !scandoubler_disable;
 
 shifter shifter (
 	 .clk       ( clk_32        ), // 31.875 MHz
+	 .clk_8_en  ( clk_8_en      ),
 	 .bus_cycle ( bus_cycle     ), // to sync memory access with cpu
 		 
 	 // memory interface
@@ -262,7 +263,6 @@ shifter shifter (
 	 .data      ( data          ), // video data read
   
 	 // cpu register interface
-	 .cpu_clk   ( cpu_clk       ),
 	 .cpu_reset ( cpu_reset     ),
 	 .cpu_din   ( cpu_din       ),
 	 .cpu_sel   ( cpu_sel       ),
@@ -303,7 +303,7 @@ wire viking_read;
 viking viking (
        .pclk      ( clk_128         ),   // 128MHz
        .himem     ( viking_himem    ),
-       .bclk      ( cpu_clk         ),
+       .clk_8_en  ( clk_8_en        ),
        .bus_cycle ( bus_cycle       ), // bus-cycle to sync video memory access with cpu
 	       
        // memory interface
