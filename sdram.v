@@ -39,8 +39,8 @@ module sdram (
 	// cpu/chipset interface
 	input 		 		init,			// init signal after FPGA config to initialize RAM
 	input 		 		clk_128,		// sdram is accessed at 128MHz
-	input          	clk_8,      // 8MHz chipset clock to which sdram state machine is synchonized
-	
+	input				clk_8_en,		// 8MHz chipset clock to which sdram state machine is synchonized
+
 	input [15:0]  		din,			// data input from chipset/cpu
 	output reg [63:0] dout,			// data output to chipset/cpu
 	input [23:0]   	addr,       // 24 bit word address
@@ -73,13 +73,13 @@ localparam STATE_READ      = STATE_CMD_CONT + CAS_LATENCY + 4'd1;
 localparam STATE_LAST      = 4'd15;  // last state in cycle
 
 reg [3:0] t;
+
 always @(posedge clk_128) begin
-	// 128Mhz counter synchronous to 8 Mhz clock
-	// force counter to pass state 0 exactly after the rising edge of clk_8
-	if(((t == STATE_LAST)  && ( clk_8 == 0)) ||
-		((t == STATE_FIRST) && ( clk_8 == 1)) ||
-		((t != STATE_LAST) && (t != STATE_FIRST)))
-			t <= t + 4'd1;
+	reg clk_8_enD;
+
+	clk_8_enD <= clk_8_en;
+	// clk_8_en is at the middle of the cycle
+	if (~clk_8_enD & clk_8_en) t <= 4'h9; else t <= t + 1'd1;
 end
 
 // ---------------------------------------------------------------------

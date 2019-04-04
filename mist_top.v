@@ -1238,7 +1238,7 @@ sdram sdram (
 
 	// system interface
 	.clk_128      	( clk_128          			),
-	.clk_8        	( clk_8            			),
+	.clk_8_en       ( clk_8_en                  ),
 	.init         	( init             			),
 
 	// cpu/chipset interface
