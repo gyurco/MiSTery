@@ -122,6 +122,10 @@ assign sd_we  = sd_cmd[0];
 reg [1:0] burst_addr;
 
 reg [15:0] data_latch;
+reg [23:0] addr_latch;
+reg [15:0] din_latch;
+reg        oe_latch;
+reg        we_latch;
 		
 always @(posedge clk_128) begin
 	// permanently latch ram data to reduce delays
@@ -146,15 +150,21 @@ always @(posedge clk_128) begin
 		end
 	end else begin
 		// normal operation
-		
+		if(t == STATE_FIRST) begin
+			addr_latch <= addr;
+			we_latch <= we;
+			oe_latch <= oe;
+			din_latch <= din;
+		end
+
 		// -------------------  cpu/chipset read/write ----------------------
-		if(we || oe) begin
+		if(we_latch || oe_latch) begin
 		
 			// RAS phase
 			if(t == STATE_CMD_START) begin
 				sd_cmd <= CMD_ACTIVE;
-				sd_addr <= { 1'b0, addr[19:8] };
-				sd_ba <= addr[21:20];
+				sd_addr <= { 1'b0, addr_latch[19:8] };
+				sd_ba <= addr_latch[21:20];
 				
 				// always return both bytes in a read. The cpu may not
 				// need it, but the caches need to be able to store everything
@@ -162,18 +172,18 @@ always @(posedge clk_128) begin
 				else    sd_dqm <= ~ds;
 					
 				// lowest address for burst read
-				burst_addr <= addr[1:0];
+				burst_addr <= addr_latch[1:0];
 			end
 				
 			// CAS phase 
 			if(t == STATE_CMD_CONT) begin
-				sd_cmd <= we?CMD_WRITE:CMD_READ;
-				if (we) sd_data <= din;
-				sd_addr <= { 4'b0010, addr[22], addr[7:0] };  // auto precharge
+				sd_cmd <= we_latch?CMD_WRITE:CMD_READ;
+				if (we) sd_data <= din_latch;
+				sd_addr <= { 4'b0010, addr_latch[22], addr_latch[7:0] };  // auto precharge
 			end
 			
 			// read phase
-			if(oe) begin						
+			if(oe_latch) begin
 				// de-multiplex the data directly into the 64 bit buffer
 				if((t >= STATE_READ+4'd1) && (t < STATE_READ+4'd1+4'd4)) begin
 					case (burst_addr) 
