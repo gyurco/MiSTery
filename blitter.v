@@ -28,7 +28,6 @@ module blitter (
 
 		// cpu register interface
 		input               clk,
-		input               clk_32,
 		input               clk_en,
 		input               reset,
 
@@ -93,16 +92,9 @@ reg        fxsr;
 wire cycle_advance = (bus_cycle == 2'd0) || (turbo && (bus_cycle == 2'd2));
 wire cycle_read    = (bus_cycle == 2'd1) || (turbo && (bus_cycle == 2'd3));
 
-// latch bus cycle information to use at the end of the cycle (posedge clk)
-reg cycle_advanceL, cycle_readL;
-always @(negedge clk) begin
-	cycle_advanceL <= cycle_advance;
-	cycle_readL <= cycle_read;
-end
-
 // ------------------ cpu interface --------------------
 reg selD;
-always @(posedge clk_32) if (clk_en) selD <= sel;
+always @(posedge clk) if (clk_en) selD <= sel;
 wire req = ~selD & sel;
 
 // CPU READ
@@ -162,10 +154,10 @@ reg [15:0] bm_data_in_latch;
 
 // latch incoming data at end of bus cycle
 always @(posedge clk)
-	if(cycle_readL)
+	if(clk_en && cycle_read)
 		bm_data_in_latch <= bm_data_in;
 
-always @(posedge clk_32) begin
+always @(posedge clk) begin
 
 	// ---------- blitter cpu register write interfce ............
 	if(reset) begin
@@ -359,14 +351,20 @@ assign bm_addr = ((state == 2'd0)||(state == 2'd3))?src_addr:dst_addr;
 
 // ----------------- blitter busmaster engine -------------------
 always @(posedge clk) begin
-	bm_read <= 1'b0;
-	bm_write <= 1'b0;
+	reg clk_en_p;
 
-	if(bus_owned && !br_in && (y_count != 0) && cycle_advanceL) begin
-		if(state == 2'd0)      bm_read  <= 1'b1;
-		else if(state == 2'd1) bm_read  <= 1'b1;
-		else if(state == 2'd2) bm_write <= 1'b1;
-		else if(state == 2'd3) bm_read  <= 1'b1;  // fxsr state
+	// Blitter state machine advanced in clk_en, drive RAM request after that
+	clk_en_p <= clk_en;
+	if (clk_en_p) begin
+		bm_read <= 1'b0;
+		bm_write <= 1'b0;
+
+		if(bus_owned && !br_in && (y_count != 0) && cycle_advance) begin
+			if(state == 2'd0)      bm_read  <= 1'b1;
+			else if(state == 2'd1) bm_read  <= 1'b1;
+			else if(state == 2'd2) bm_write <= 1'b1;
+			else if(state == 2'd3) bm_read  <= 1'b1;  // fxsr state
+		end
 	end
 end
 

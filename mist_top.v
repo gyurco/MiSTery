@@ -439,8 +439,7 @@ blitter blitter (
 	.bus_cycle 	(bus_cycle        ),
 
 	// cpu interface
-	.clk       	(clk_8            ),
-	.clk_32     (clk_32           ),
+	.clk       	(clk_32           ),
 	.clk_en     (clk_8_en         ),
 	.reset     	(reset            ),
 	.din       	(tg68_dat_out     ),
