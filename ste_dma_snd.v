@@ -146,6 +146,11 @@ reg selD;
 always @(posedge clk) selD <= sel;
 wire req = ~selD & sel;
 
+// Microwire is a separate device
+reg mw_selD;
+always @(posedge clk) if (clk_8_en) mw_selD <= sel;
+wire mw_req = ~mw_selD & sel;
+
 reg [6:0] mw_cnt;   // micro wire shifter counter
 
 // micro wire outputs
@@ -184,23 +189,23 @@ always @(posedge clk) begin
 				// sound mode register
 				if(addr == 5'h10) mode <= { din[7], din[1:0] };
 			end
-
-			// micro wire has a 16 bit interface
-			if(addr == 5'h12) mw_mask_reg <= din; 
 		end
+
+		// micro wire has a 16 bit interface
+		if(mw_req && !rw && addr == 5'h12) mw_mask_reg <= din;
 	end
 
 	// ----------- micro wire interface -----------
 	
 	// writing the data register triggers the transfer
-	if(clk_8_en && ((req && !rw && (addr == 5'h11)) || (mw_cnt != 0))) begin
+	if(clk_8_en && ((mw_req && !rw && (addr == 5'h11)) || (mw_cnt != 0))) begin
 
 		// decrease shift counter. Do this before the register write as
 		// register write has priority and should reload the counter
 		if(mw_cnt != 0) 
 			mw_cnt <= mw_cnt - 7'd1;
 
-		if(req && !rw && (addr == 5'h11)) begin
+		if(mw_req && !rw && (addr == 5'h11)) begin
 			// first bit is evaluated imediately					
 			mw_data_reg <= { din[14:0], 1'b0 }; 
 			mw_data <= din[15];
@@ -212,7 +217,7 @@ always @(posedge clk) begin
 		end
 
 		// rotate mask on first access and on every further 8 clocks 
-		if((req && !rw && (addr == 5'h11)) || (mw_cnt[2:0] == 3'b000)) begin
+		if((mw_req && !rw && (addr == 5'h11)) || (mw_cnt[2:0] == 3'b000)) begin
 			mw_mask_reg <= { mw_mask_reg[14:0], mw_mask_reg[15]}; 
 			// notify client of valid bits
 			mw_clk <= mw_mask_reg[15];
