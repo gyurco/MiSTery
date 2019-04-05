@@ -116,7 +116,7 @@ end
 
 reg selD;
 always @(posedge clk) if (clk_en) selD <= sel;
-wire write = ~selD & sel & ~ds & ~rw;
+wire write = clk_en & ~selD & sel & ~ds & ~rw;
 
 reg iackD;
 always @(posedge clk) if (clk_en) iackD <= iack;
