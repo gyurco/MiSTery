@@ -56,8 +56,7 @@
 	 
 module dma (
 	    // clocks and system interface
-	input 		  clk,
-	input         clk_32,
+	input 		  clk, // 32 MHz
 	input         clk_en,
 	input 		  reset,
 	input [1:0] 	  bus_cycle,
@@ -109,7 +108,7 @@ assign irq = fdc_irq || acsi_irq;
 
 // for debug: count irqs
 reg [7:0] fdc_irq_count;
-always @(posedge clk_32 or posedge reset) begin
+always @(posedge clk or posedge reset) begin
 	reg fdc_irqD;
 	if(reset) fdc_irq_count <= 8'd0;
 	else begin
@@ -119,7 +118,7 @@ always @(posedge clk_32 or posedge reset) begin
 end
 
 reg [7:0] acsi_irq_count;
-always @(posedge clk_32 or posedge reset) begin
+always @(posedge clk or posedge reset) begin
 	reg acsi_irqD;
 	if(reset) acsi_irq_count <= 8'd0;
 	else begin
@@ -129,7 +128,7 @@ always @(posedge clk_32 or posedge reset) begin
 end
 
 reg cpu_selD;
-always @(posedge clk_32) if (clk_en) cpu_selD <= cpu_sel;
+always @(posedge clk) if (clk_en) cpu_selD <= cpu_sel;
 wire cpu_req = ~cpu_selD & cpu_sel;
 
 // dma sector count and mode registers
@@ -145,7 +144,7 @@ wire [7:0] fdc_status_byte;
 wire [7:0] fdc_dout;
    
 fdc fdc(
-	 .clk         ( clk_32                ),
+	 .clk         ( clk                   ),
 	 .clk_en      ( clk_en                ),
 	 .reset       ( reset                 ),
 	 
@@ -178,7 +177,7 @@ wire [7:0] acsi_status_byte;
 wire [7:0] acsi_dout;
  
 acsi acsi(
-	 .clk         ( clk_32                ),
+	 .clk         ( clk                   ),
 	 .clk_en      ( clk_en                ),
 	 .reset       ( reset                 ),
 	 
@@ -239,7 +238,7 @@ reg cpu_scnt_write_strobe;
 reg cpu_mode_write_strobe;  
 reg cpu_dma_mode_direction_toggle;
    
-always @(posedge clk_32) begin
+always @(posedge clk) begin
    if(reset) begin
       cpu_address_write_strobe <= 1'b0;      
       cpu_scnt_write_strobe <= 1'b0;      
@@ -306,12 +305,9 @@ wire fifo_full      = (fifo_wptr - fifo_rptr) > 4'd7;
 wire fifo_reset = cpu_dma_mode_direction_toggle || io_addr_strobe;
 
 reg fifo_read_in_progress, fifo_write_in_progress;
-assign ram_br = fifo_read_in_progress || fifo_write_in_progress || ioc_br_clk; 
+assign ram_br = fifo_read_in_progress || fifo_write_in_progress || ioc_br_clk;
 
-reg ioc_br_clk;
-always @(negedge clk)
-   if(cycle_advance) 
-		ioc_br_clk <= ioc_br;
+reg ioc_br_clk = 0;
 
 // ============= FIFO WRITE ENGINE ==================
 
@@ -320,7 +316,7 @@ wire fifo_write_start = dma_in_progress && dma_direction_out &&
      !fifo_write_in_progress && !fifo_full;
 
 // state machine for DMA ram read access
-always @(posedge clk_32 or posedge fifo_reset) begin
+always @(posedge clk or posedge fifo_reset) begin
 	if(fifo_reset == 1'b1) begin
 		fifo_write_in_progress <= 1'b0;
 	end else begin
@@ -334,19 +330,19 @@ end
    
 // ram control signals need to be stable over the whole 8 Mhz cycle
 always @(posedge clk)
-   ram_read <= (cycle_advance_L && fifo_write_in_progress);
+   if (clk_en) ram_read <= cycle_advance && fifo_write_in_progress;
 
 wire ram_read_strobe = ~ram_readD & ram_read;
 wire ram_read_done   = ram_readD & ~ram_read;
 reg ram_readD;
-always @(posedge clk_32)
+always @(posedge clk)
 	ram_readD <= ram_read;
 
 wire [15:0] fifo_data_in = dma_direction_out?ram_din:dio_data_in_reg;
 wire fifo_data_in_strobe = dma_direction_out?ram_read_done:io_data_in_strobe;
 
 // write to fifo on rising edge of fifo_data_in_strobe
-always @(posedge clk_32 or posedge fifo_reset) begin
+always @(posedge clk or posedge fifo_reset) begin
    if(fifo_reset == 1'b1)
      fifo_wptr <= 4'd0;
    else if (fifo_data_in_strobe) begin
@@ -362,7 +358,7 @@ wire fifo_read_start = dma_in_progress && !dma_direction_out &&
      !fifo_read_in_progress && fifo_full;
 
 // state machine for DMA ram write access
-always @(posedge clk_32 or posedge fifo_reset) begin
+always @(posedge clk or posedge fifo_reset) begin
 	if(fifo_reset == 1'b1) begin
 		// not reading from fifo, not writing into ram
 		fifo_read_in_progress <= 1'b0;
@@ -377,21 +373,21 @@ end
 
 // ram control signals need to be stable over the whole 8 Mhz cycle
 always @(posedge clk)
-   ram_write <= (cycle_advance_L && fifo_read_in_progress);
+   if (clk_en) ram_write <= cycle_advance && fifo_read_in_progress;
 
 wire ram_write_strobe = ~ram_writeD & ram_write;
 wire ram_write_done   = ram_writeD & ~ram_write;
 reg ram_writeD;
-always @(posedge clk_32)
+always @(posedge clk)
 	ram_writeD <= ram_write;
 
 reg [15:0] fifo_data_out;
 wire fifo_data_out_strobe = dma_direction_out?io_data_out_strobe:ram_write_done;
 
-always @(posedge clk_32)
+always @(posedge clk)
    fifo_data_out <= fifo[fifo_rptr];
 
-always @(posedge clk_32 or posedge fifo_reset) begin
+always @(posedge clk or posedge fifo_reset) begin
    if(fifo_reset == 1'b1)         fifo_rptr <= 4'd0;
    else if (fifo_data_out_strobe) fifo_rptr <= fifo_rptr + 4'd1;
 end
@@ -415,7 +411,7 @@ reg       sector_done;
 reg 	  sector_strobe;
 reg 	  sector_strobe_prepare;
 
-always @(posedge clk_32) begin
+always @(posedge clk) begin
    if(dma_scnt_write_strobe) begin
       word_cnt <= 8'd0;
       sector_strobe_prepare <= 1'b0;
@@ -458,7 +454,7 @@ wire [7:0] dma_scnt_next = sector_strobe_prepare?dma_scnt_dec:
 	   cpu_scnt_write_strobe?cpu_din[7:0]:dio_addr_reg[31:24];
 
 // cpu or io controller set the sector count register
-always @(posedge clk_32)
+always @(posedge clk)
 	if (dma_scnt_write_strobe) dma_scnt <= dma_scnt_next;
    
 // DMA in progress flag:
@@ -475,7 +471,7 @@ wire dma_stop = cpu_dma_mode_direction_toggle;
 wire cpu_starts_dma = cpu_scnt_write_strobe && (cpu_din[7:0] != 0) && !dma_mode[6];
 wire ioc_starts_dma = io_addr_strobe && (dio_addr_reg[31:24] != 0);
 
-always @(posedge clk_32 or posedge dma_stop) begin
+always @(posedge clk or posedge dma_stop) begin
    if(dma_stop) dma_in_progress <= 1'b0;
    else if (dma_scnt_write_strobe) dma_in_progress <= cpu_starts_dma || ioc_starts_dma || (sector_strobe && dma_scnt_next != 0);   
 end
@@ -488,7 +484,7 @@ wire dma_direction_set = io_addr_strobe || cpu_dma_mode_direction_toggle;
 wire dma_direction_out_next = cpu_mode_write_strobe?cpu_din[8]:dio_addr_reg[23];
 
 // cpu or io controller set the dma direction   
-always @(posedge clk_32)
+always @(posedge clk)
   if (dma_direction_set) dma_direction_out <= dma_direction_out_next;
 
 // ================================= DMA address ============================
@@ -505,7 +501,7 @@ reg [6:0] dma_addr_l;
 wire [22:0] dma_addr = { dma_addr_h, dma_addr_m, dma_addr_l };
 
 reg dma_addr_inc;
-always @(posedge clk_32)
+always @(posedge clk)
    dma_addr_inc <= ram_write_done || ram_read_done;
 
 wire dma_addr_write_strobe = dma_addr_inc || io_addr_strobe;
@@ -516,7 +512,7 @@ wire [22:0] dma_addr_next =
 	    io_addr_strobe?{ dio_addr_reg[22:0] }:
 	    (dma_addr + 23'd1);
 
-always @(posedge clk_32) begin
+always @(posedge clk) begin
 	if (dma_addr_write_strobe_l) dma_addr_l <= dma_addr_next[ 6: 0];
 	if (dma_addr_write_strobe_m) dma_addr_m <= dma_addr_next[14: 7];
 	if (dma_addr_write_strobe_h) dma_addr_h <= dma_addr_next[22:15];
@@ -575,14 +571,12 @@ reg dio_data_out_strobeD;
 reg dio_dma_ackD;
 reg dio_dma_nakD;
 
-always@(posedge clk_32) begin
+always@(posedge clk) begin
 	dio_addr_strobeD <= dio_addr_strobe;
 	dio_data_in_strobeD <= dio_data_in_strobe;
 	dio_data_out_strobeD <= dio_data_out_strobe;
 	dio_dma_ackD <= dio_dma_ack;
 	dio_dma_nakD <= dio_dma_nak;
 end
-
-reg ioc_br = 1'b0;
 
 endmodule

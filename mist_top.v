@@ -590,13 +590,12 @@ wire dma_br;
 
 dma dma (
 	// system interface
-	.clk_32     (clk_32         ),
-	.clk      	(clk_8       	),
+	.clk        (clk_32         ),
 	.clk_en     (clk_8_en       ),
 	.reset    	(reset       	),
-	.bus_cycle  (bus_cycle     ),
+	.bus_cycle  (bus_cycle      ),
 	.irq      	(dma_irq     	),
-	.turbo		(1'b0				),
+	.turbo		(1'b0           ),
 
 	// IO controller interface
 	.dio_addr_strobe     ( dio_addr_strobe     ),
