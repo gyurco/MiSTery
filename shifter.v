@@ -88,15 +88,7 @@ always @(negedge clk)
 // by software to generate a line interrupt and to e.g. do 512 color effects.
 // st_de is active low. Using display enable (de) for this makes sure the cpu has
 // plenty of time before data for the next line is starting to be fetched
-// assign st_de = ~de;
-
-// according to hatari video.h/video.c the timer_b irq comes 28 8MHz cycles after
-// the last pixel has been displayed. Our de is 4 cycles earlier then the end
-// of the line, so we delay by 28+4=32
-reg [31:0] st_de_delay;
-assign st_de = st_de_delay[31];
-always @(posedge clk)
-   if (t==2'b01) st_de_delay <= { st_de_delay[30:0], ~de };
+assign st_de = ~de;
 
 always @(posedge clk) begin
    st_hs <= h_sync;
