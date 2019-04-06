@@ -89,11 +89,13 @@ conf pal56_conf(
 // total: 1024x626, active incl border: 800x560, displayed: 640x400
 // horizontal scan rate: 15.625 kHz ST (, 31.25 kHz VGA), vertical scan rate: 49.92 hz
 
+// PAL50 and NTSC vertical timings have to be in a special relationship to allow vertical
+// border opening work!
 wire [121:0] pal50_config_str;
 conf pal50_conf(
   // display      front porch     sync width     back porch      border width                  sync polarity
   .h_ds(10'd640), .h_fp( 10'd80), .h_s( 10'd64), .h_bp( 10'd80), .h_lb(10'd80), .h_rb(10'd80),  .h_sp(1'b1),
-  .v_ds(10'd200), .v_fp( 10'd15), .v_s(  10'd3), .v_bp( 10'd4), .v_tb(10'd40), .v_bb(10'd51),  .v_sp(1'b1),
+  .v_ds(10'd200), .v_fp( 10'd4), .v_s(  10'd3), .v_bp( 10'd15), .v_tb(10'd44), .v_bb(10'd47),  .v_sp(1'b1),
   .str  (pal50_config_str)
 );
 
@@ -110,7 +112,7 @@ conf ntsc_conf(
   // display      front porch     sync width     back porch      border width                  sync polarity
   .h_ds(10'd640), .h_fp( 10'd76), .h_s( 10'd64), .h_bp( 10'd76), .h_lb(10'd80), .h_rb(10'd80), .h_sp(1'b1),
 //  .v_ds(10'd200), .v_fp( 10'd10), .v_s(  10'd3), .v_bp( 10'd10), .v_tb(10'd20), .v_bb(10'd20), .v_sp(1'b0),
-  .v_ds(10'd200), .v_fp( 10'd1), .v_s(  10'd3), .v_bp( 10'd10), .v_tb(10'd20), .v_bb(10'd29), .v_sp(1'b0),
+  .v_ds(10'd200), .v_fp( 10'd6), .v_s(  10'd2), .v_bp( 10'd10), .v_tb(10'd20), .v_bb(10'd24), .v_sp(1'b0),
   .str  (ntsc_config_str)
 );
 
@@ -170,13 +172,13 @@ wire [60:0] h_str = { h_sp,
 		      h_ds + h_rb + h_fp + h_s + h_bp + h_lb - 10'd1};
 			
 wire [60:0] v_str = { v_sp, 
-		      v_ds - 10'd1, 
-		      v_ds + v_bb - 10'd1,
-		      v_ds + v_bb + v_fp - 10'd1, 
-		      v_ds + v_bb + v_fp + v_s - 10'd1, 
-		      v_ds + v_bb + v_fp + v_s + v_bp - 10'd1, 
-		      v_ds + v_bb + v_fp + v_s + v_bp + v_tb - 10'd1};
-			
+		      v_bp - 10'd1, 
+		      v_bp + v_tb - 10'd1,
+		      v_bp + v_tb + v_ds - 10'd1, 
+		      v_bp + v_tb + v_ds + v_bb - 10'd1, 
+		      v_bp + v_tb + v_ds + v_bb + v_fp - 10'd1, 
+		      v_bp + v_tb + v_ds + v_bb + v_fp + v_s - 10'd1};
+
 assign str = { h_str, v_str };
 
 endmodule

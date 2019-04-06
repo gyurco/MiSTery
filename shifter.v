@@ -107,10 +107,10 @@ always @(posedge clk) begin
 	// so vbl happens at cycle 8 of the display phase
 	if(hcnt == 8) begin		
 		// vsync starts at begin of blanking phase
-		if(vcnt == t7_v_blank_bot)   st_vs <= 1'b1;
+		if(vcnt == t10_v_sync)   st_vs <= 1'b1;
 		
 		// vsync ends at begin of top border
-		if(vcnt == t10_v_border_top) st_vs <= 1'b0;
+		if(vcnt == t11_v_end) st_vs <= 1'b0;
 	end
 end
 		
@@ -137,7 +137,10 @@ video_modes video_modes(
 // display               border blank(FP)   sync   blank(BP) border 
 // |--------------------|xxxxxx|#########|_______|##########|xxxxxx|
 //                     t0     t1        t2      t3         t4     t5  horizontal
-//                     t6     t7        t8      t9        t10    t11  vertical
+
+//  blank(BP) border display               border blank(FP)   sync  
+// ##########|xxxxxx|--------------------|xxxxxx|#########|_______|
+//          t6     t7                   t8     t9       t10     t11  vertical
 
 // extract the various timing parameters from the config string 
 
@@ -151,11 +154,11 @@ wire [9:0] t4_h_border_left  = low?{1'b0,config_string[80:72]}:config_string[80:
 wire [9:0] t5_h_end          = low?{1'b0,config_string[70:62]}:config_string[70:61];
 
 assign vga_vs_pol = config_string[60];
-wire [9:0] t6_v_border_bot   = config_string[59:50];
-wire [9:0] t7_v_blank_bot    = config_string[49:40];
-wire [9:0] t8_v_sync         = config_string[39:30];
-wire [9:0] t9_v_blank_top    = config_string[29:20];
-wire [9:0] t10_v_border_top  = config_string[19:10];
+wire [9:0] t6_v_border_top   = config_string[59:50];
+wire [9:0] t7_v_disp_start   = config_string[49:40];
+wire [9:0] t8_v_border_bot   = config_string[39:30];
+wire [9:0] t9_v_blank_bot    = config_string[29:20];
+wire [9:0] t10_v_sync        = config_string[19:10];
 wire [9:0] t11_v_end         = config_string[9:0];
 
 // default video mode is monochrome
@@ -171,8 +174,7 @@ wire low   = (shmode == 2'd0);
 wire [2:0] planes = mono?3'd1:(mid?3'd2:3'd4);
 
 reg [1:0] syncmode;
-reg [1:0] syncmode_latch;
-wire pal = (syncmode_latch[1] == 1'b1);
+wire pal = (syncmode[1] == 1'b1);
 
  // data input buffers for up to 4 planes
 reg [15:0] data_latch[4];
@@ -391,64 +393,12 @@ always @(posedge clk) begin
  end
 end
 
-// ---------------------------------------------------------------------------
-// ----------------------------- overscan detection --------------------------
-// ---------------------------------------------------------------------------
-
-// Currently only opening the bottom border for overscan is supported. Opening
-// the top border should also be easy. Opening the side borders is basically 
-// impossible as this requires a 100% perfect CPU and shifter timing.
-
-reg last_syncmode;
-reg [3:0] bottom_overscan_cnt;
-reg [3:0] top_overscan_cnt;
-
-wire bottom_overscan = (bottom_overscan_cnt != 0);
-wire top_overscan = (top_overscan_cnt != 0);
-
 reg syncmode_at_line_start;
 
 always @(posedge clk) begin
-	if(cpu_reset) begin
-		top_overscan_cnt <= 4'd0;
-		bottom_overscan_cnt <= 4'd0;
-	end else begin
-		last_syncmode <= syncmode[1];  // delay syncmode to detect changes
-
-      // reset counters
-		if((vcnt == 0) && (hcnt == 10'd0)) begin
-		   if(bottom_overscan_cnt != 0)
-		     bottom_overscan_cnt  <= bottom_overscan_cnt - 4'd1;
-
-		   if(top_overscan_cnt != 0)
-		     top_overscan_cnt  <= top_overscan_cnt - 4'd1;
-		end
-	   
-		// this is the magic used to do "overscan".
-		// the magic actually involves more than toggling syncmode (50/60hz)
-		// within line 200. But this is sufficient for our detection
-
-		// trigger in line 199
-		if( (vcnt >= 9'd194) && (vcnt <= 9'd202) ) begin
-			// syncmode has changed between 1 and 0 (50/60 hz)
-			if(syncmode[1] != last_syncmode)
-				bottom_overscan_cnt <= 4'd15;
-		end 
-	  
-		// trigger in line 284/285 and 1/2
-		if( ( (vcnt >= 9'd280) && (vcnt <= 9'd290) ) ||
-			 ( (vcnt >=   9'd0) && (vcnt <=   9'd3) ) ) begin
-			// syncmode has changed between 1 and 0 (50/60 hz)
-			if(syncmode[1] != last_syncmode)
-				top_overscan_cnt <= 4'd15;
-		end
-		
-		// latch syncmode at begin of line and check if it changed at the end
-		// this special case causes 2 less (50->60) or more (60->50) bytes to be read
-		// during a line
-		if(hcnt == de_h_start)
-			syncmode_at_line_start <= syncmode[1];
-	end
+	if(hcnt == de_h_start)
+		syncmode_at_line_start <= syncmode[1];
+//	end
 end
 
 // ---------------------------------------------------------------------------
@@ -521,20 +471,15 @@ wire [9:0] ste_prefetch    = (ste && ((pixel_offset != 0) && !ste_overscan_enabl
 wire [9:0] de_h_start      = t5_h_end - 10'd16 - ste_prefetch;
 wire [9:0] de_h_end        = t0_h_border_right - 10'd16 + ste_overscan;
 
-// extra lines required by vertical overscan
-wire [9:0] de_v_top_extra  = top_overscan?10'd29:10'd0 /* synthesis keep */;  // 29 extra ST lines at top
-wire [9:0] de_v_bot_extra  = bottom_overscan?10'd38:10'd0 /* synthesis keep */;    // 38 extra ST lines at bottom
-
-// calculate lines in which active display starts end ends
-wire [9:0] de_v_start      = t11_v_end - de_v_top_extra;
-wire [9:0] de_v_end        = t6_v_border_bot + de_v_bot_extra;
+wire [9:0] de_v_start      = t7_v_disp_start;
+wire [9:0] de_v_end        = t8_v_border_bot;
 
 always @(posedge clk) begin
 
 	// line in which memory access is enabled
 	if(hcnt == v_event) begin
-		if(vcnt == de_v_start)  de_v <= 1'b1;
-		if(vcnt == de_v_end)    de_v <= 1'b0;
+		if(vcnt == t7_v_disp_start)  de_v <= 1'b1;
+		if(vcnt == t8_v_border_bot || vcnt == t9_v_blank_bot) de_v <= 1'b0;
 	end
 		
 	// display enable signal 16/32/64 bits (16*planes) ahead of display enable (de)
@@ -551,12 +496,10 @@ always @(posedge clk) begin
 	// in mono mode it doesn't work that way as there's no border and 
 	// three lines before blank is inside the display area
 	if((hcnt == t5_h_end-8 ) && 
-		(vcnt == (mono?(t7_v_blank_bot+10'd1):(t7_v_blank_bot-10'd3)))) begin
+		(vcnt == (mono?(10'd1):(t10_v_sync-10'd3)))) begin
 		vaddr <= _v_bas_ad;
 		plane <= 2'd0;
 
-		// copy syncmode
-		syncmode_latch <= syncmode;
 	end else begin
 
 		// video transfer happens in cycle 3 (end of video cycle)
@@ -668,14 +611,14 @@ always @(posedge clk) begin
 		if(vcnt == t11_v_end)  vcnt <= 10'd0;
 		else                   vcnt <= vcnt + 10'd1;
 
-		if( vcnt == t8_v_sync) 	    v_sync <= 1'b1;
-		if( vcnt == t9_v_blank_top) v_sync <= 1'b0;
+		if( vcnt == t10_v_sync) v_sync <= 1'b1;
+		if( vcnt == t11_v_end)  v_sync <= 1'b0;
 
 		// generate vertical video signal states
-		if( vcnt == t8_v_sync )                                        v_state <= STATE_SYNC;
-		if((vcnt == de_v_end) || (vcnt == t10_v_border_top))           v_state <= STATE_BORDER;
-		if((vcnt == t7_v_blank_bot) || (vcnt == t9_v_blank_top))       v_state <= STATE_BLANK;
-		if( vcnt == de_v_start)                                        v_state <= STATE_DISP;
+		if( vcnt == t10_v_sync )                            v_state <= STATE_SYNC;
+		if((vcnt == de_v_end) || (vcnt == t6_v_border_top)) v_state <= STATE_BORDER;
+		if((vcnt == t9_v_blank_bot) || (vcnt == 0))         v_state <= STATE_BLANK;
+		if( vcnt == t7_v_disp_start)                        v_state <= STATE_DISP;
 	end
   end
 end
