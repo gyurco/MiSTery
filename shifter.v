@@ -111,7 +111,7 @@ end
 // ---------------------------------------------------------------------------
 
 wire [121:0] config_string;
-
+reg  [121:61] config_string_l;
 video_modes video_modes(
 	// signals used to select the appropriate mode
 	.mono      (mono),
@@ -137,13 +137,13 @@ video_modes video_modes(
 // extract the various timing parameters from the config string 
 
 // horizontal timing values are for 640 pixel and are divided by 2 for 320 pixel low rez
-assign vga_hs_pol = config_string[121];
-wire [9:0] t0_h_border_right = low?{1'b0,config_string[120:112]}:config_string[120:111];
-wire [9:0] t1_h_blank_right  = low?{1'b0,config_string[110:102]}:config_string[110:101];
-wire [9:0] t2_h_sync         = low?{1'b0,config_string[100:92]}:config_string[100:91];
-wire [9:0] t3_h_blank_left   = low?{1'b0,config_string[90:82]}:config_string[90:81];
-wire [9:0] t4_h_border_left  = low?{1'b0,config_string[80:72]}:config_string[80:71];
-wire [9:0] t5_h_end          = low?{1'b0,config_string[70:62]}:config_string[70:61];
+assign vga_hs_pol = config_string_l[121];
+wire [9:0] t0_h_border_right = low?{1'b0,config_string_l[120:112]}:config_string_l[120:111];
+wire [9:0] t1_h_blank_right  = low?{1'b0,config_string_l[110:102]}:config_string_l[110:101];
+wire [9:0] t2_h_sync         = low?{1'b0,config_string_l[100:92]}:config_string_l[100:91];
+wire [9:0] t3_h_blank_left   = low?{1'b0,config_string_l[90:82]}:config_string_l[90:81];
+wire [9:0] t4_h_border_left  = low?{1'b0,config_string_l[80:72]}:config_string_l[80:71];
+wire [9:0] t5_h_end          = low?{1'b0,config_string_l[70:62]}:config_string_l[70:61];
 
 assign vga_vs_pol = config_string[60];
 wire [9:0] t6_v_border_top   = config_string[59:50];
@@ -467,6 +467,7 @@ wire [9:0] de_v_start      = t7_v_disp_start;
 wire [9:0] de_v_end        = t8_v_border_bot;
 
 always @(posedge clk) begin
+	if (cpu_reset) config_string_l[121:61] <= config_string[121:61];
 
 	// line in which memory access is enabled
 	if(hcnt == v_event) begin
@@ -491,6 +492,8 @@ always @(posedge clk) begin
 		(vcnt == (mono?(10'd1):(t10_v_sync-10'd3)))) begin
 		vaddr <= _v_bas_ad;
 		plane <= 2'd0;
+		// copy syncmode
+		config_string_l[121:61] <= config_string[121:61];
 
 	end else begin
 
