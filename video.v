@@ -89,11 +89,15 @@ assign vs = (enable_csync || ypbpr)?1'b1:stvid_vs;
 // ------------------------- OSD ---------------------------
 
 // in viking mode OSD is operated at 64 MHz pixel clock
-reg clk_64;
-always @(posedge clk_128)
-  clk_64 <= !clk_64;
+reg ce_pix64, ce_pix16;
+always @(posedge clk_128) begin
+	reg [2:0] pix_div;
+	pix_div <= pix_div + 1'b1;
+	ce_pix64 <= !pix_div[0];
+	ce_pix16 <= !pix_div;
+end
 
-wire osd_clk = viking_enable?clk_128:clk_32;
+wire osd_ce = viking_enable?ce_pix64:ce_pix16;
    
 wire [5:0] y, pb, pr;
 rgb2ypbpr rgb2ypbpr (
@@ -114,7 +118,8 @@ assign video_b = ypbpr?pb:osd_b;
 // include OSD overlay
 wire [5:0] osd_r, osd_g, osd_b;
 osd osd (
-         .clk        ( osd_clk    ),
+         .clk        ( clk_128    ),
+		 .ce_pix     ( osd_ce     ),
 
          // OSD spi interface to io controller
          .sdi        ( sdi        ),
@@ -122,17 +127,17 @@ osd osd (
          .ss         ( ss         ),
 
          // feed ST video signal into OSD
-			.hs         ( stvid_hs ),
-			.vs         ( stvid_vs ),
+         .HSync      ( stvid_hs ),
+         .VSync      ( stvid_vs ),
 	 
-         .r_in       ( ovl_r ),
-         .g_in       ( ovl_g ),
-         .b_in       ( ovl_b ),
+         .R_in       ( ovl_r ),
+         .G_in       ( ovl_g ),
+         .B_in       ( ovl_b ),
 	 
          // receive signal with OSD overlayed
-         .r_out      ( osd_r  ),
-         .g_out      ( osd_g  ),
-         .b_out      ( osd_b  )
+         .R_out      ( osd_r  ),
+         .G_out      ( osd_g  ),
+         .B_out      ( osd_b  )
 );
 
 // include debug overlay

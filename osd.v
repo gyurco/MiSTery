@@ -2,7 +2,7 @@
 // osd.v
 // 
 // On Screen Display implementation for the MiST board
-// http://code.google.com/p/mist-board/
+// https://github.com/mist-devel
 // 
 // Copyright (c) 2015 Till Harbaum <till@harbaum.org> 
 // 
@@ -21,160 +21,155 @@
 //
 
 module osd (
-  input        clk, // 31.875 MHz
+	// OSDs pixel clock, should be synchronous to cores pixel clock to
+	// avoid jitter.
+	input        clk,
+	input        ce_pix,
 
-  // SPI interface for OSD
-  input        sck,
-  input        ss,
-  input        sdi,
+	// SPI interface
+	input        sck,
+	input        ss,
+	input        sdi,
 
-  input        hs,
-  input        vs,
-  
-  input [5:0]  r_in,  // Red[5:0]
-  input [5:0]  g_in,  // Green[5:0]
-  input [5:0]  b_in,  // Blue[5:0]
-
-  output [5:0] r_out, // Red[5:0]
-  output [5:0] g_out, // Green[5:0]
-  output [5:0] b_out  // Blue[5:0]
+	// VGA signals coming from core
+	input  [5:0] R_in,
+	input  [5:0] G_in,
+	input  [5:0] B_in,
+	input        HSync,
+	input        VSync,
+	
+	// VGA signals going to video connector
+	output [5:0] R_out,
+	output [5:0] G_out,
+	output [5:0] B_out
 );
 
-// combine input and OSD into a overlayed signal
-assign r_out = !oe?r_in:{pixel, pixel, pixel, r_in[5:3]};
-assign g_out = !oe?g_in:{pixel, pixel,  1'b1, g_in[5:3]};
-assign b_out = !oe?b_in:{pixel, pixel, pixel, b_in[5:3]};
+parameter OSD_X_OFFSET = 10'd0;
+parameter OSD_Y_OFFSET = 10'd0;
+parameter OSD_COLOR    = 3'b010;
 
-reg enabled;
+localparam OSD_WIDTH   = 10'd256;
+localparam OSD_HEIGHT  = 10'd128;
 
-// ---------------------------------------------------------------------------
-// ------------------------- video timing analysis ---------------------------
-// ---------------------------------------------------------------------------
-
-// System clock is 32Mhz. Slowest hsync is 15Khz/64us. Hcounter must thus be
-// able to run to 2048
-reg [10:0] 	hcnt;
-reg [10:0] 	vcnt;
-
-reg [10:0] 	hs_high;
-reg [10:0] 	hs_low;
-reg         hs_pol;
-wire [10:0] 	dsp_width = hs_pol?hs_low:hs_high;
-   
-reg [10:0] 	vs_high;
-reg [10:0] 	vs_low;
-reg         vs_pol;
-wire [10:0] 	dsp_height = vs_pol?vs_low:vs_high;
-   
-reg hsD, vsD;
-always @(posedge clk) begin
-   // check if hsync has changed
-   hsD <= hs;
-   if(hsD != hs) begin
-      // this lags by one hsync, but registering it
-	  // gives better timing properties at 128MHz
-      hs_pol <= hs_high < hs_low;
-
-      if(hs)  hs_low  <= hcnt;
-      else    hs_high <= hcnt;
-      hcnt <= 11'd0;
-
-      if(hs == hs_pol) begin
-	 // check if vsync has changed
-	 vsD <= vs;
-	 if(vsD != vs) begin
-	    vs_pol = vs_high < vs_low;
-	    if(vs)  vs_low  <= vcnt;
-	    else    vs_high <= vcnt;
-	    vcnt <= 11'd0;
-	 end else
-	   vcnt <= vcnt + 11'd1;
-      end
-   end else
-     hcnt <= hcnt + 11'd1;
-end
-   
-// ---------------------------------------------------------------------------
-// -------------------------------- spi client -------------------------------
-// ---------------------------------------------------------------------------
+// *********************************************************************************
+// spi client
+// *********************************************************************************
 
 // this core supports only the display related OSD commands
 // of the minimig
-
-reg [7:0]       sbuf;
-reg [7:0]       cmd;
-reg [4:0]       cnt;
-reg [10:0]      bcnt;
-
-reg [7:0] buffer [2047:0];  // the OSD buffer itself
+reg        osd_enable;
+(* ramstyle = "no_rw_check" *) reg  [7:0] osd_buffer[2047:0];  // the OSD buffer itself
 
 // the OSD has its own SPI interface to the io controller
 always@(posedge sck, posedge ss) begin
-  if(ss == 1'b1) begin
-      cnt <= 5'd0;
-      bcnt <= 11'd0;
-  end else begin
-    sbuf <= { sbuf[6:0], sdi};
+	reg  [4:0] cnt;
+	reg [10:0] bcnt;
+	reg  [7:0] sbuf;
+	reg  [7:0] cmd;
 
-    // 0:7 is command, rest payload
-    if(cnt < 15)
-      cnt <= cnt + 4'd1;
-    else
-      cnt <= 4'd8;
+	if(ss) begin
+		cnt  <= 0;
+		bcnt <= 0;
+	end else begin
+		sbuf <= {sbuf[6:0], sdi};
 
-      if(cnt == 7) begin
-       cmd <= {sbuf[6:0], sdi};
-      
-      // lower three command bits are line address
-      bcnt <= { sbuf[1:0], sdi, 8'h00};
+		// 0:7 is command, rest payload
+		if(cnt < 15) cnt <= cnt + 1'd1;
+			else cnt <= 8;
 
-      // command 0x40: OSDCMDENABLE, OSDCMDDISABLE
-      if(sbuf[6:3] == 4'b0100)
-        enabled <= sdi;
-    end
+		if(cnt == 7) begin
+			cmd <= {sbuf[6:0], sdi};
 
-    // command 0x20: OSDCMDWRITE
-    if((cmd[7:3] == 5'b00100) && (cnt == 15)) begin
-      buffer[bcnt] <= {sbuf[6:0], sdi};
-      bcnt <= bcnt + 11'd1;
-    end
-  end
+			// lower three command bits are line address
+			bcnt <= {sbuf[1:0], sdi, 8'h00};
+
+			// command 0x40: OSDCMDENABLE, OSDCMDDISABLE
+			if(sbuf[6:3] == 4'b0100) osd_enable <= sdi;
+		end
+
+		// command 0x20: OSDCMDWRITE
+		if((cmd[7:3] == 5'b00100) && (cnt == 15)) begin
+			osd_buffer[bcnt] <= {sbuf[6:0], sdi};
+			bcnt <= bcnt + 1'd1;
+		end
+	end
 end
 
-// ---------------------------------------------------------------------------
-// ------------------------------- OSD position ------------------------------
-// ---------------------------------------------------------------------------
+// *********************************************************************************
+// video timing and sync polarity anaylsis
+// *********************************************************************************
 
-wire expand_x = ((dsp_width > 1000)&&(dsp_height < 1000));
-wire expand_y = (dsp_height > 400);
-   
-wire [10:0] width  = expand_x?10'd512:10'd256;
-wire [10:0] height = expand_y?10'd128:10'd64;
+// horizontal counter
+reg  [9:0] h_cnt;
+reg  [9:0] hs_low, hs_high;
+wire       hs_pol = hs_high < hs_low;
+wire [9:0] dsp_width = hs_pol ? hs_low : hs_high;
 
-wire [10:0] border_x = expand_x?10'd4:10'd4;
-wire [10:0] border_y = expand_y?10'd4:10'd2;
+// vertical counter
+reg  [9:0] v_cnt;
+reg  [9:0] vs_low, vs_high;
+wire       vs_pol = vs_high < vs_low;
+wire [9:0] dsp_height = vs_pol ? vs_low : vs_high;
 
-wire [10:0] pos_x = (dsp_width - width)>>1;
-wire [10:0] pos_y = (dsp_height - height)>>1;
+wire doublescan = (dsp_height>350); 
 
-wire oe = enabled && (
-  (hcnt >= pos_x - border_x) &&
-  (hcnt < (pos_x + width + border_x)) &&
-  (vcnt >= pos_y - border_y) &&
-  (vcnt < (pos_y + height + border_y)));
+always @(posedge clk) begin
+	reg hsD;
+	reg vsD;
 
-wire content_area =
-  (hcnt >= pos_x) && (hcnt < (pos_x + width - 1)) &&
-  (vcnt >= pos_y) && (vcnt < (pos_y + height - 1));
+	if(ce_pix) begin
+		hsD <= HSync;
 
-// one pixel offset for delay by byte register
-wire [7:0] ihcnt = (expand_x?((hcnt-pos_x)>>1):(hcnt-pos_x))+8'd1;
-wire [6:0] ivcnt =  expand_y?((vcnt-pos_y)>>1):(vcnt-pos_y);
+		// falling edge of HSync
+		if(!HSync && hsD) begin	
+			h_cnt <= 0;
+			hs_high <= h_cnt;
+		end
 
-wire pixel = content_area?buffer_byte[ivcnt[2:0]]:1'b0;
+		// rising edge of HSync
+		else if(HSync && !hsD) begin	
+			h_cnt <= 0;
+			hs_low <= h_cnt;
+			v_cnt <= v_cnt + 1'd1;
+		end else begin
+			h_cnt <= h_cnt + 1'd1;
+		end
 
-reg [7:0] buffer_byte; 
-always @(posedge clk)
-  buffer_byte <= buffer[{ivcnt[5:3], ihcnt}];
-  
+		vsD <= VSync;
+
+		// falling edge of VSync
+		if(!VSync && vsD) begin	
+			v_cnt <= 0;
+			vs_high <= v_cnt;
+		end
+
+		// rising edge of VSync
+		else if(VSync && !vsD) begin	
+			v_cnt <= 0;
+			vs_low <= v_cnt;
+		end
+	end
+end
+
+// area in which OSD is being displayed
+wire [9:0] h_osd_start = ((dsp_width - OSD_WIDTH)>> 1) + OSD_X_OFFSET;
+wire [9:0] h_osd_end   = h_osd_start + OSD_WIDTH;
+wire [9:0] v_osd_start = ((dsp_height- (OSD_HEIGHT<<doublescan))>> 1) + OSD_Y_OFFSET;
+wire [9:0] v_osd_end   = v_osd_start + (OSD_HEIGHT<<doublescan);
+wire [9:0] osd_hcnt    = h_cnt - h_osd_start + 1'd1;  // one pixel offset for osd_byte register
+wire [9:0] osd_vcnt    = v_cnt - v_osd_start;
+
+wire osd_de = osd_enable && 
+              (HSync != hs_pol) && (h_cnt >= h_osd_start) && (h_cnt < h_osd_end) &&
+              (VSync != vs_pol) && (v_cnt >= v_osd_start) && (v_cnt < v_osd_end);
+
+reg  [7:0] osd_byte;
+always @(posedge clk) if(ce_pix) osd_byte <= osd_buffer[{doublescan ? osd_vcnt[7:5] : osd_vcnt[6:4], osd_hcnt[7:0]}];
+
+wire osd_pixel = osd_byte[doublescan ? osd_vcnt[4:2] : osd_vcnt[3:1]];
+
+assign R_out = !osd_de ? R_in : {osd_pixel, osd_pixel, OSD_COLOR[2], R_in[5:3]};
+assign G_out = !osd_de ? G_in : {osd_pixel, osd_pixel, OSD_COLOR[1], G_in[5:3]};
+assign B_out = !osd_de ? B_in : {osd_pixel, osd_pixel, OSD_COLOR[0], B_in[5:3]};
+
 endmodule
