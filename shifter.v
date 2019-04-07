@@ -52,7 +52,7 @@ module shifter (
   input 	    			ste, // enable STE featurss
 
   output 	    		vga_hs_pol, // sync polarity to be used on vga
-  output 	    		vga_vs_pol,
+  output reg    		vga_vs_pol,
  
   // signals not affected by scan doubler for internal use like irqs
   output 	    		st_de,
@@ -99,7 +99,10 @@ always @(posedge clk) begin
 	// so vbl happens at cycle 8 of the display phase
 	if(hcnt == 8) begin		
 		// vsync starts at begin of blanking phase
-		if(vcnt == t10_v_sync)   st_vs <= 1'b1;
+		if(vcnt == t10_v_sync) begin
+			st_vs <= 1'b1;
+			vga_vs_pol <= vs_pol;
+		end
 		
 		// vsync ends at begin of top border
 		if(vcnt == t11_v_end) st_vs <= 1'b0;
@@ -145,7 +148,7 @@ wire [9:0] t3_h_blank_left   = low?{1'b0,config_string_l[90:82]}:config_string_l
 wire [9:0] t4_h_border_left  = low?{1'b0,config_string_l[80:72]}:config_string_l[80:71];
 wire [9:0] t5_h_end          = low?{1'b0,config_string_l[70:62]}:config_string_l[70:61];
 
-assign vga_vs_pol = config_string[60];
+wire vs_pol = config_string[60];
 wire [9:0] t6_v_border_top   = config_string[59:50];
 wire [9:0] t7_v_disp_start   = config_string[49:40];
 wire [9:0] t8_v_border_bot   = config_string[39:30];
