@@ -39,7 +39,7 @@ module audio (
 	input ste_dma_snd_sel,
 
 	// ste dma interface
-	input					hsync,     // to synchronize with video
+	input			hde1,     // to synchronize with video
 	output            dma_read,
 	output [22:0]     dma_addr,
 	input [63:0]      dma_data,
@@ -143,7 +143,7 @@ ste_dma_snd ste_dma_snd (
 	// memory interface
 	.clk_2_en   (clk_2_en        ),
 	.bus_cycle 	(bus_cycle       ),
-	.hsync      (hsync           ),
+	.hde1       (hde1            ),
 	.saddr      (dma_addr        ),
 	.read       (dma_read        ),
 	.data       (dma_data        ),

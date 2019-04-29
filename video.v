@@ -67,6 +67,7 @@ module video (
   input 	ste,                 // enable STE featurss
  
   // signals not affected by scan doubler for internal use like irqs
+  output    st_hde1,
   output 	st_de,
   output 	st_vs,
   output 	st_hs 
@@ -192,7 +193,7 @@ wire vga_vs = shifter_sd_adjusted_vs ^ vga_vs_pol;
 
 wire shifter_sd_adjusted_hs;
 wire shifter_sd_adjusted_vs;   
-   
+
 sync_adjust sync_adjust (
        .clk    ( clk_32                 ),
        .adjust ( adjust                 ),
@@ -203,7 +204,7 @@ sync_adjust sync_adjust (
        .hs_out ( shifter_sd_adjusted_hs ),
        .vs_out ( shifter_sd_adjusted_vs )
 );
-   
+
 // --------------- combine shifter with scan doubler -----------------
 
 // use scandoubler if 15khz signal has been detected and 
@@ -293,6 +294,7 @@ shifter shifter (
 	 .ste       ( ste           ), // enable STE features
  
 	 // signals not affected by scan doubler for internal use like irqs
+	 .st_hde1   ( st_hde1       ),
 	 .st_de     ( st_de         ),
 	 .st_vs     ( st_vs         ),
 	 .st_hs     ( st_hs         )

@@ -59,7 +59,7 @@ wire [1:0] usb_redirection = system_ctrl[27:26];
 
 wire video_read;
 wire [22:0] video_address;
-wire st_de, st_hs, st_vs;
+wire st_hde1, st_de, st_hs, st_vs;
 wire [15:0] video_adj;
 
 // generate dtack for all implemented peripherals
@@ -307,6 +307,7 @@ video video (
 	
 	// signals not affected by scan doubler required for
 	// irq generation
+	.st_hde1    (st_hde1        ),
 	.st_hs		(st_hs      	),
 	.st_vs		(st_vs      	),
 	.st_de		(st_de      	)
@@ -521,7 +522,7 @@ audio audio (
 	.ste_dma_snd_sel ( ste_dma_snd_sel ),
 
 	// ste dma interface
-	.hsync		( st_hs             ),
+	.hde1		( st_hde1           ),
 	.dma_addr   ( ste_dma_snd_addr  ),
 	.dma_read   ( ste_dma_snd_read  ),
 	.dma_data   ( ram_data_out_64   ),
@@ -1185,7 +1186,7 @@ wire cpu_cycle   = (bus_cycle == 1) || (bus_cycle == 2);
 wire cpu_cycle_int = (bus_cycle == 2);
 
 // ----------------- RAM address --------------
-wire ste_dma_has_bus = (bus_cycle == 0) && st_hs && ste;
+wire ste_dma_has_bus = (bus_cycle == 0) && !st_hde1 && ste;
 wire [22:0] video_cycle_addr = ste_dma_has_bus?ste_dma_snd_addr:video_address;
 wire [22:0] cpu_cycle_addr = dma_has_bus?dma_addr:(blitter_has_bus?blitter_master_addr:tg68_adr[23:1]);
 wire [22:0] ram_address = video_cycle?video_cycle_addr:cpu_cycle_addr;

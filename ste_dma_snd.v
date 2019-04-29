@@ -37,7 +37,7 @@ module ste_dma_snd (
 	// memory interface
 	input               clk_8_en,
 	input [1:0] 		bus_cycle, // bus-cycle
-	input					hsync,     // to synchronize with video
+	input				hde1,     // to synchronize with video
 	output            read,
 	output [22:0]     saddr,
 	input [63:0]      data,
@@ -51,7 +51,7 @@ module ste_dma_snd (
 );
 
 assign saddr = snd_adr;   // drive data
-assign read = (bus_cycle == 0) && hsync && !fifo_full && dma_enable;
+assign read = (bus_cycle == 0) && !hde1 && !fifo_full && dma_enable;
 
 // ---------------------------------------------------------------------------
 // ------------------------------ clock generation ---------------------------
@@ -235,7 +235,7 @@ end
 // This type of fifo can actually never be 100% full. It contains at most
 // 2^n-1 words. A n=2 buffer can thus contain at most 3 words which at 50kHz
 // stereo means that the buffer needs to be reloaded at 16.6kHz. Reloading
-// happens in hsync at 15.6Khz. Thus a n=2 buffer is not sufficient. 
+// happens in hde1 at 15.6Khz. Thus a n=2 buffer is not sufficient. 
 
 localparam FIFO_ADDR_BITS = 3;    // four words
 localparam FIFO_DEPTH = (1 << FIFO_ADDR_BITS);
@@ -296,7 +296,7 @@ end
 // ---------------------------------------------------------------------------
 
 // The memory engine is very similar to the one used by the video/shifter 
-// implementation and access the ram while video doesn't need it (in the hsync)
+// implementation and access the ram while video doesn't need it (in the hde)
 
 reg dma_enable;  // flag indicating dma engine is active
 
@@ -334,9 +334,9 @@ always @(posedge clk) begin
 				end
 			end else begin
 
-				// fifo not full? read something during hsync using the video cycle
+				// fifo not full? read something during !hde using the video cycle
 				// clk_8_en is at the end of the 8 MHz cycle
-				if(!fifo_full && hsync && clk_8_en && (bus_cycle == 0)) begin
+				if(!fifo_full && !hde1 && clk_8_en && (bus_cycle == 0)) begin
 						
  					if(snd_adr != snd_end_latched) begin
 						// read right word from ram using the 64 bit memory interface

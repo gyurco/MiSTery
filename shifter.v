@@ -55,7 +55,8 @@ module shifter (
   output reg    		vga_vs_pol,
  
   // signals not affected by scan doubler for internal use like irqs
-  output 	    		st_de,
+  output reg		st_hde1,
+  output 	    	st_de,
   output reg 	   	st_vs,
   output reg 	   	st_hs
 );
@@ -484,6 +485,9 @@ always @(posedge clk) begin
 		if(hcnt == de_h_start)  de <= 1'b1;
 		if(hcnt == de_h_end)    de <= 1'b0;
 	end
+
+	if(hcnt == de_h_start)  st_hde1 <= 1'b1;
+	if(hcnt == de_h_end)    st_hde1 <= 1'b0;
  
 	// according to hatari the video counter is reloaded 3 lines before 
 	// the vbi occurs. This is right after the display has been painted.
