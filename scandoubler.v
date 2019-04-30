@@ -42,6 +42,11 @@ module scandoubler (
   output 	   is15k
 );
 
+reg clk_16;
+always @(posedge clk) begin
+   clk_16 <= ~clk_16;
+end
+
 // --------------------- create output signals -----------------
 // latch everything once more to make it glitch free and apply scanline effect
 reg scanline;
@@ -94,25 +99,6 @@ reg [11:0]  sd_out;
 
 // 2 lines of 1024 pixels 3*4 bit RGB
 reg [11:0] sd_buffer [2047:0];
-reg        clk_16;
-
-// use alternating sd_buffers when storing/reading data   
-reg vsD;
-reg line_toggle;
-always @(posedge clk) begin
-   clk_16 <= ~clk_16;
-   vsD <= vs_in;
-
-   if(vsD != vs_in) 
-     line_toggle <= 1'b0;
-
-   // begin of incoming hsync
-   if(hsD && !hs_in) 
-     line_toggle <= !line_toggle;
-end
-   
-always @(posedge clk)
-   sd_buffer[{line_toggle, hcnt}] <= { r_in, g_in, b_in };
    
 // ==================================================================
 // =================== horizontal timing analysis ===================
@@ -125,9 +111,11 @@ assign is15k = hs_max > (16000000/20000);
 reg [9:0] hs_max;
 reg [9:0] hs_rise;
 reg [9:0] hcnt;
-reg hsD;
-   
+// use alternating sd_buffers when storing/reading data
+reg line_toggle;
+
 always @(posedge clk) begin
+    reg hsD, vsD;
     if (clk_16) begin
         hsD <= hs_in;
 
@@ -140,6 +128,17 @@ always @(posedge clk) begin
 
         // save position of rising edge
         if(!hsD && hs_in) hs_rise <= hcnt;
+
+        vsD <= vs_in;
+
+        // begin of incoming hsync
+        if(hsD && !hs_in)
+            line_toggle <= !line_toggle;
+
+        if(vsD != vs_in)
+            line_toggle <= 1'b0;
+
+        sd_buffer[{line_toggle, hcnt}] <= { r_in, g_in, b_in };
     end
 end
    
@@ -152,6 +151,8 @@ reg hs_sd;
 
 // timing generation runs 32 MHz (twice the input signal analysis speed)
 always @(posedge clk) begin
+   reg hsD;
+   hsD <= hs_in;
 
    // output counter synchronous to input and at twice the rate
    sd_hcnt <= sd_hcnt + 10'd1;
