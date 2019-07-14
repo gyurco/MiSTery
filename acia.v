@@ -6,14 +6,13 @@ module acia (
 	input [7:0] din,
 	input sel,
 	input [1:0] addr,
-	input ds,
 	input rw,
 	output reg [7:0] dout,
 	output irq,
 
 	output midi_out,
 	input midi_in,
-	
+
 	// data from io controller to ikbd acia
    input ikbd_strobe_in,
    input [7:0] ikbd_data_in,
@@ -33,10 +32,6 @@ reg E_d;
 always @(posedge clk) E_d <= E;
 wire clk_en = ~E_d & E;
 
-reg selD;
-always @(posedge clk) if (clk_en) selD <= sel;
-wire req = ~selD & sel;
-
 // --- ikbd output fifo ---
 // filled by the CPU when writing to the acia data register
 // emptied by the io controller when reading via SPI
@@ -46,7 +41,7 @@ io_fifo ikbd_out_fifo (
 	.in_clk   			(clk),
 	.in 					(din),
 	.in_strobe 			(1'b0),
-	.in_enable			(clk_en && req && ~ds && ~rw && (addr == 2'd1)),   // ikbd acia data write
+	.in_enable			(clk_en && sel && ~rw && (addr == 2'd1)),   // ikbd acia data write
 
 	.out_clk          (clk),
 	.out 					(ikbd_data_out),
@@ -86,7 +81,7 @@ io_fifo midi_out_fifo (
 	.in_clk   			(clk),
 	.in 					(din),
 	.in_strobe 			(1'b0),
-	.in_enable			(clk_en && req && ~ds && ~rw && (addr == 2'd3)),  // midi acia data write
+	.in_enable			(clk_en && sel && ~rw && (addr == 2'd3)),  // midi acia data write
 
 	.out_clk          (clk),
 	.out 					(midi_data_out),
@@ -115,7 +110,7 @@ always @(posedge clk) begin
 
 		// read on ikbd data register
 		ikbd_cpu_data_read <= 1'b0;
-		if(clk_en && req && ~ds && rw && (addr == 2'd1))
+		if(clk_en && sel && rw && (addr == 2'd1))
 			ikbd_cpu_data_read <= 1'b1;
 
 		if(ikbd_cpu_data_read && ikbd_rx_data_available) begin
@@ -146,11 +141,11 @@ assign irq = ikbd_irq || midi_irq;
 
 // ---------------- send acia data to io controller ------------
 
-always @(sel, ds, rw, addr, ikbd_status, ikbd_rx_data_available, ikbd_rx_data, ikbd_irq,
+always @(sel, rw, addr, ikbd_status, ikbd_rx_data_available, ikbd_rx_data, ikbd_irq,
 		midi_status, midi_rx_data, midi_rx_data_available, midi_tx_empty, midi_irq) begin
 	dout = 8'h00;
 
-	if(sel && ~ds && rw) begin
+	if(sel && rw) begin
       // keyboard acia read
       if(addr == 2'd0) dout = ikbd_status;
       if(addr == 2'd1) dout = ikbd_rx_data;
@@ -195,7 +190,7 @@ always @(posedge clk) begin
    end else begin
 	
 		// read on midi data register
-		if(req && ~ds && rw && (addr == 2'd3)) begin
+		if(clk_en && sel && rw && (addr == 2'd3)) begin
 			midi_rx_data_available <= 1'b0;   // read on midi data clears rx status
 			midi_rx_overrun <= 1'b0;
 		end
@@ -291,7 +286,7 @@ always @(posedge clk) begin
 		midi_tx_cnt <= 8'd0;
 		midi_tx_empty <= 1'b1;
 		midi_tx_data_valid <= 1'b0;
-	end else if(clk_en && req && ~ds && ~rw) begin
+	end else if(clk_en && sel && ~rw) begin
 
 			// write to ikbd control register
 			if(addr == 2'd0)

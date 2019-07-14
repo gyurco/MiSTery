@@ -56,12 +56,11 @@
 	 
 module dma (
 	    // clocks and system interface
-	input 		  clk, // 32 MHz
-	input         clk_en,
-	input 		  reset,
-	input [1:0] 	  bus_cycle,
-	input 		  turbo,
-	output 		  irq,
+	input             clk, // 32 MHz
+	input             clk_en,
+	input             reset,
+	input       [1:0] bus_cycle,
+	output            irq,
 
 	// cpu interface
 	input      [15:0] cpu_din,
@@ -89,19 +88,19 @@ module dma (
 	input       [4:0] dio_status_index,
 
 	// additional fdc control signals provided by PSG and OSD
-	input 		  fdc_wr_prot,
-	input 		  drv_side,
-	input [1:0] 	  drv_sel,
+	input             fdc_wr_prot,
+	input             drv_side,
+	input [1:0]       drv_sel,
 	// additional acsi control signals provided by OSD
 	input [7:0]       acsi_enable,
 
 	// ram interface for dma engine
-	output 		  ram_br,
-	output reg 	  ram_read,
-	output reg 	  ram_write,
-	output [22:0] 	  ram_addr,
-	output [15:0] 	  ram_dout,
-	input [15:0] 	  ram_din
+	output            ram_br,
+	output reg        ram_read,
+	output reg        ram_write,
+	output [22:0]     ram_addr,
+	output [15:0]     ram_dout,
+	input [15:0]      ram_din
 );
 
 assign irq = fdc_irq || acsi_irq;
@@ -278,14 +277,8 @@ end
 // ======================== BUS cycle handler ===================
 
 // specify which bus cycles to use
-wire cycle_advance   = (bus_cycle == 2'd0) || (turbo && (bus_cycle == 2'd2));
-wire cycle_io        = (bus_cycle == 2'd1) || (turbo && (bus_cycle == 2'd3));
-
-// latch bus cycle information to use at the end of the cycle (posedge clk)
-reg cycle_advance_L;
-always @(negedge clk) begin
-	cycle_advance_L <= cycle_advance;
-end
+wire cycle_advance   = (bus_cycle == 2'd0);
+wire cycle_io        = (bus_cycle == 2'd1);
 
 // =======================================================================
 // ============================= DMA FIFO ================================
@@ -412,35 +405,35 @@ reg 	  sector_strobe;
 reg 	  sector_strobe_prepare;
 
 always @(posedge clk) begin
-   if(dma_scnt_write_strobe) begin
-      word_cnt <= 8'd0;
-      sector_strobe_prepare <= 1'b0;
-      sector_strobe <= 1'b0;
-      sector_done <= 1'b0;
-   end else begin
-      if(cycle_io) begin
-	 sector_strobe_prepare <= 1'b0;
-	 sector_strobe <= 1'b0;
+	if(dma_scnt_write_strobe) begin
+		word_cnt <= 8'd0;
+		sector_strobe_prepare <= 1'b0;
+		sector_strobe <= 1'b0;
+		sector_done <= 1'b0;
+	end else begin
+		if(cycle_io) begin
+			sector_strobe_prepare <= 1'b0;
+			sector_strobe <= 1'b0;
 
-	 // wait a little after the last word
-	 if(sector_done) begin
-	    sector_done <= 1'b0;
-	    sector_strobe_prepare <= 1'b1;
-	    // trigger scnt decrement
-	    sector_strobe <= 1'b1;
-	 end
+			// wait a little after the last word
+			if(sector_done) begin
+				sector_done <= 1'b0;
+				sector_strobe_prepare <= 1'b1;
+				// trigger scnt decrement
+				sector_strobe <= 1'b1;
+			end
       end
 
-      // and ram read or write increases the word counter by one
-      if(ram_write_strobe || ram_read_strobe) begin
-	 word_cnt <= word_cnt + 8'd1;
-	 if(word_cnt == 255) begin
-	    sector_done <= 1'b1;
-	    // give multiplexor some time ahead ...
-	    sector_strobe_prepare <= 1'b1;
-	 end
-      end
-   end 
+		// and ram read or write increases the word counter by one
+		if(ram_write_strobe || ram_read_strobe) begin
+			word_cnt <= word_cnt + 8'd1;
+			if(word_cnt == 255) begin
+				sector_done <= 1'b1;
+				// give multiplexor some time ahead ...
+				sector_strobe_prepare <= 1'b1;
+			end
+		end
+	end 
 end
 
 // cpu and io controller can write the scnt register and it's decremented 
@@ -456,7 +449,7 @@ wire [7:0] dma_scnt_next = sector_strobe_prepare?dma_scnt_dec:
 // cpu or io controller set the sector count register
 always @(posedge clk)
 	if (dma_scnt_write_strobe) dma_scnt <= dma_scnt_next;
-   
+
 // DMA in progress flag:
 // - cpu writing the sector count register starts the DMA engine if
 //   dma enable bit 6 in mode register is clear

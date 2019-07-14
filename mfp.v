@@ -21,18 +21,18 @@
 
 module mfp (
 	// cpu register interface
-	input 		 clk,
-	input        clk_en,
-	input 		 reset,
-	input [7:0]  din,
-	input 		 sel,
-	input [4:0]  addr,
-	input 		 ds,
-	input 		 rw,
+	input            clk,
+	input            clk_en,
+	input            reset,
+	input      [7:0] din,
+	input            sel,
+	input      [4:0] addr,
+	input            ds,
+	input            rw,
 	output reg [7:0] dout,
-	output 		 irq,
-	input 		 iack,
-	output		 dtack,
+	output           irq,
+	input            iack,
+	output           dtack,
 
 	// serial rs232 connection to io controller
 	output 		 serial_data_out_available,
@@ -114,15 +114,23 @@ always @(posedge clk) begin
 	end
 end
 
-reg selD;
-always @(posedge clk) if (clk_en) selD <= sel;
-wire write = clk_en & ~selD & sel & ~ds & ~rw;
+wire write = sel & clk_en & ~ds & ~rw;
+reg bus_dtack;
+always @(posedge clk)
+	if (~sel) bus_dtack <= 0;
+	else if (clk_en & sel & ~ds) bus_dtack <= 1;
 
+reg iack_dtack;
 reg iackD;
-always @(posedge clk) if (clk_en) iackD <= iack;
-wire iack_sel = clk_en & ~iackD & iack & ~ds;
+always @(posedge clk) begin
+	iackD <= iack;
+	if (~iack) iack_dtack <= 0;
+	else if (iack_sel) iack_dtack <= 1;
+end
 
-assign dtack = (selD & sel) || (iackD & iack);
+wire iack_sel = ~iackD & iack;
+
+assign dtack = bus_dtack || iack_dtack;
 
 // timer a/b is in pulse mode
 wire [1:0] pulse_mode;

@@ -2,9 +2,6 @@
 /*                                          */
 /********************************************/
 
-// comment for building with the FX68K CPU
-//`define TG68KCPU
-
 module mist_top ( 
   // clock inputs	
   input wire [ 2-1:0] 	CLOCK_27, // 27 MHz
@@ -45,7 +42,7 @@ module mist_top (
 );
 
 // enable additional ste/megaste features
-wire ste = system_ctrl[23] || system_ctrl[24];
+wire ste = 1;//system_ctrl[23] || system_ctrl[24];
 wire mste = system_ctrl[24];
 wire steroids = system_ctrl[23] && system_ctrl[24];  // a STE on steroids
 
@@ -57,299 +54,263 @@ wire ethernec_present = system_ctrl[25];
 // 0=nothing 1=rs232 2=printer 3=midi
 wire [1:0] usb_redirection = system_ctrl[27:26];
 
-wire video_read;
-wire [22:0] video_address;
-wire st_hde1, st_de, st_hs, st_vs;
-wire [15:0] video_adj;
+wire psg_stereo = system_ctrl[22];
 
-// generate dtack for all implemented peripherals
-wire io_dtack = vreg_sel || mmu_sel || mfp_dtack ||
-      psg_dtack || dma_sel || auto_iack || blitter_sel || 
-	  ste_joy_sel || ste_dma_snd_sel || mste_ctrl_sel || vme_sel || 
-	  rom_sel[1] || rom_sel[0]; 
+// clock generation
+wire pll_locked;
+wire clk_32;
+wire clk_96;
 
-// the original tg68k did not contain working support for bus fault exceptions. While earlier
-// TOS versions cope with that, TOS versions with blitter support need this to work as this is
-// required to properly detect that a blitter is not present.
-// a bus error is now generated once no dtack is seen for 63 clock cycles.
-wire tg68_clr_berr;
-wire tg68_berr = &dtack_timeout;
-	
-// count bus errors for debugging purposes. we can thus trigger for a
-// certain bus error
-reg [7:0] berr_cnt_out /* synthesis noprune */;
-reg [7:0] berr_cnt;
-reg berrD;
-always @(negedge clk_8) begin
-	berrD <= tg68_berr;
-
-	if(reset) begin
-		berr_cnt <= 8'd0;
-	end else begin
-		berr_cnt_out <= 8'd0;
-		if(tg68_berr && !berrD) begin
-			berr_cnt_out <= berr_cnt + 8'd1;
-			berr_cnt <= berr_cnt + 8'd1;
-		end
-	end
-end
-
-reg bus_ok;
-always @(negedge clk_8) begin
-	// bus error if cpu owns bus, but no dtack, nor ram access,
-	// nor fast cpu cycle nor cpu does internsal processing
-	bus_ok <= tg68_dtack || br || cpu2mem || (tg68_busstate == 2'b01);
-end
-
-reg berr_reset;
-always @(negedge clk_32) begin
-	if(reset)
-		berr_reset <= 1'b1;
-	else if(clkenaD)
-		berr_reset <= tg68_clr_berr;
-end
-
-reg [4:0] dtack_timeout;
-always @(posedge clk_32 or posedge berr_reset) begin
-	if(berr_reset) begin
-		dtack_timeout <= 4'd0;
-	end else begin
-		// timeout only when cpu owns the bus and when
-		// neither dtack nor another bus master are active
-
-		// also ram areas should never generate a
-		// bus error for reading. But rom does for writing
-		if(!(&dtack_timeout)) begin
-			if(bus_ok)
-				dtack_timeout <= 4'd0;
-			else if(cpu_cycle && clk_cnt == 1) // increase timout at the end of the cpu cycle
-				dtack_timeout <= dtack_timeout + 4'd1;
-		end
-	end 
-end
-
-// no tristate busses exist inside the FPGA. so bus request doesn't do
-// much more than halting the cpu by suppressing 
-wire br = dma_br || blitter_br; // dma/blitter are only other bus masters
-
-// the tg68k core doesn't reliably support mixed usage of autovector and non-autovector
-// interrupts.
-// For the atari we've fixed the non-autovector support inside the kernel and switched
-// entirely to non-autovector interrupts. This means that we now have to provide
-// the vectors for those interrupts that oin the ST are autovector ones. This needs
-// to be done for IPL2 (hbi) and IPL4 (vbi)
-wire auto_iack;
-wire [7:0] auto_vector;
-
-// interfaces not implemented:
-// $fff00000 - $fff000ff  - IDE  
-// $ffff8780 - $ffff878f  - SCSI
-// $fffffa40 - $fffffa7f  - FPU
-// $fffffc20 - $fffffc3f  - RTC
-// $ffff8e00 - $ffff8e0f  - VME  (only fake implementation)
-
-wire io_sel, io_sel_1ws;
-wire cpuio_sel;
-
-// romport interface at $fa0000 - $fbffff
-wire rom_sel_all = ethernec_present && cpu_cycle && tg68_as && tg68_rw && ({tg68_adr[23:17], 1'b0} == 8'hfa);
-wire [1:0] rom_sel = { rom_sel_all && tg68_adr[16], rom_sel_all && !tg68_adr[16] };
-wire [15:0] rom_data_out;
-
-// mmu 8 bit interface at $ff8000 - $ff800d
-wire mmu_sel  = io_sel && 
-	(({tg68_adr[15:3], 3'd0} == 16'h8000) ||   // ff8000-ff8007 
-	 ({tg68_adr[15:2], 2'd0} == 16'h8008) ||   // ff8008-ff800b
-	 ({tg68_adr[15:1], 1'd0} == 16'h800c));    // ff800c-ff800d	
-wire [7:0] mmu_data_out;
-
-// mega ste cache controller 8 bit interface at $ff8e20 - $ff8e21
-// STEroids mode does not have this config, it always runs full throttle
-wire mste_ctrl_sel = !steroids && mste && io_sel && ({tg68_adr[15:1], 1'd0} == 16'h8e20);
-wire [7:0] mste_ctrl_data_out;
-
-// vme controller 8 bit interface at $ffff8e00 - $ffff8e0f
-// (requierd to enable Mega STE cpu speed/cache control)
-wire vme_sel = !steroids && mste && io_sel && ({tg68_adr[15:4], 4'd0} == 16'h8e00);
-
-// shifter 16 bit interface at $ff8200 - $ff820d and $ff8240 - $ff827f
-// STE shifter also has registers at ff820f and ff8265
-wire vreg_sel = cpuio_sel && (
- 	 ({tg68_adr[15:3], 3'd0} == 16'h8200) ||           // ff8200-ff8207
-	 ({tg68_adr[15:2], 2'd0} == 16'h8208) ||           // ff8208-ff820b
-	 ({tg68_adr[15:1], 1'd0} == 16'h820c) ||           // ff820c-ff820d	
-	(({tg68_adr[15:1], 1'd0} == 16'h820e) && ste) ||   // ff820e-ff820f (STE)	
-	 ({tg68_adr[15:6], 6'd0} == 16'h8240));            // ff8240-ff827f
-wire [15:0] vreg_data_out;
-
-// ste joystick 16 bit interface at $ff9200 - $ff923f
-wire ste_joy_sel = ste && io_sel && ({tg68_adr[15:6], 6'd0} == 16'h9200);
-wire [15:0] ste_joy_data_out;
-
-// ste dma snd 8 bit interface at $ff8900 - $ff893f
-wire ste_dma_snd_sel = ste && cpuio_sel && ({tg68_adr[15:6], 6'd0} == 16'h8900);
-wire [15:0] ste_dma_snd_data_out;
-
-// mfp 8 bit interface at $fffa00 - $fffa3f, odd byte and word only
-wire mfp_sel  = io_sel && (tg68_lds == 1'd0) && ({tg68_adr[15:6], 6'd0} == 16'hfa00);
-wire [7:0] mfp_data_out;
- 
-// acia 8 bit interface at $fffc00 - $fffdff
-wire acia_addr = io_sel && ({tg68_adr[15:9], 9'd0} == 16'hfc00);  // fffc00-fffdff
-wire acia_sel = cpu_E && cpu_vma && acia_addr;
-
-wire [7:0] acia_data_out;
-
-// blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
-wire blitter_sel = (system_ctrl[19] || ste) && io_sel && ({tg68_adr[15:6], 6'd0} == 16'h8a00);
-wire [15:0] blitter_data_out;
-
-//  psg 8 bit interface at $ff8800 - $ff88ff
-wire psg_sel  = io_sel && ({tg68_adr[15:8], 8'd0} == 16'h8800);
-wire psg_dtack = io_sel_1ws && ({tg68_adr[15:8], 8'd0} == 16'h8800);
-wire [15:0] audio_data_out;
-
-//  dma 16 bit interface at $ff8604 - $ff8607 (word only) and $ff8606 - $ff860d (STE - ff860f)
-wire word_access = (tg68_uds == 1'd0) && (tg68_lds == 1'd0);
-wire dma_sel  = io_sel && (
-	(({tg68_adr[15:2], 2'd0} == 16'h8604) && word_access) ||  // ff8604-ff8607 word only
-	 ({tg68_adr[15:2], 2'd0} == 16'h8608) ||                  // ff8608-ff860b
-	 ({tg68_adr[15:1], 1'd0} == 16'h860c) ||                  // ff860c-ff860d
-	(({tg68_adr[15:1], 1'd0} == 16'h860e) && ste));           // ff860e-ff860f (hdmode, STE)
-wire [15:0] dma_data_out;
-
-// --------- de-multiplex the various io data output ports into one -----------
-// acia returns 0xff on odd addresses (needed e.g. by intro of automation 496)
-wire [15:0] acia_data_out_16 = { acia_data_out, acia_sel?8'hff:8'h00 };
-wire [15:0] mfp_data_out_16 = { mfp_sel?8'hff:8'h00, mfp_data_out };
-wire [15:0] mmu_data_out_16 = { mmu_sel?8'hff:8'h00, mmu_data_out };
-wire [15:0] mste_ctrl_data_out_16 = { mste_ctrl_sel?8'hff:8'h00, mste_ctrl_data_out };
-
-wire [15:0] io_data_out = vreg_data_out | dma_data_out | blitter_data_out | 
-				ste_joy_data_out | audio_data_out | rom_data_out | { 8'h00, auto_vector } |
-				mfp_data_out_16 | mmu_data_out_16 | mste_ctrl_data_out_16 | acia_data_out_16;
-
+// use pll
+clock clock (
+  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
+  .c0           (clk_96           ), // output clock c0 (96MHz)
+  .c1           (clk_32           ), // output clock c1 (32MHz)
+  .locked       (pll_locked       )  // pll locked output
+);
+assign SDRAM_CLK = clk_96;
 wire init = ~pll_locked;
 
-/* -------------------------- Video subsystem -------------------- */
+// MFP clock
+// required: 2.4576 MHz
+wire clk_mfp;
+pll_mfp1 pll_mfp1 (
+  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
+  .c0           (clk_mfp          )  // output clock c0 (2.4576MHz)
+);
 
-// viking/sm194 is enabled and max 8MB memory may be enabled. In steroids mode
-// video memory is moved to $e80000 and all stram up to 14MB may be used
-wire viking_mem_ok = MEM512K || MEM1M || MEM2M || MEM4M || MEM8M;
-wire viking_enable = (system_ctrl[28] && viking_mem_ok) || steroids;
+wire reset = system_ctrl[0];
 
-// check for cpu access to 0xcxxxxx with viking enabled to switch video
-// output once the driver loads. 256 accesses to the viking memory range
-// are considered a valid sign that the driver is working. Without driver
-// others may also probe that area which is why we want to see 256 accesses
-reg [7:0] viking_in_use;
-reg       viking_active;
 
+// MCU signals
+reg         mcu_reset_n;
 always @(posedge clk_32) begin
-	if(peripheral_reset) begin
-		viking_in_use <= 8'h00;
-		viking_active <= 0;
-	end else begin
-		// cpu writes to $c0xxxx or $e80000
-		if(clkena && !br && (tg68_busstate == 2'b11) && viking_enable && 
-			(tg68_adr[23:18] == (steroids?6'b111010:6'b110000)) && (viking_in_use != 8'hff))
-			viking_in_use <= viking_in_use + 8'h01;
-		viking_active <= (viking_in_use == 8'hff);
-	end
+	reg resetD;
+	mcu_reset_n <= 1;
+	resetD <= reset;
+	if (resetD & ~reset) mcu_reset_n <= 0;
 end
 
-video video (
-	.clk_128      	(clk_128    ),
-	.clk_32      	(clk_32     ),
-	.clk_8_en       (clk_8_en   ),
-	.bus_cycle   	(bus_cycle  ),
-	
-	// spi for OSD
-   .sdi           (SPI_DI    	),
-   .sck           (SPI_SCK   	),
-   .ss            (SPI_SS3   	),
+wire        mhz4, mhz4_en;
+wire        mcu_dtack_n;
+wire        hsync_n, vsync_n;
+wire        rom0_n, rom1_n, rom2_n, rom3_n, rom4_n, rom5_n, rom6_n, romp_n;
+wire        ras0_n, ras1_n;
+wire        mfpint_n, mfpcs_n, mfpiack_n;
+wire        sndir, sndcs;
+wire        n6850, fcs_n;
+wire        rtccs_n, rtcrd_n, rtcwr_n;
+wire        sint;
+wire [15:0] mcu_dout;
+wire        ras_n = ras0_n & ras1_n;
 
-	// cpu register interface
-	.cpu_reset    (reset       ),
-	.cpu_din      (tg68_dat_out),
-	.cpu_sel      (vreg_sel    ),
-	.cpu_addr     (tg68_adr[6:1]),
-	.cpu_uds      (tg68_uds    ),
-	.cpu_lds      (tg68_lds    ),
-	.cpu_rw       (tg68_rw     ),
-	.cpu_dout     (vreg_data_out),
-	
-   .vaddr      (video_address ),
-	.data       (ram_data_out_64),
-	.read       (video_read    ),
-	
-	.hs			(VGA_HS	      ),
-	.vs			(VGA_VS		   ),
-	.video_r    (VGA_R  	      ),
-	.video_g    (VGA_G    	   ),
-	.video_b    (VGA_B    	   ),
+// compatibility for existing dma and blitter
+wire  [1:0] bus_cycle;
 
-	// debug overlay
-	.dbg_enable (switches[0]   ),
-	.dbg_val_a  (tg68_adr       ),
-	.dbg_val_d  ({tg68_dat_out, cpu_data_in }),
-	.dbg_val_s  ({16'h0000, berr_cnt, 6'b000000, tg68_busstate } ),
-	
-	// configuration signals
-   .viking_enable       ( viking_active       ), // enable and activate viking video card
-   .viking_himem        ( steroids            ), // let viking use memory from $e80000
-   .scandoubler_disable ( scandoubler_disable ), // don't use scandoubler in 15khz modes 
-   .ypbpr               ( ypbpr               ), // output ypbpr instead of rgb 
-	.adjust              ( video_adj    	    ),
-	.pal56               ( ~system_ctrl[9]     ),
-   .scanlines           ( system_ctrl[21:20]  ),
-	.ste			         ( ste				       ),
-	
-	// signals not affected by scan doubler required for
-	// irq generation
-	.st_hde1    (st_hde1        ),
-	.st_hs		(st_hs      	),
-	.st_vs		(st_vs      	),
-	.st_de		(st_de      	)
+// CPU signals
+wire        mhz8, mhz8_en1, mhz8_en2;
+wire        berr_n;
+wire        dtack_n;
+wire        ipl0_n, ipl1_n, ipl2_n;
+wire        fc0, fc1, fc2;
+wire        as_n, cpu_rw, uds_n, lds_n, vma_n, vpa_n, cpu_E;
+wire [15:0] cpu_din, cpu_dout;
+wire [23:1] cpu_a;
+
+wire        rom_n = rom0_n & rom1_n & rom2_n & rom3_n & rom4_n & rom5_n & rom6_n & romp_n;
+assign      cpu_din = 
+              dma_sel ? dma_data_out :
+				  blitter_sel ? blitter_data_out :
+              !rdat_n  ? shifter_dout :
+				  !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
+              !rom_n   ? rom_data_out :
+              !n6850   ? { acia_data_out, 8'hFF } :
+              sndcs    ? { snd_data_out, 8'hFF }:
+              mcu_dout;
+
+// Shifter signals
+wire        cmpcs_n, latch, de, blank_n, rdat_n, wdat_n, dcyc_n, sreq, sload_n, mono;
+wire [ 7:0] dma_snd_l, dma_snd_r;
+wire [ 3:0] r, g, b;
+
+// RAM signals
+wire [23:1] ram_a;
+wire        ram_uds, ram_lds, ram_we_n;
+wire [15:0] ram_din;
+
+gstmcu gstmcu (
+	.clk32      ( clk_32 ),
+	.resb       ( mcu_reset_n ),
+	.porb       ( mcu_reset_n ),
+	.BR_N       ( ~br ),
+	.FC0        ( fc0 ),
+	.FC1        ( fc1 ),
+	.FC2        ( fc2 ),
+	.AS_N       ( as_n ),
+	.RW         ( cpu_rw ),
+	.UDS_N      ( uds_n ),
+	.LDS_N      ( lds_n ),
+	.VMA_N      ( vma_n ),
+	.MFPINT_N   ( mfpint_n ),
+	.A          ( cpu_a ),  // from CPU
+	.ADDR       ( ram_a ),  // to RAM
+	.DIN        ( cpu_dout ),
+	.DOUT       ( mcu_dout ),
+	.MHZ8       ( mhz8 ),
+   .MHZ8_EN1   ( mhz8_en1 ),
+	.MHZ8_EN2   ( mhz8_en2 ),
+	.MHZ4       ( mhz4 ),
+	.MHZ4_EN    ( mhz4_en ),
+	.BERR_N     ( berr_n ),
+	.IPL0_N     ( ipl0_n ),
+	.IPL1_N     ( ipl1_n ),
+	.IPL2_N     ( ipl2_n ),
+	.DTACK_N    ( mcu_dtack_n ),
+	.IACK_N     ( mfpiack_n),
+	.ROM0_N     ( rom0_n ),
+	.ROM1_N     ( rom1_n ),
+	.ROM2_N     ( rom2_n ),
+	.ROM3_N     ( rom3_n ),
+	.ROM4_N     ( rom4_n ),
+	.ROM5_N     ( rom5_n ),
+	.ROM6_N     ( rom6_n ),
+	.ROMP_N     ( romp_n ),
+	.RAM_N      ( ),
+   .RAS0_N     ( ras0_n ),
+	.RAS1_N     ( ras1_n ),
+	.RAM_LDS    ( ram_lds ),
+	.RAM_UDS    ( ram_uds ),
+	.VPA_N      ( vpa_n ),
+	.MFPCS_N    ( mfpcs_n ),
+	.SNDIR      ( sndir ),
+	.SNDCS      ( sndcs ),
+	.N6850      ( n6850 ),
+	.FCS_N      ( fcs_n ),
+	.RTCCS_N    ( rtccs_n ),
+	.RTCRD_N    ( rtcrd_n ),
+	.RTCWR_N    ( rtcwr_n ),
+	.LATCH      ( latch ),
+	.HSYNC_N    ( hsync_n ),
+	.VSYNC_N    ( vsync_n ),
+	.DE         ( de ),
+	.BLANK_N    ( blank_n ),
+	.RDAT_N     ( rdat_n ),
+	.WE_N       ( ram_we_n ),
+	.WDAT_N     ( wdat_n ),
+	.CMPCS_N    ( cmpcs_n ),
+	.DCYC_N     ( dcyc_n ),
+	.SREQ       ( sreq),
+	.SLOAD_N    ( sload_n),
+	.SINT       ( sint ),
+	.bus_cycle  ( bus_cycle )
 );
 
-mmu mmu (
-	// cpu register interface
-	.clk      (clk_32      ),
-	.clk_en   (clk_8_en    ),
-	.reset    (reset       ),
-	.din      (tg68_dat_out[7:0]),
-	.sel      (mmu_sel     ),
-	.ds       (tg68_lds    ),
-	.rw       (tg68_rw     ),
-	.dout     (mmu_data_out)
+wire [15:0] shifter_dout;
+
+gstshifter gstshifter (
+	.clk32      ( clk_32 ),
+	.ste        ( ste ),
+	.resb       ( !reset ),
+
+    // CPU/RAM interface
+	.CS         ( ~cmpcs_n ),
+	.A          ( cpu_a[6:1] ),
+	.DIN        ( cpu_dout ),
+	.DOUT       ( shifter_dout ),
+	.LATCH      ( latch ),
+	.RDAT_N     ( rdat_n ),   // latched MDIN -> DOUT
+	.WDAT_N     ( wdat_n ),   // DIN  -> MDOUT
+	.RW         ( cpu_rw ),
+	.MDIN       ( ram_data_out ),
+	.MDOUT      ( ram_din  ),
+
+	// VIDEO
+	.MONO_OUT   ( mono ),
+	.LOAD_N     ( dcyc_n ),
+	.DE         ( de ),
+	.BLANK_N    ( blank_n ),
+	.R          ( r ),
+	.G          ( g ),
+	.B          ( b ),
+
+    // DMA SOUND
+	.SLOAD_N    ( sload_n ),
+	.SREQ       ( sreq ),
+	.audio_left ( dma_snd_l ),
+	.audio_right( dma_snd_r )
 );
 
-// mega ste cache/cpu clock controller
-wire enable_16mhz;
-wire enable_cache;
-mste_ctrl mste_ctrl (
-	// cpu register interface
-	.clk      (clk_32      ),
-	.clk_en   (clk_8_en    ),
-	.reset    (reset       ),
-	.din      (tg68_dat_out[7:0]),
-	.sel      (mste_ctrl_sel ),
-	.ds       (tg68_lds    ),
-	.rw       (tg68_rw     ),
-	.dout     (mste_ctrl_data_out),
-	
-	.enable_cache (enable_cache),
-	.enable_16mhz (enable_16mhz)
+mist_video #(.COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
+	.clk_sys    ( clk_32 ),
+	.SPI_SCK    ( SPI_SCK ),
+	.SPI_SS3    ( SPI_SS3 ),
+	.SPI_DI     ( SPI_DI ),
+	.R          ( r ),
+	.G          ( g ),
+	.B          ( b ),
+	.HSync      ( hsync_n ),
+   .VSync      ( vsync_n ),
+   .VGA_R      ( VGA_R ),
+	.VGA_G      ( VGA_G ),
+	.VGA_B      ( VGA_B ),
+	.VGA_VS     ( VGA_VS ),
+	.VGA_HS     ( VGA_HS ),
+	.ce_divider ( 1'b1 ),
+	.rotate     ( 2'b00 ),
+	.scandoubler_disable( scandoubler_disable | mono ),
+	.scanlines  ( system_ctrl[21:20] ),
+	.ypbpr      ( ypbpr )
+);
+
+assign      dtack_n = (mcu_dtack_n & ~mfp_dtack & ~dma_sel & ~blitter_sel) | br;
+
+fx68k fx68k (
+	.clk        ( clk_32 ),
+	.extReset   ( reset ),
+	.pwrUp      ( reset ),
+	.enPhi1     ( mhz8_en1 ),
+	.enPhi2     ( mhz8_en2 ),
+
+	.eRWn       ( cpu_rw ),
+	.ASn        ( as_n ),
+	.LDSn       ( lds_n ),
+	.UDSn       ( uds_n ),
+	.E          ( cpu_E ),
+	.VMAn       ( vma_n ),
+	.FC0        ( fc0 ),
+	.FC1        ( fc1 ),
+	.FC2        ( fc2 ),
+	.BGn        (),
+	.oRESETn    (),
+	.oHALTEDn   (),
+	.DTACKn     ( dtack_n ),
+	.VPAn       ( vpa_n ),
+	.BERRn		( berr_n ),
+	.BRn        ( 1 ),
+	.BGACKn     ( 1 ),
+	.IPL0n		( ipl0_n ),
+	.IPL1n		( ipl1_n ),
+	.IPL2n		( ipl2_n ),
+	.iEdb       ( cpu_din ),
+	.oEdb       ( cpu_dout ),
+	.eab        ( cpu_a )
 );
 
 wire acia_irq, dma_irq;
 
 // the STE delays the xsirq by 1/250000 second before feeding it into timer_a
-wire ste_dma_snd_xsirq, ste_dma_snd_xsirq_delayed;
+// 74ls164
+wire      xsint = ~sint;
+reg [7:0] xsint_delay;
+always @(posedge clk_32 or negedge xsint) begin
+	if(!xsint) xsint_delay <= 8'h00;            // async reset
+	else if (clk_2_en) xsint_delay <= {xsint_delay[6:0], xsint};
+end
+
+wire xsint_delayed = xsint_delay[7];
 
 // mfp io7 is mono_detect which in ste is xor'd with the dma sound irq
-wire mfp_io7 = system_ctrl[8] ^ (ste?ste_dma_snd_xsirq:1'b0);
+wire mfp_io7 = system_ctrl[8] ^ (ste?xsint:1'b0);
 
 // input 0 is busy from printer which is pulled up when the printer cannot accept further data
 // if no printer redirection is being used this is wired to the extra joystick ports provided
@@ -358,24 +319,27 @@ wire parallel_fifo_full;
 wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy0[4];
 
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
-wire [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
-wire [1:0] mfp_timer_in = {!st_de, ste?ste_dma_snd_xsirq_delayed:!parallel_fifo_full};
-wire       mfp_dtack;
+wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
+wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_fifo_full};
+wire        mfp_dtack;
+wire        mfp_int, mfp_iack = ~mfpiack_n;
+assign      mfpint_n = ~mfp_int;
+wire  [7:0] mfp_data_out;
 
 mfp mfp (
 	// cpu register interface
-	.clk      (clk_32      ),
-	.clk_en   (clk_4_en    ),
-	.reset    (reset       ),
-	.din      (tg68_dat_out[7:0]),
-	.sel      (mfp_sel     ),
-	.addr     (tg68_adr[5:1]),
-	.ds       (tg68_lds    ),
-	.rw       (tg68_rw     ),
-	.dout     (mfp_data_out),
-	.irq      (mfp_irq     ),
-	.iack     (mfp_iack    ),
-	.dtack    (mfp_dtack   ),
+	.clk      ( clk_32        ),
+	.clk_en   ( mhz4_en       ),
+	.reset    ( reset         ),
+	.din      ( cpu_dout[7:0] ),
+	.sel      ( ~mfpcs_n      ),
+	.addr     ( cpu_a[5:1]    ),
+	.ds       ( lds_n         ),
+	.rw       ( cpu_rw        ),
+	.dout     ( mfp_data_out  ),
+	.irq      ( mfp_int       ),
+	.iack     ( mfp_iack      ),
+	.dtack    ( mfp_dtack     ),
 
 	// serial/rs232 interface io-controller<->mfp
 	.serial_data_out_available 	(serial_data_from_mfp_available),
@@ -387,27 +351,28 @@ mfp mfp (
 	.serial_status_in 	   		(serial_status_to_mfp),
 
 	// input signals
-	.clk_ext   (clk_mfp       ),  // 2.457MHz clock
-	.t_i       (mfp_timer_in  ),  // timer a/b inputs
-	.i         (mfp_gpio_in   )   // gpio-in
-); 
+	.clk_ext  ( clk_mfp       ),  // 2.457MHz clock
+	.t_i      ( mfp_timer_in  ),  // timer a/b inputs
+	.i        ( mfp_gpio_in   )   // gpio-in
+);
+
+wire [7:0] acia_data_out;
 
 acia acia (
 	// cpu interface
-	.clk      (clk_32      ),
-	.E        (cpu_E       ),
-	.reset    (reset       ),
-	.din      (tg68_dat_out[15:8]),
-	.sel      (acia_sel    ),
-	.addr     (tg68_adr[2:1]),
-	.ds       (tg68_uds    ),
-	.rw       (tg68_rw     ),
-	.dout     (acia_data_out),
-	.irq      (acia_irq     ),
-	
+	.clk      ( clk_32        ),
+	.E        ( cpu_E         ),
+	.reset    ( reset         ),
+	.din      ( cpu_dout[15:8]),
+	.sel      ( ~n6850        ),
+	.addr     ( cpu_a[2:1]    ),
+	.rw       ( cpu_rw        ),
+	.dout     ( acia_data_out ),
+	.irq      ( acia_irq      ),
+
 	// physical MIDI interface
-	.midi_out (UART_TX      ),
-	.midi_in  (UART_RX      ),
+	.midi_out ( UART_TX       ),
+	.midi_in  ( UART_RX       ),
 	 
 	// ikbd interface
 	.ikbd_data_out_available 	(ikbd_data_from_acia_available),
@@ -422,34 +387,122 @@ acia acia (
 	.midi_data_out 	   		(midi_data_from_acia)
 );
 
+wire [7:0] snd_data_out;
+wire [7:0] ym_a_out, ym_b_out, ym_c_out;
+
+wire [9:0] ym_audio_out_l = psg_stereo ? ym_a_out + ym_b_out : ym_a_out + ym_b_out + ym_c_out;
+wire [9:0] ym_audio_out_r = psg_stereo ? ym_c_out + ym_b_out : ym_a_out + ym_b_out + ym_c_out;
+
+reg clk_2_en;
+always @(posedge clk_32) begin
+	reg [3:0] cnt;
+	clk_2_en <= (cnt == 0);
+	cnt <= cnt + 1'd1;
+end
+
+// extra joysticks are wired to the printer port
+// using the "gauntlet2 interface", fire of
+// joystick 0 is connected to the mfp I0 (busy)
+wire [7:0] port_b_in = { ~joy0[0], ~joy0[1], ~joy0[2], ~joy0[3],~joy1[0], ~joy1[1], ~joy1[2], ~joy1[3]};
+wire [7:0] port_a_in = { 2'b11, ~joy1[4], 5'b11111 };
+wire [7:0] port_a_out;
+wire [7:0] port_b_out;
+wire       floppy_side = port_a_out[0];
+wire [1:0] floppy_sel = port_a_out[2:1];
+
+ym2149 ym2149 (
+	.CLK         ( clk_32        ),
+	.CE          ( clk_2_en      ),
+	.RESET       ( reset         ),
+	.DI          ( cpu_dout[15:8]),
+	.DO          ( snd_data_out  ),
+	.CHANNEL_A   ( ym_a_out      ),
+	.CHANNEL_B   ( ym_b_out      ),
+	.CHANNEL_C   ( ym_c_out      ),
+	.BDIR        ( sndir         ),
+	.BC          ( sndcs         ),
+	.MODE        ( 0             ),
+	.SEL         ( 0             ),
+	.IOA_in      ( port_a_in     ),
+	.IOA_out     ( port_a_out    ),
+	.IOB_in      ( port_b_in     ),
+	.IOB_out     ( port_b_out    )
+);
+
+// ------ fifo to store printer data coming from psg ---------
+io_fifo #(.DEPTH(4)) parallel_out_fifo (
+	.reset          ( reset ),
+
+	.in_clk         ( clk_32 ),
+	.in             ( port_b_out ),
+	.in_strobe      ( port_a_out[5] ),
+	.in_enable      ( 1'b0 ),
+
+	.out_clk        ( clk_32 ),
+	.out            ( parallel_data_out ),
+	.out_strobe     ( parallel_strobe_out ),
+	.out_enable     ( 1'b0 ),
+
+	.full           ( parallel_fifo_full ),
+	.data_available ( parallel_data_out_available )
+);
+// audio output processing
+
+// YM and STE audio channels are expanded to 14 bits and added resulting in 15 bits
+// for the sigmadelta dac take from the minimig
+
+// This should later be handled by the lmc1992
+
+wire [9:0] ym_audio_out_l_signed = ym_audio_out_l - 10'h200;
+wire [9:0] ym_audio_out_r_signed = ym_audio_out_r - 10'h200;
+wire [7:0] ste_audio_out_l_signed = dma_snd_l - 8'h80;
+wire [7:0] ste_audio_out_r_signed = dma_snd_r - 8'h80;
+
+wire [14:0] audio_mix_l =
+        { ym_audio_out_l_signed[9], ym_audio_out_l_signed, ym_audio_out_l_signed[9:6]} +
+        { ste_audio_out_l_signed[7], ste_audio_out_l_signed, ste_audio_out_l_signed[7:2] };
+wire [14:0] audio_mix_r =
+        { ym_audio_out_r_signed[9], ym_audio_out_r_signed, ym_audio_out_r_signed[9:6]} +
+        { ste_audio_out_r_signed[7], ste_audio_out_r_signed, ste_audio_out_r_signed[7:2] };
+
+sigma_delta_dac sigma_delta_dac (
+	.clk      ( clk_32      ),      // bus clock
+	.ldatasum ( audio_mix_l ),      // left channel data
+	.rdatasum ( audio_mix_r ),      // right channel data
+	.left     ( AUDIO_L     ),      // left bitstream output
+	.right    ( AUDIO_R     )       // right bitsteam output
+);
+
 wire [23:1] blitter_master_addr;
 wire blitter_master_write;
 wire blitter_master_read;
 wire blitter_irq;
 wire blitter_br;
 wire [15:0] blitter_master_data_out;
-
+// blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
+wire blitter_sel = (system_ctrl[19] || ste) && cpu_a[23:16] == 8'hff && ~as_n && ({cpu_a[15:6], 6'd0} == 16'h8a00);
+wire [15:0] blitter_data_out;
 reg blitter_bg;
 
 // give bus to blitter
-always @(posedge clk_8) begin
-	blitter_bg <= blitter_br;
+always @(posedge clk_32) begin
+	if (mhz8_en1) blitter_bg <= blitter_br;
 end
 
 blitter blitter (
 	.bus_cycle 	(bus_cycle        ),
 
 	// cpu interface
-	.clk       	(clk_32           ),
-	.clk_en     (clk_8_en         ),
-	.reset     	(reset            ),
-	.din       	(tg68_dat_out     ),
-	.sel       	(blitter_sel      ),
-	.addr      	(tg68_adr[5:1]    ),
-	.uds       	(tg68_uds         ),
-	.lds       	(tg68_lds         ),
-	.rw        	(tg68_rw          ),
-	.dout      	(blitter_data_out ),
+	.clk       	( clk_32          ),
+	.clk_en     ( mhz8_en1        ),
+	.reset     	( reset           ),
+	.din       	( cpu_dout        ),
+	.sel       	( blitter_sel     ),
+	.addr      	( cpu_a[5:1]      ),
+	.uds       	( uds_n           ),
+	.lds       	( lds_n           ),
+	.rw        	( cpu_rw          ),
+	.dout      	( blitter_data_out),
 
 	.bm_addr   	(blitter_master_addr),
 	.bm_write	(blitter_master_write),
@@ -457,94 +510,12 @@ blitter blitter (
 	.bm_read    (blitter_master_read),
 	.bm_data_in (ram_data_out),
 
-	.br_in     (dma_br           ),
-	.br_out    (blitter_br       ),
-	.bg        (blitter_bg       ),
-	.irq       (blitter_irq      ),
+	.br_in      ( dma_br          ),
+	.br_out     ( blitter_br      ),
+	.bg         ( blitter_bg      ),
+	.irq        ( blitter_irq     ),
 
-	.turbo     (0                )
-);
-
-ste_joystick ste_joystick (
-	.clk      (clk_32      ),
-	.clk_en   (clk_8_en    ),
-	.reset    (reset       ),
-	.din      (tg68_dat_out),
-	.sel      (ste_joy_sel ),
-	.addr     (tg68_adr[5:1]),
-	.uds      (tg68_uds    ),
-	.lds      (tg68_lds    ),
-	.rw       (tg68_rw     ),
-	.dout     (ste_joy_data_out)
-);
-
-ethernec ethernec (
-	.clk        (clk_8       ),
-	.sel        (rom_sel     ),
-	.addr       (tg68_adr[15:1]),
-	.dout       (rom_data_out),
-	
-	.status     (eth_status),
-	
-	.mac_begin  (eth_mac_begin),
-	.mac_strobe (eth_mac_strobe),
-	.mac_byte   (eth_mac_byte),
-	
-	.tx_begin   (eth_tx_read_begin),
-	.tx_strobe  (eth_tx_read_strobe),
-	.tx_byte    (eth_tx_read_byte),
-	
-	.rx_begin   (eth_rx_write_begin),
-	.rx_strobe  (eth_rx_write_strobe),
-	.rx_byte    (eth_rx_write_byte)
-);
-
-// ----------------- AUDIO subsystem ----------------
-wire [22:0] ste_dma_snd_addr;
-wire ste_dma_snd_read;
-
-audio audio (
-	// system interface
-	.reset      ( reset         ),
-	.clk        ( clk_32        ),
-	.clk_2_en   ( clk_2_en      ),
-	.clk_8_en   ( clk_8_en      ),
-	.bus_cycle 	( bus_cycle		),
-
-	// cpu register interface(s)
-	.din ( tg68_dat_out ),
-	.dout ( audio_data_out ),
-	.addr ( tg68_adr[15:0] ),
-	.rw ( tg68_rw ),
-	.uds ( tg68_uds ),
-	.lds ( tg68_lds ),
-	.psg_sel ( psg_sel ),
-	.ste_dma_snd_sel ( ste_dma_snd_sel ),
-
-	// ste dma interface
-	.hde1		( st_hde1           ),
-	.dma_addr   ( ste_dma_snd_addr  ),
-	.dma_read   ( ste_dma_snd_read  ),
-	.dma_data   ( ram_data_out_64   ),
-
-	.psg_stereo ( system_ctrl[22] ),
-
-	// connections to psg gpio ports
-	.joy0 ( joy0 ),
-	.joy1 ( joy1 ),
-	.floppy_side ( floppy_side ),
-	.floppy_sel ( floppy_sel ),
-	
-	// psg gpio printer port fifo
-	.parallel_data_out ( parallel_data_out ),
-	.parallel_strobe_out ( parallel_strobe_out ),
-	.parallel_data_out_available (parallel_data_out_available),
-
-	.xsint     	(ste_dma_snd_xsirq ),
-	.xsint_d   	(ste_dma_snd_xsirq_delayed ),
-
-	.audio_r ( AUDIO_R ),
-	.audio_l ( AUDIO_L )
+	.turbo      ( 0               )
 );
 
 wire        dio_addr_strobe;
@@ -560,11 +531,11 @@ wire  [7:0] dio_status_in;
 wire  [4:0] dio_status_index;
 
 data_io data_io (
-	.sck		     ( SPI_SCK             ),
+	.sck             ( SPI_SCK             ),
 	.ss			     ( SPI_SS2             ),
 	.sdi   		     ( SPI_DI              ),
 	.sdo             ( dio_sdo             ),
-	.clk		     ( clk_32              ),
+	.clk             ( clk_32              ),
 	.ctrl_out        ( system_ctrl         ),
 	.video_adj	     ( video_adj           ),
 	.addr_strobe     ( dio_addr_strobe     ),
@@ -587,15 +558,21 @@ wire [22:0] dma_addr;
 wire [15:0] dma_dout;
 wire dma_write, dma_read;
 wire dma_br;
+wire word_access = (uds_n == 1'd0) && (lds_n == 1'd0);
+wire dma_sel  = cpu_a[23:16] == 8'hff && ~as_n && (
+        (({cpu_a[15:2], 2'd0} == 16'h8604) && word_access) ||  // ff8604-ff8607 word only
+         ({cpu_a[15:2], 2'd0} == 16'h8608) ||                  // ff8608-ff860b
+         ({cpu_a[15:1], 1'd0} == 16'h860c) ||                  // ff860c-ff860d
+        (({cpu_a[15:1], 1'd0} == 16'h860e) && ste));           // ff860e-ff860f (hdmode, STE)
+wire [15:0] dma_data_out;
 
 dma dma (
 	// system interface
-	.clk        (clk_32         ),
-	.clk_en     (clk_8_en       ),
-	.reset    	(reset       	),
-	.bus_cycle  (bus_cycle      ),
-	.irq      	(dma_irq     	),
-	.turbo		(1'b0           ),
+	.clk        ( clk_32        ),
+	.clk_en     ( mhz8_en1      ),
+	.reset    	( reset       	 ),
+	.bus_cycle  ( bus_cycle     ),
+	.irq      	( dma_irq     	 ),
 
 	// IO controller interface
 	.dio_addr_strobe     ( dio_addr_strobe     ),
@@ -611,619 +588,77 @@ dma dma (
 	.dio_status_index    ( dio_status_index    ),
 
 	// cpu interface
-	.cpu_din      (tg68_dat_out[15:0]),
-	.cpu_sel      (dma_sel    ),
-	.cpu_addr     (tg68_adr[3:1]),
-	.cpu_uds      (tg68_uds    ),
-	.cpu_lds      (tg68_lds    ),
-	.cpu_rw       (tg68_rw     ),
-	.cpu_dout     (dma_data_out),
+	.cpu_din      ( cpu_dout      ),
+	.cpu_sel      ( dma_sel       ),
+	.cpu_addr     ( cpu_a[3:1]    ),
+	.cpu_uds      ( uds_n         ),
+	.cpu_lds      ( lds_n         ),
+	.cpu_rw       ( cpu_rw        ),
+	.cpu_dout     ( dma_data_out  ),
 
 	// additional signals for floppy/acsi interface
-	.fdc_wr_prot (wr_prot),
-	.drv_sel  (floppy_sel  ),
-	.drv_side (floppy_side ),
-	.acsi_enable (system_ctrl[17:10]),
+	.fdc_wr_prot  ( wr_prot       ),
+	.drv_sel      ( floppy_sel    ),
+	.drv_side     ( floppy_side   ),
+	.acsi_enable  ( system_ctrl[17:10] ),
 
 	// ram interface
-	.ram_br        (dma_br     ),
-	.ram_read 	 	(dma_read	),
-	.ram_write 	 	(dma_write	),
-	.ram_addr		(dma_addr	),
-	.ram_dout 		(dma_dout 	),
-	.ram_din  		(ram_data_out	)
+	.ram_br        ( dma_br       ),
+	.ram_read 	 	( dma_read	   ),
+	.ram_write 	 	( dma_write	   ),
+	.ram_addr		( dma_addr	   ),
+	.ram_dout 		( dma_dout 	   ),
+	.ram_din  		( ram_data_out	)
 );
 
-wire [1:0] floppy_sel;
-wire floppy_side;
 assign LED = (floppy_sel == 2'b11);
 
-// clock generation
-wire pll_locked;
-wire clk_8;
-wire clk_32;
-wire clk_128;
-
-// use pll
-clock clock (
-  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
-  .c0           (clk_128          ), // output clock c0 (128MHz)
-  .c1           (clk_32           ), // output clock c1 (32MHz)
-  .c3           (SDRAM_CLK        ), // output clock c3 (128MHz)
-  .locked       (pll_locked       )  // pll locked output
-);
-
-
-//// clock enables ////
-reg  [1:0] bus_cycle;
-reg  [3:0] clk_counter;
-wire [1:0] clk_cnt = clk_counter[1:0];
-reg        clk_8_en;
-reg        clk_4_en;
-reg        clk_2_en;
-
-always @ (posedge clk_32, negedge pll_locked) begin
-	if (!pll_locked) begin
-		clk_counter <= 4'd2;
-		bus_cycle <= 2'd0;
-	end else begin 
-		clk_8_en <= 0;
-		clk_4_en <= 0;
-		clk_2_en <= 0;
-		clk_counter <= clk_counter + 1'd1;
-		if(clk_counter[1:0] == 1) bus_cycle <= bus_cycle + 1'd1;
-		if(&clk_counter[1:0])     clk_8_en <= 1;
-		if(!clk_counter[2:0])     clk_4_en <= 1;
-		if(!clk_counter)          clk_2_en <= 1;
-	end
-end
-
-assign clk_8 = clk_cnt[1];
-
-// MFP clock
-// required: 2.4576 MHz
-wire clk_mfp;
-pll_mfp1 pll_mfp1 (
-  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
-  .c0           (clk_mfp          )  // output clock c0 (2.4576MHz)
-);
-
-wire reset = system_ctrl[0];
-
-// ------------- generate VBI (IPL = 4) --------------
-reg vsD, vsD2, vbi;
-wire vbi_ack = cpu2iack && cpu_cycle && tg68_as && (tg68_adr[3:1] == 3'b100);
-
-always @(negedge clk_8) begin
-	vsD <= st_vs;
-	vsD2 <= vsD;           // delay by one
-
-	if(reset || vbi_ack)
-		vbi <= 1'b0;
-	else if(vsD && !vsD2)
-		vbi <= 1'b1;
-end
-
-// ------------- generate HBI (IPL = 2) --------------
-reg hsD, hsD2, hbi;
-wire hbi_ack = cpu2iack && cpu_cycle && tg68_as && (tg68_adr[3:1] == 3'b010);
-
-always @(negedge clk_8) begin
-	hsD <= st_hs;
-	hsD2 <= hsD;           // delay by one
-
-	if(reset || hbi_ack)
-		hbi <= 1'b0;
-	else if(hsD && !hsD2)
-		hbi <= 1'b1;
-end
-
-wire mfp_irq;
-
-// ipl[0] is tied high on the atari
-wire [2:0] ipl = mfp_irq ? 3'b001: // mfp has IPL 6
-                 vbi     ? 3'b011: // vbi has IPL 4
-                 hbi     ? 3'b101: // hbi has IPL 2
-                           3'b111;
-
-// the tg68 can itself generate a reset signal
-wire tg68_reset;  
-wire peripheral_reset = reset || !tg68_reset;
-
-/* -------------------------------------------------------------------------- */
-/* ------------------------------  TG68 CPU interface  ---------------------- */
-/* -------------------------------------------------------------------------- */
-
-`ifdef TG68KCPU
-// tg68 bus interface. These are the signals which are latched
-// for the 8MHz bus.
-reg [15:0] tg68_dat_out;
-reg [31:0] tg68_adr;
-wire [2:0] tg68_IPL;
-wire       tg68_dtack;
-reg        tg68_uds;
-reg        tg68_lds;
-reg        tg68_rw;
-reg [2:0]  tg68_fc;
-
-reg clkena;
-reg iCacheStore;
-reg dCacheStore;
-reg cacheUpdate;
-reg cacheRead;
-reg cpuDoes8MhzCycle;
-
-// latch 68k signals before each 8mhz cycle to meet 8Mhz timing
-// requirements
-wire [15:0] tg68_dat_out_S;
-wire [31:0] tg68_adr_S;
-wire [2:0]  tg68_fc_S;
-wire        tg68_uds_S;
-wire        tg68_lds_S;
-wire        tg68_rw_S;
-
-reg         tg68_as;
-
-// generate signal indicating the CPU may run from cache (cpu is active, 
-// performs a read and the caches are able to provide the requested data)
-wire cacheReady = steroids && cache_hit;
-
-// a clkena delayed by 180 deg is being used to 
-// read from the cache
-reg clkenaD;
-always @(posedge clk_32)
-	clkenaD <= clkena;
-
-// the TG68 core works on the rising clock edge. We thus prepare everything
-// on the falling clock edge
-reg cacheFail /* synthesis noprune */;
-always @(negedge clk_32) begin
-	// default: cpu does not run
-	clkena <= 1'b0;
-	iCacheStore <= 1'b0;
-	dCacheStore <= 1'b0;
-	cacheUpdate <= 1'b0;
-	cacheFail <= 1'b0;
-	
-	if(br || reset)
-		tg68_as <= 1'b0;
-	else begin
-		// run cpu if it owns the bus
-		if(clk_cnt == 1) begin
-			// 8Mhz cycle must not start directly after the cpu has been clocked
-			// as the address may not be stable then
-
-			// cpuDoes8MhzCycle has same timing as tg68_as
-			if(tg68_busstate != 2'b01) cpuDoes8MhzCycle <= 1'b1; 
-
-			// tg68 core does not provide a as signal, so we generate it
-			tg68_as <= (tg68_busstate != 2'b01); 
-
-			// writes are always full 8 Mhz cycles, reads only if caches cannot provide
-			// the required data
-	
-			// all other output signals are simply latched to make sure
-			// they don't change within a 8Mhz cycle even if the CPU
-			// advances. This would be a problem if e.g. The CPU would try
-			// to start a bus cycle while the 8Mhz cycle is in progress
-			tg68_dat_out <= tg68_dat_out_S;
-			tg68_adr <= tg68_adr_S;
-			tg68_uds <= tg68_uds_S;
-			tg68_lds <= tg68_lds_S;
-			tg68_rw <= tg68_rw_S;
-			tg68_fc <= tg68_fc_S;	
-		end
-
-		cacheRead <= cacheReady;
-
-		// cpu does internal processing -> let it do this immediately
-		// or cpu wants to read and the requested data is available from the cache -> run immediately
-		if((tg68_busstate == 2'b01) || ((tg68_busstate[0] == 1'b0) && cacheReady)) begin
-			if(steroids || ((clk_cnt == 1) && (cpu_cycle || cpu_cycle_int))) begin
-				clkena <= 1'b1; 
-				cpuDoes8MhzCycle <= 1'b0;
-			end
-		end 
-		
-		else begin
-			// this ends a normal 8MHz bus cycle. This requires that the 
-			// cpu/chipset had the entire cycle and not e.g. started just in
-			// the middle. This is verified using the cpuDoes8MhzCycle signal
-			// which is invalidated whenever the cpu uses a internal cycle or 
-			// runs from cache
- 
-			// clk_cnt == 1 -> clkena in cycle 0 -> cpu runs in cycle 0
-			if((clk_cnt == 1) && cpuDoes8MhzCycle && cpu_cycle && (tg68_dtack || tg68_berr)) begin
-				clkena <= 1'b1;
-				cpuDoes8MhzCycle <= 1'b0;
-
-				// ---------- cache debugging --------------- 		
-				// if the cache reports a hit, it should be the same data that's also 		
-				// returned by ram. Otherwise the cache is broken 		
-				if(cache_hit && (tg68_busstate[0] == 1'b0)) begin 		
-					if(cache_data_out != system_data_out) 		
-						cacheFail <= 1'b1; 		
-				end 		
-
-				if(cacheable && tg68_dtack) begin
-					case(tg68_busstate)
-						0: iCacheStore <= 1'b1;  // store data in instruction cache on cpu instruction read
-						2: dCacheStore <= 1'b1;  // store data in data cache on cpu data read
-						3: cacheUpdate <= 1'b1;  // update cache on data write
-					endcase
-				end
-			end
-		end		
-	end
-end
-
-// TODO: generate cacheUpdate from ram_wr, so other bus masters also trigger this
-// same goes for cache lds/uds and the address used for update16 !!!!
-
-wire [1:0] tg68_busstate;
-
-// feed data from cache into the cpu
-wire [15:0] cache_data_out = data_cache_hit?data_cache_data_out:inst_cache_data_out;
-wire [15:0] cpu_data_in = cacheRead?cache_data_out:system_data_out;
-
-wire cpu_E = !clk_8;
-wire cpu_vma = 1;
-
-TG68KdotC_Kernel #(2,2,2,2,2,2,2) tg68k (
-	.clk          	(clk_32 			),
-	.nReset       	(~reset			),
-	.clkena_in		(clkena			), 
-	.data_in       (cpu_data_in	),
-	.IPL				(ipl           ),
-	.IPL_autovector(1'b0          ),
-	.berr         	(tg68_berr     ),
-	.clr_berr     	(tg68_clr_berr ),
-	.CPU           (system_ctrl[5:4] ),  // 00=68000
-   .addr_out     	(tg68_adr_S    ),
-	.data_write   	(tg68_dat_out_S),
-	.nUDS          (tg68_uds_S    ),
-	.nLDS          (tg68_lds_S    ),
-	.nWr           (tg68_rw_S     ),
-	.busstate	 	(tg68_busstate ), // 00-> fetch code 10->read data 11->write data 01->no memaccess
-	.nResetOut	   (tg68_reset    ),
-	.FC            (tg68_fc_S     )
-);
-
-// generate dtack (for st ram and rom on read, no dtack for rom write)
-assign tg68_dtack = ((cpu2mem && cpu_cycle && tg68_as) || io_dtack || acia_sel ) && !br;
-assign io_sel = cpu_cycle && cpu2io && tg68_as ;
-assign io_sel_1ws = io_sel;
-assign cpuio_sel = io_sel;
-// simulate auto-vectoring
-assign auto_iack = cpu_cycle && cpu2iack && tg68_as &&
-	((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010));
-wire [7:0] auto_vector_vbi = (auto_iack && (tg68_adr[3:1] == 3'b100))?8'h1c:8'h00;
-wire [7:0] auto_vector_hbi = (auto_iack && (tg68_adr[3:1] == 3'b010))?8'h1a:8'h00;
-assign auto_vector = auto_vector_vbi | auto_vector_hbi;
-
-// request interrupt ack from mfp for IPL == 6. This must not be done by 
-// combinatorics as it must be glitch free since the mfp does things on the
-// rising edge of iack. 
-reg mfp_iack;
-
-always @(posedge clk_32 or posedge reset) begin
-	if(reset)
-		mfp_iack <= 1'b0;
-	else begin
-		if(clk_cnt == 2)
-			mfp_iack <= cpu_cycle && cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
-	end
-end
 
 /* ------------------------------------------------------------------------------ */
-/* ---------------------------------- cpu cache --------------------------------- */
-/* ------------------------------------------------------------------------------ */
-
-wire cache_hit = cacheable && (data_cache_hit || inst_cache_hit);
- 
-// Any type of memory that may use a cache. Since it's a pure read cache we don't
-// have to differentiate between ram and rom. Cartridge is not cached since me might
-// attach dongles there someday
-wire cacheable = ((tg68_adr_S[23:22] == 2'b00) ||       // ordinary 4MB
-					   (tg68_adr_S[23:22] == 2'b01) ||       // 8MB 
-					   (tg68_adr_S[23:22] == 2'b10) ||       // 12MB
-	               (tg68_adr_S[23:21] == 3'b110) ||      // 14MB 
-						(tg68_adr_S[23:18] == 6'b111000) ||   // 256k TOS
-						(tg68_adr_S[23:17] == 7'b1111110) ||  // first 128k of 192k TOS
-		 				(tg68_adr_S[23:16] == 8'b11111110) ); // second 64k of 192k TOS
-					   
-wire data_cache_hit;
-wire [15:0] data_cache_data_out;
-
-cache data_cache (
-	.clk_128  		( clk_128					),
-	.clk  			( clk_32						),
-	.reset 			( reset						), 
-	.flush			( br							), 
-
-	// use the tg68_*_S signals here to quickly react on cpu requests
-	.strobe        ( clkenaD               ),
-	.addr     		( tg68_adr_S[23:1]		),
-	.ds        		( { ~tg68_lds_S, ~tg68_uds_S } ),
-
-	// the interface to the cpus read interface is pretty simple
-	.hit				( data_cache_hit 			),
-	.dout				( data_cache_data_out	),
-
-	// interface to update entire cache lines on ram read
-	.store         ( dCacheStore				),
-	.din64         ( ram_data_out_64       ),
-	
-	// this is a write through cache. Thus the cpus write access to ram
-	// is not intercepted but only used to update matching cache lines
-	.update        ( cacheUpdate           ),
-	.din16         ( ram_data_in           )
-);
-
-wire inst_cache_hit;
-wire [15:0] inst_cache_data_out;
-
-cache instruction_cache (
-	.clk_128  		( clk_128					),
-	.clk  	  		( clk_32						),
-	.reset 			( reset						), 
-	.flush			( br							), 
-
-	// use the tg68_*_S signals here to quickly react on cpu requests
-	.strobe        ( clkenaD               ),
-	.addr     		( tg68_adr_S[23:1]		),
-	.ds        		( { ~tg68_lds_S, ~tg68_uds_S } ),
-
-	// the interface to the cpus read interface is pretty simple
-	.hit				( inst_cache_hit 			),
-	.dout				( inst_cache_data_out	),
-
-	// interface to update entire cache lines on ram read
-	.store         ( iCacheStore				),
-	.din64         ( ram_data_out_64       ),
-	
-	// this is a write through cache. Thus the cpus write access to ram
-	// is not intercepted but only used to update matching cache lines
-	.update        ( cacheUpdate           ),
-	.din16         ( ram_data_in           )
-);
-
-`else
-/* ------------------------------------------------------------------------------ */
-/* -------------------------------- FX68K CPU ----------------------------------- */
-/* ------------------------------------------------------------------------------ */
-reg clkena;
-reg clkena_n;
-reg clkenaD;
-reg clr_berr;
-reg fx68_mem_dtack;
-wire fx68_E;
-wire cpu_E = fx68_E;
-wire fx68_vma_n;
-wire cpu_vma = !fx68_vma_n;
-
-reg         fx68_cpuio;
-reg         fx68_mem_data_valid;
-reg         fx68_mem_latch_valid;
-reg  [15:0] fx68_mem_latch;
-wire [15:0] fx68_data_in = cpu2mem?(fx68_mem_latch_valid?fx68_mem_latch:ram_data_out):io_data_out;
-
-assign auto_iack = 0;
-assign auto_vector = 0;
-
-assign tg68_clr_berr = clr_berr;
-
-always @(posedge clk_32) begin
-	reg fx68_berr1, fx68_berr2;
-	// default: cpu does not run
-	clkena <= 0;
-	clkena_n <= 0;
-	if ((mste && enable_16mhz) || steroids) begin
-		// 16MHZ clock
-		if (clk_cnt == 2) clkena <= 1;
-		if (clk_cnt == 1) clkena_n <= 1;
-	end
-	if (clk_cnt == 0) clkena <= 1;
-	if (clk_cnt == 3) clkena_n <= 1;
-	clkenaD <= clkena;
-
-	if (clkena) begin
-		clr_berr <= 0;
-		fx68_berr1 <= tg68_berr;
-		fx68_berr2 <= fx68_berr1;
-		if (fx68_berr2) clr_berr <= 1;
-	end
-
-	if (cpu2mem && tg68_as && !br && cpu_cycle) begin
-		if (clk_cnt == 2'b10) fx68_mem_data_valid <= 1;
-		// SDRAM data valid after clk_cnt == 0, if the read cycle started at 2
-		// issue DTACK for writes early
-		if ((clk_cnt == 2'b00 && fx68_mem_data_valid) || (clk_cnt == 2'b10 && !fx68_rw_n)) fx68_mem_dtack <= 1;
-		if (clk_cnt == 2'b01) begin
-			fx68_mem_latch_valid <= 1;
-			fx68_mem_latch <= ram_data_out;
-		end
-	end
-
-	// for IO cycle which starts at a CPU RAM cycle (Shifter + DMA audio)
-	if (io_sel && cpu_cycle) begin
-		fx68_cpuio <= 1;
-	end
-
-	// end of READ or WRITE cycle
-	if (fx68_as_n) begin
-		fx68_mem_data_valid <= 0;
-		fx68_mem_latch_valid <= 0;
-		fx68_mem_dtack <= 0;
-		fx68_cpuio <= 0;
-	end
-end
-
-wire mfp_iack = cpu2iack && tg68_as && (tg68_adr[3:1] == 3'b110);
-
-// generate dtack (for st ram and rom on read, no dtack for rom write)
-assign tg68_dtack = (fx68_mem_dtack || io_dtack) && !fx68_as_n;
-assign io_sel = cpu2io && tg68_as;
-assign cpuio_sel = (io_sel && cpu_cycle) || fx68_cpuio;
-
-reg tg68_asD;
-always @(posedge clk_32) if (clkena) tg68_asD <= tg68_as;
-assign io_sel_1ws = cpu2io && tg68_asD && !fx68_as_n;
-
-wire        tg68_as = ~(tg68_lds & tg68_uds); // for TG68 compatibility
-wire  [1:0] tg68_busstate = tg68_rw ? 2'b00 : 2'b11;
-wire        fx68_as_n;
-// autovector if hbi or vbi
-wire        fx68_vpa_n = ~acia_addr && ~(cpu2iack && ((tg68_adr[3:1] == 3'b100) || (tg68_adr[3:1] == 3'b010)));
-
-wire [15:0] cpu_data_in = system_data_out;
-wire [15:0] tg68_dat_out;
-wire [31:0] tg68_adr;
-wire  [2:0] tg68_IPL;
-wire        tg68_dtack;
-wire        tg68_uds;
-wire        tg68_lds;
-wire        tg68_rw = fx68_rw_n | (tg68_lds & tg68_uds);
-wire  [2:0] tg68_fc;
-wire        fx68_rw_n;
-
-fx68k fx68k (
-	.clk		( clk_32 ),
-	.extReset	( reset ),
-	.pwrUp		( reset ),
-	.enPhi1		( clkena ),
-	.enPhi2		( clkena_n ),
-
-	.eRWn		( fx68_rw_n ),
-	.ASn		( fx68_as_n ),
-	.LDSn		( tg68_lds ),
-	.UDSn		( tg68_uds ),
-	.E			( fx68_E ),
-	.VMAn		( fx68_vma_n ),
-	.FC0		( tg68_fc[0] ),
-	.FC1		( tg68_fc[1] ),
-	.FC2		( tg68_fc[2] ),
-	.BGn		(),
-	.oRESETn	( tg68_reset ),
-	.oHALTEDn	(),
-	.DTACKn		( ~tg68_dtack ),
-	.VPAn		( fx68_vpa_n ),
-	.BERRn		( ~tg68_berr ),
-	.BRn		( 1 ),
-	.BGACKn		( 1 ),
-	.IPL0n		( ipl[0] ),
-	.IPL1n		( ipl[1] ),
-	.IPL2n		( ipl[2] ),
-	.iEdb		( fx68_data_in ),
-	.oEdb		( tg68_dat_out ),
-	.eab		( tg68_adr[23:1] )
-);
-
-`endif
-/* ------------------------------------------------------------------------------ */
-/* ----------------------------- memory area mapping ---------------------------- */
-/* ------------------------------------------------------------------------------ */
-
-wire MEM512K = (system_ctrl[3:1] == 3'd0);
-wire MEM1M   = (system_ctrl[3:1] == 3'd1);
-wire MEM2M   = (system_ctrl[3:1] == 3'd2);
-wire MEM4M   = (system_ctrl[3:1] == 3'd3);
-wire MEM8M   = (system_ctrl[3:1] == 3'd4);
-wire MEM14M  = (system_ctrl[3:1] == 3'd5);
-
-// rom is also at 0x000000 to 0x000007
-wire cpu2lowrom = (tg68_adr[23:3] == 21'd0);
-
-// the viking card has ram at 0xc00000 only in st/ste/mega ste mode. In STEroids the
-// video memory is at 0xe80000 and is always enabled
-wire viking_at_c0 = viking_enable && !steroids;
-
-// ordinary ram from 0x000000 to 0x400000, more if enabled
-wire cpu2ram = (!cpu2lowrom) && (
-								  (tg68_adr[23:22] == 2'b00)     ||  // ordinary 4MB
-	((MEM14M || MEM8M) &&  (tg68_adr[23:22] == 2'b01))    ||  // 8MB 
-	(MEM14M            && ((tg68_adr[23:22] == 2'b10)     ||  // 12MB
-	                       (tg68_adr[23:21] == 3'b110)))  ||  // 14MB
-	(steroids          &&  (tg68_adr[23:19] == 5'b11101)) ||  // 512k at $e80000 for STEroids
-	(viking_at_c0      &&  (tg68_adr[23:18] == 6'b110000))    // 256k at 0xc00000 for viking card
-);
-
-// 256k tos from 0xe00000 to 0xe40000
-wire cpu2tos256k = (tg68_adr[23:18] == 6'b111000);
-
-// 192k tos from 0xfc0000 to 0xff0000
-wire cpu2tos192k = (tg68_adr[23:17] == 7'b1111110)  || 
-		 				 (tg68_adr[23:16] == 8'b11111110);
-
-// 128k cartridge from 0xfa0000 to 0xfbffff
-wire cpu2cart = ({tg68_adr[23:17], 1'b0} == 8'hfa) && !ethernec_present;
-
-// all rom areas
-wire cpu2rom = cpu2lowrom || cpu2tos192k || cpu2tos256k || cpu2cart;
-	 
-// cpu to any type of mem (rw on ram, read on rom)
-wire cpu2mem = cpu2ram || (tg68_rw && cpu2rom);
-							
-// io from 0xff0000
-wire cpu2io = (tg68_adr[23:16] == 8'hff);
-
-// irq ack happens
-wire cpu2iack = (tg68_fc == 3'b111);
-
-/* ------------------------------------------------------------------------------ */
-/* ------------------------------- bus multiplexer ------------------------------ */
+/* --------------------------- SDRAM bus multiplexer ---------------------------- */
 /* ------------------------------------------------------------------------------ */
 
 wire dma_has_bus = dma_br;
 wire blitter_has_bus = blitter_br;
 
-// 250 ns (two cycles) are used for CPU (+DMA, blitter) access. As these slots are adjacent,
-// only of of them will be used in each READ or WRITE cycle. The CPU will align itself
-// to 4 cycle boundary, thus 0 wait state for most of the operations.
-// A third slot is used for video + STE audio, and fourth is for the Viking monitor.
-wire video_cycle = (bus_cycle == 0) || (bus_cycle == 3);
-wire cpu_cycle   = (bus_cycle == 1) || (bus_cycle == 2);
-wire cpu_cycle_int = (bus_cycle == 2);
+// no tristate busses exist inside the FPGA. so bus request doesn't do
+// much more than halting the cpu by suppressing 
+wire br = dma_br || blitter_br; // dma/blitter are only other bus masters
+
+wire cpu_cycle   = (bus_cycle == 1);
+
+reg ras_n_d;
+wire ram_oe = ras_n_d & ~ras_n & ram_we_n & |ram_a;
+wire ram_we = ras_n_d & ~ras_n & ~ram_we_n;
+
+always @(posedge clk_32) begin
+	ras_n_d <= ras_n;
+end
 
 // ----------------- RAM address --------------
-wire ste_dma_has_bus = (bus_cycle == 0) && !st_hde1 && ste;
-wire [22:0] video_cycle_addr = ste_dma_has_bus?ste_dma_snd_addr:video_address;
-wire [22:0] cpu_cycle_addr = dma_has_bus?dma_addr:(blitter_has_bus?blitter_master_addr:tg68_adr[23:1]);
-wire [22:0] ram_address = video_cycle?video_cycle_addr:cpu_cycle_addr;
+wire [23:1] dma_address = dma_has_bus?dma_addr:blitter_master_addr;
+wire [23:1] sdram_address = (cpu_cycle & br)?dma_address:ram_a;
 
 // ----------------- RAM read -----------------
-// memory access during the video cycle is shared between video and ste_dma_snd
-wire video_cycle_oe = ste_dma_has_bus?ste_dma_snd_read:video_read;
-// memory access during the cpu cycle is shared between blitter and cpu
-wire cpu_cycle_oe = dma_has_bus?dma_read:(blitter_has_bus?blitter_master_read:(cpu_cycle && tg68_as && tg68_rw && cpu2mem && !tg68_dtack));
-wire ram_oe = video_cycle?video_cycle_oe:(cpu_cycle?cpu_cycle_oe:1'b0);
+wire dma_oe = dma_has_bus?dma_read:blitter_master_read;
+wire sdram_oe = (cpu_cycle & br)?dma_oe:ram_oe;
 
 // ----------------- RAM write -----------------
-wire cpu_cycle_wr = dma_has_bus?dma_write:(blitter_has_bus?blitter_master_write:(cpu_cycle && tg68_as && ~tg68_rw && cpu2ram));
-wire ram_wr = video_cycle?1'b0:(cpu_cycle?cpu_cycle_wr:1'b0);
+wire dma_we = dma_has_bus?dma_write:blitter_master_write;
+wire sdram_we = (cpu_cycle & br)?dma_we:ram_we;
 
-wire [15:0] ram_data_out;
-wire [15:0] system_data_out = cpu2mem?ram_data_out:io_data_out;
-wire [15:0] ram_data_in = dma_has_bus?dma_dout:(blitter_has_bus?blitter_master_data_out:tg68_dat_out);
+wire [15:0] ram_data_in = dma_has_bus?dma_dout:(blitter_has_bus?blitter_master_data_out:ram_din);
 
 // data strobe
-wire ram_uds = video_cycle?1'b1:(br?1'b1:~tg68_uds);
-wire ram_lds = video_cycle?1'b1:(br?1'b1:~tg68_lds);
- 
-// sdram controller has 64 bit output
+wire sdram_uds = (cpu_cycle & br)?1'b1:ram_uds;
+wire sdram_lds = (cpu_cycle & br)?1'b1:ram_lds;
+
+wire [15:0] ram_data_out;
 wire [63:0] ram_data_out_64;
+wire [15:0] rom_data_out;
 
-// select right word of 64 bit ram output for those devices that only want 16 bits
-// this is only used for the cpu and other bus masters opoerating within the cpu 
-// cycle but neither video nor dma audio use it. They are both fed with 64 bits
-assign ram_data_out =
- 	 (cpu_cycle_addr[1:0] == 2'd0)?ram_data_out_64[15:0]:
-	((cpu_cycle_addr[1:0] == 2'd1)?ram_data_out_64[31:16]:
-	((cpu_cycle_addr[1:0] == 2'd2)?ram_data_out_64[47:32]:
-	                               ram_data_out_64[63:48]));
+assign SDRAM_CKE = 1'b1;
 
-assign SDRAM_CKE         = 1'b1;
-   
 sdram sdram (
 	// interface to the MT48LC16M16 chip
 	.sd_data     	( SDRAM_DQ                 ),
@@ -1236,17 +671,22 @@ sdram sdram (
 	.sd_cas      	( SDRAM_nCAS               ),
 
 	// system interface
-	.clk_128      	( clk_128          			),
-	.clk_8_en       ( clk_8_en                  ),
-	.init         	( init             			),
+	.clk_96        ( clk_96                   ),
+	.clk_8_en      ( mhz8_en1                 ),
+	.init         	( init                     ),
 
 	// cpu/chipset interface
-	.din       		( ram_data_in      			),
-	.addr     		( { 1'b0, ram_address } 	),
-	.ds        		( { ram_uds, ram_lds } 		),
-	.we       		( ram_wr           			),
-	.oe         	( ram_oe           			),
-	.dout       	( ram_data_out_64  			)
+	.din           ( ram_data_in              ),
+	.addr          ( { 1'b0, sdram_address }  ),
+	.ds            ( { sdram_uds, sdram_lds } ),
+	.we            ( sdram_we                 ),
+	.oe            ( sdram_oe                 ),
+	.dout          ( ram_data_out             ),
+	.dout64        ( ram_data_out_64          ),
+
+	.rom_oe        ( ~rom_n                   ),
+	.rom_addr      ( { 1'b0, cpu_a }          ),
+	.rom_dout      ( rom_data_out             )
 );
 
 // multiplex spi_do, drive it from user_io if that's selected, drive

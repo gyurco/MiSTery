@@ -46,7 +46,6 @@ create_clock -name {SPI_SCK}  -period 41.666 -waveform { 20.8 41.666 } [get_port
 #**************************************************************
 
 derive_pll_clocks
-create_generated_clock -name clk_8 -source [get_pins {clock|altpll_component|auto_generated|pll1|clk[1]}] -divide_by 4 [get_registers {clk_counter[1]}]
 #**************************************************************
 # Set Clock Latency
 #**************************************************************
@@ -71,15 +70,14 @@ set_input_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|c
 
 set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -max 1.5 [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
 set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -min -0.8 [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
-set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[3]}] -max 1.5 [get_ports SDRAM_CLK]
-set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[3]}] -min -0.8 [get_ports SDRAM_CLK]
+set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -max 1.5 [get_ports SDRAM_CLK]
+set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -min -0.8 [get_ports SDRAM_CLK]
 
 #**************************************************************
 # Set Clock Groups
 #**************************************************************
 
 set_clock_groups -asynchronous -group [get_clocks {SPI_SCK}] -group [get_clocks {clock|altpll_component|auto_generated|pll1|clk[*]}]
-set_clock_groups -asynchronous -group [get_clocks {SPI_SCK}] -group [get_clocks {clk_8}]
 set_clock_groups -asynchronous -group [get_clocks {pll_mfp1|altpll_component|auto_generated|pll1|clk[0]}] -group [get_clocks {clock|altpll_component|auto_generated|pll1|clk[*]}]
 
 #**************************************************************
@@ -87,7 +85,6 @@ set_clock_groups -asynchronous -group [get_clocks {pll_mfp1|altpll_component|aut
 #**************************************************************
 
 # Don't care about the debug overlay
-set_false_path -to {video:video|overlay:overlay|*}
 set_false_path -to [get_ports {VGA_*}]
 set_false_path -to [get_ports {UART_TX}]
 set_false_path -to [get_ports {AUDIO_L}]
@@ -98,21 +95,9 @@ set_false_path -to [get_ports {LED}]
 # Set Multicycle Path
 #**************************************************************
 
-# SDRAM 128 MHz to CPU 32 MHz -> 3x
-set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 3 
-set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 2
-
-# CPU -> 2x
-set_multicycle_path -from {TG68KdotC_Kernel:tg68k|*} -setup 2
-set_multicycle_path -from {TG68KdotC_Kernel:tg68k|*} -hold 1
-
-# clk8 -> SDRAM 128MHz -> 2x
-set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2
-set_multicycle_path -from [get_clocks {clk_8}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 1
-
-# CPU 32 to clk_8 -> 2x
-set_multicycle_path -to [get_clocks {clk_8}] -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -setup 2
-set_multicycle_path -to [get_clocks {clk_8}] -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -hold 1
+# SDRAM 96 MHz to system 32 MHz
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 1
 
 # FX68K
 set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 2
