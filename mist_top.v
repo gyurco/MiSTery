@@ -480,7 +480,7 @@ wire blitter_irq;
 wire blitter_br;
 wire [15:0] blitter_master_data_out;
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
-wire blitter_sel = (system_ctrl[19] || ste) && cpu_a[23:16] == 8'hff && ~as_n && ({cpu_a[15:6], 6'd0} == 16'h8a00);
+wire blitter_sel = (system_ctrl[19] || ste) && cpu_a[23:16] == 8'hff && ~as_n && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
 wire [15:0] blitter_data_out;
 reg blitter_bg;
 
@@ -558,9 +558,8 @@ wire [22:0] dma_addr;
 wire [15:0] dma_dout;
 wire dma_write, dma_read;
 wire dma_br;
-wire word_access = (uds_n == 1'd0) && (lds_n == 1'd0);
-wire dma_sel  = cpu_a[23:16] == 8'hff && ~as_n && (
-        (({cpu_a[15:2], 2'd0} == 16'h8604) && word_access) ||  // ff8604-ff8607 word only
+wire dma_sel  = cpu_a[23:16] == 8'hff && ~as_n && ~(uds_n && lds_n) && (
+         ~fcs_n ||                                             // ff8604-ff8607 word only
          ({cpu_a[15:2], 2'd0} == 16'h8608) ||                  // ff8608-ff860b
          ({cpu_a[15:1], 1'd0} == 16'h860c) ||                  // ff860c-ff860d
         (({cpu_a[15:1], 1'd0} == 16'h860e) && ste));           // ff860e-ff860f (hdmode, STE)
