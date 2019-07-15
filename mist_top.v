@@ -240,7 +240,7 @@ gstshifter gstshifter (
 	.audio_right( dma_snd_r )
 );
 
-mist_video #(.COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
 	.clk_sys    ( clk_32 ),
 	.SPI_SCK    ( SPI_SCK ),
 	.SPI_SS3    ( SPI_SS3 ),
