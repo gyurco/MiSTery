@@ -24,36 +24,36 @@
 // http://paradox.atari.org/files/BLIT_FAQ.TXT
 
 module blitter (
-		input [1:0] 			bus_cycle,
-
 		// cpu register interface
-		input               clk,
-		input               clk_en,
-		input               reset,
+		input             clk,
+		input             clk_en,
+		input             reset,
 
-		input 		  			sel,
-		input [4:0] 			addr,
-		input [15:0] 			din,
-		output reg [15:0] 	dout,
-		input 		  			uds,
-		input 		  			lds,
-		input 		  			rw,
-		
+		input             sel,
+		input       [4:0] addr,
+		input      [15:0] din,
+		output reg [15:0] dout,
+		input             uds,
+		input             lds,
+		input             rw,
+
 		// bus master interface
-		output [23:1] 			bm_addr,
-		output reg       		bm_write,
-		output reg    			bm_read,
-		output [15:0]  		bm_data_out,
-		input  [15:0]  		bm_data_in,
+		input       [1:0] bus_cycle,
+		output     [23:1] bm_addr,
+		output reg        bm_write,
+		output reg        bm_read,
+		output     [15:0] bm_data_out,
+		input      [15:0] bm_data_in,
 
-		input						br_in,
-		output reg 				br_out,
-		output 		  			irq,
-		input						bg,
+		input             br_in,   // now doing real bus arbitration, is it still needed?
+		output reg        br_out,
+		input             bg,
+		output reg        bgack,
+		output            irq,
 
-		input 					turbo				// 16Mhz blitter
+		input             turbo    // 16Mhz blitter
 );
- 
+
 assign irq = busy;
 
 // CPU controlled register set
@@ -93,9 +93,6 @@ wire cycle_advance = (bus_cycle == 2'd0) || (turbo && (bus_cycle == 2'd2));
 wire cycle_read    = (bus_cycle == 2'd1) || (turbo && (bus_cycle == 2'd3));
 
 // ------------------ cpu interface --------------------
-reg selD;
-always @(posedge clk) if (clk_en) selD <= sel;
-wire req = ~selD & sel;
 
 // CPU READ
 always @(sel, rw, addr, src_y_inc, src_x_inc, src_addr, endmask1, endmask2, endmask3, 
@@ -149,14 +146,6 @@ reg bus_owned;
 // state 3: extra source read cycle (fxsr)
 reg [1:0] state;
 
-// latch for read data
-reg [15:0] bm_data_in_latch;
-
-// latch incoming data at end of bus cycle
-always @(posedge clk)
-	if(clk_en && cycle_read)
-		bm_data_in_latch <= bm_data_in;
-
 always @(posedge clk) begin
 
 	// ---------- blitter cpu register write interfce ............
@@ -165,7 +154,7 @@ always @(posedge clk) begin
 		state <= 2'd0;
 		wait4bus <= 1'b0;
 	end else begin
-		if(clk_en && req && ~rw) begin
+		if(sel && ~rw) begin
 			// ------ 16/32 bit registers, not byte adressable ----------
 			if((addr >= 5'h00) && (addr <= 5'h0f))	halftone_ram[addr] <= din;
 
@@ -225,19 +214,21 @@ always @(posedge clk) begin
 			end 
 		end
 	end
-	
+
 	// ----------------------------------------------------------------------------------
 	// -------------------------- blitter state machine ---------------------------------
 	// ----------------------------------------------------------------------------------
+
+	bgack <= bus_owned;
 
 	// entire state machine advances in bus_cycle 0
 	// (the cycle before the one being used by the cpu/blitter for memory access)
 	if(clk_en && cycle_advance) begin
 
 		// grab bus if blitter is supposed to run (busy == 1) and we're not waiting for the bus
-		br_out <= busy && (!wait4bus || (wait4bus && (bus_coop_cnt == 0)));
+		br_out <= busy && (!wait4bus || (wait4bus && (bus_coop_cnt == 0))) && !bus_owned && !br_in;
 		bus_owned <= busy && !wait4bus;
-		
+
 		// clear busy flag if blitter is done
 		if(y_count == 0) busy <= 1'b0;
 
@@ -253,7 +244,7 @@ always @(posedge clk) begin
 				wait4bus <= !wait4bus;
 			end
 		end
-		
+
 		// blitter has just been setup, so init the state machine in first step
 		if(init) begin 
 			init <= 1'b0;
@@ -350,14 +341,23 @@ end
 assign bm_addr = ((state == 2'd0)||(state == 2'd3))?src_addr:dst_addr;
 
 // ----------------- blitter busmaster engine -------------------
+// Originally blitter "simulates" the CPU's control signals, and
+// let the MMU handle the RAM access
+
+// latch for read data
+reg [15:0] bm_data_in_latch;
+
 always @(posedge clk) begin
-	reg clk_en_p;
+	reg clk_en_d;
 
 	// Blitter state machine advanced in clk_en, drive RAM request after that
-	clk_en_p <= clk_en;
-	if (clk_en_p) begin
-		bm_read <= 1'b0;
-		bm_write <= 1'b0;
+	clk_en_d <= clk_en;
+	if (clk_en_d) begin
+		if (cycle_read) begin
+			bm_read <= 1'b0;
+			bm_write <= 1'b0;
+		end
+		if (bm_read) bm_data_in_latch <= bm_data_in;
 
 		if(bus_owned && !br_in && (y_count != 0) && cycle_advance) begin
 			if(state == 2'd0)      bm_read  <= 1'b1;

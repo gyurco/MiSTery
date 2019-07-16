@@ -262,7 +262,7 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.ypbpr      ( ypbpr )
 );
 
-assign      dtack_n = (mcu_dtack_n & ~mfp_dtack & ~dma_sel & ~blitter_sel) | br;
+assign      dtack_n = (mcu_dtack_n & ~mfp_dtack & ~dma_sel & ~blitter_sel) | dma_br;
 
 fx68k fx68k (
 	.clk        ( clk_32 ),
@@ -280,17 +280,17 @@ fx68k fx68k (
 	.FC0        ( fc0 ),
 	.FC1        ( fc1 ),
 	.FC2        ( fc2 ),
-	.BGn        (),
+	.BGn        ( blitter_bg ),
 	.oRESETn    (),
 	.oHALTEDn   (),
 	.DTACKn     ( dtack_n ),
 	.VPAn       ( vpa_n ),
 	.BERRn		( berr_n ),
-	.BRn        ( 1 ),
-	.BGACKn     ( 1 ),
-	.IPL0n		( ipl0_n ),
-	.IPL1n		( ipl1_n ),
-	.IPL2n		( ipl2_n ),
+	.BRn        ( ~blitter_br ),
+	.BGACKn     ( ~blitter_bgack ),
+	.IPL0n      ( ipl0_n ),
+	.IPL1n      ( ipl1_n ),
+	.IPL2n      ( ipl2_n ),
 	.iEdb       ( cpu_din ),
 	.oEdb       ( cpu_dout ),
 	.eab        ( cpu_a )
@@ -478,44 +478,40 @@ wire blitter_master_write;
 wire blitter_master_read;
 wire blitter_irq;
 wire blitter_br;
+wire blitter_bgack;
+wire blitter_bg;
 wire [15:0] blitter_master_data_out;
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
 wire blitter_sel = (system_ctrl[19] || ste) && cpu_a[23:16] == 8'hff && ~as_n && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
 wire [15:0] blitter_data_out;
-reg blitter_bg;
-
-// give bus to blitter
-always @(posedge clk_32) begin
-	if (mhz8_en1) blitter_bg <= blitter_br;
-end
 
 blitter blitter (
-	.bus_cycle 	(bus_cycle        ),
-
 	// cpu interface
-	.clk       	( clk_32          ),
-	.clk_en     ( mhz8_en1        ),
-	.reset     	( reset           ),
-	.din       	( cpu_dout        ),
-	.sel       	( blitter_sel     ),
-	.addr      	( cpu_a[5:1]      ),
-	.uds       	( uds_n           ),
-	.lds       	( lds_n           ),
-	.rw        	( cpu_rw          ),
-	.dout      	( blitter_data_out),
+	.clk         ( clk_32           ),
+	.clk_en      ( mhz8_en2         ),
+	.reset       ( reset            ),
+	.din         ( cpu_dout         ),
+	.sel         ( blitter_sel      ),
+	.addr        ( cpu_a[5:1]       ),
+	.uds         ( uds_n            ),
+	.lds         ( lds_n            ),
+	.rw          ( cpu_rw           ),
+	.dout        ( blitter_data_out ),
 
-	.bm_addr   	(blitter_master_addr),
-	.bm_write	(blitter_master_write),
-	.bm_data_out (blitter_master_data_out),
-	.bm_read    (blitter_master_read),
-	.bm_data_in (ram_data_out),
+	.bus_cycle   ( bus_cycle               ),
+	.bm_addr     ( blitter_master_addr     ),
+	.bm_write    ( blitter_master_write    ),
+	.bm_data_out ( blitter_master_data_out ),
+	.bm_read     ( blitter_master_read     ),
+	.bm_data_in  ( ram_data_out            ),
 
-	.br_in      ( dma_br          ),
-	.br_out     ( blitter_br      ),
-	.bg         ( blitter_bg      ),
-	.irq        ( blitter_irq     ),
+	.br_in       ( dma_br        ),
+	.br_out      ( blitter_br    ),
+	.bg          ( ~blitter_bg   ),
+	.irq         ( blitter_irq   ),
+	.bgack       ( blitter_bgack ),
 
-	.turbo      ( 0               )
+	.turbo       ( 0             )
 );
 
 wire        dio_addr_strobe;
@@ -618,11 +614,11 @@ assign LED = (floppy_sel == 2'b11);
 /* ------------------------------------------------------------------------------ */
 
 wire dma_has_bus = dma_br;
-wire blitter_has_bus = blitter_br;
+wire blitter_has_bus = blitter_bgack;
 
 // no tristate busses exist inside the FPGA. so bus request doesn't do
 // much more than halting the cpu by suppressing 
-wire br = dma_br || blitter_br; // dma/blitter are only other bus masters
+wire br = dma_br || blitter_bgack; // dma/blitter are only other bus masters
 
 wire cpu_cycle   = (bus_cycle == 1);
 
