@@ -525,7 +525,8 @@ blitter blitter (
 
 wire        dio_addr_strobe;
 wire [31:0] dio_addr_reg;
-wire        dio_data_in_strobe;
+wire        dio_data_in_strobe_uio;
+wire        dio_data_in_strobe_mist;
 wire [15:0] dio_data_in_reg;
 wire        dio_data_out_strobe;
 wire [15:0] dio_data_out_reg;
@@ -534,6 +535,8 @@ wire  [7:0] dio_dma_status;
 wire        dio_dma_nak;
 wire  [7:0] dio_status_in;
 wire  [4:0] dio_status_index;
+wire [23:1] dio_data_addr;
+wire        dio_download;
 
 data_io data_io (
 	.sck             ( SPI_SCK             ),
@@ -545,8 +548,11 @@ data_io data_io (
 	.video_adj	     ( video_adj           ),
 	.addr_strobe     ( dio_addr_strobe     ),
 	.addr_reg        ( dio_addr_reg        ),
-	.data_in_strobe  ( dio_data_in_strobe  ),
+	.data_in_strobe_uio ( dio_data_in_strobe_uio ),
+	.data_in_strobe_mist( dio_data_in_strobe_mist),
 	.data_in_reg     ( dio_data_in_reg     ),
+	.data_addr       ( dio_data_addr       ),
+	.data_download   ( dio_download        ),
 	.data_out_strobe ( dio_data_out_strobe ),
 	.data_out_reg    ( dio_data_out_reg    ),
 	.dma_ack         ( dio_dma_ack         ),
@@ -581,7 +587,7 @@ dma dma (
 	// IO controller interface
 	.dio_addr_strobe     ( dio_addr_strobe     ),
 	.dio_addr_reg        ( dio_addr_reg        ),
-	.dio_data_in_strobe  ( dio_data_in_strobe  ),
+	.dio_data_in_strobe  ( dio_data_in_strobe_mist ),
 	.dio_data_in_reg     ( dio_data_in_reg     ),
 	.dio_data_out_strobe ( dio_data_out_strobe ),
 	.dio_data_out_reg    ( dio_data_out_reg    ),
@@ -632,31 +638,40 @@ wire br = dma_br || blitter_bgack; // dma/blitter are only other bus masters
 wire cpu_cycle   = (bus_cycle == 1);
 
 reg ras_n_d;
+reg data_wr;
 wire ram_oe = ras_n_d & ~ras_n & ram_we_n & |ram_a;
 wire ram_we = ras_n_d & ~ras_n & ~ram_we_n;
 
 always @(posedge clk_32) begin
+	reg dio_data_in_strobe_uioD;
+
 	ras_n_d <= ras_n;
+	data_wr <= 1'b0;
+	if (bus_cycle == 0 && mhz8_en1) begin
+		dio_data_in_strobe_uioD <= dio_data_in_strobe_uio;
+		if (dio_data_in_strobe_uio ^ dio_data_in_strobe_uioD) data_wr <= 1'b1;
+	end
 end
 
 // ----------------- RAM address --------------
 wire [23:1] dma_address = dma_has_bus?dma_addr:blitter_master_addr;
-wire [23:1] sdram_address = (cpu_cycle & br)?dma_address:ram_a;
+wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:(cpu_cycle & br)?dma_address:ram_a;
 
 // ----------------- RAM read -----------------
 wire dma_oe = dma_has_bus?dma_read:blitter_master_read;
-wire sdram_oe = (cpu_cycle & br)?dma_oe:ram_oe;
+wire sdram_oe = (cpu_cycle & dio_download)?1'b0:(cpu_cycle & br)?dma_oe:ram_oe;
 
 // ----------------- RAM write -----------------
 wire dma_we = dma_has_bus?dma_write:blitter_master_write;
-wire sdram_we = (cpu_cycle & br)?dma_we:ram_we;
+wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & br)?dma_we:ram_we;
 
-wire [15:0] ram_data_in = dma_has_bus?dma_dout:(blitter_has_bus?blitter_master_data_out:ram_din);
+wire [15:0] ram_data_in = dio_download?dio_data_in_reg:dma_has_bus?dma_dout:(blitter_has_bus?blitter_master_data_out:ram_din);
 
 // data strobe
-wire sdram_uds = (cpu_cycle & br)?1'b1:ram_uds;
-wire sdram_lds = (cpu_cycle & br)?1'b1:ram_lds;
+wire sdram_uds = (cpu_cycle & (br | dio_download))?1'b1:ram_uds;
+wire sdram_lds = (cpu_cycle & (br | dio_download))?1'b1:ram_lds;
 
+wire [23:1] rom_a = !rom2_n ? { 4'hE, 2'b00, cpu_a[17:1] } : cpu_a;
 wire [15:0] ram_data_out;
 wire [63:0] ram_data_out_64;
 wire [15:0] rom_data_out;
@@ -689,7 +704,7 @@ sdram sdram (
 	.dout64        ( ram_data_out_64          ),
 
 	.rom_oe        ( ~rom_n                   ),
-	.rom_addr      ( { 1'b0, cpu_a }          ),
+	.rom_addr      ( rom_a                    ),
 	.rom_dout      ( rom_data_out             )
 );
 
@@ -802,7 +817,7 @@ user_io user_io(
 		.scandoubler_disable       (scandoubler_disable),
 		.ypbpr                     (ypbpr),
 		.SWITCHES                  (switches ),
-		.CORE_TYPE						(8'ha3)    // mist core id
+		.CORE_TYPE                 (8'ha7)    // mist2 core id
 );
 
 			

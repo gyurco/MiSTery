@@ -24,12 +24,12 @@
 //
 
 module data_io #(parameter ADDR_WIDTH=24, START_ADDR = 0) (
-	input 			    clk,
+	input              clk,
 	// io controller spi interface
-	input 			    sck,
-	input 			    ss,
-	input 			    sdi,
-	output reg          sdo,
+	input              sck,
+	input              ss,
+	input              sdi,
+	output reg         sdo,
 
 	// MiST settings
 	output reg [31:0] ctrl_out,
@@ -40,8 +40,11 @@ module data_io #(parameter ADDR_WIDTH=24, START_ADDR = 0) (
 	output reg [31:0] addr_reg, //31-24 sector count, 23 direction, 22-0 mem address
 
 	// data_in_reg valid
-	output reg        data_in_strobe,
+	output reg        data_in_strobe_mist,
+	output reg        data_in_strobe_uio,
 	output reg [15:0] data_in_reg,
+	output reg [23:1] data_addr,
+	output reg        data_download,
 
 	// valid before the next data_out_reg required
 	// give enough time to advance the pointer and load
@@ -80,6 +83,10 @@ localparam MIST_BUS_REQ      = 8'h07;  // request bus - not used
 localparam MIST_BUS_REL      = 8'h08;  // release bus - not used
 localparam MIST_SET_VADJ     = 8'h09;
 localparam MIST_NAK_DMA      = 8'h0a;  // reject a dma command
+
+localparam UIO_FILE_TX       = 8'h53;
+localparam UIO_FILE_TX_DAT   = 8'h54;
+localparam UIO_FILE_INDEX    = 8'h55;
 
 // SPI bit and byte counters
 reg [15:0] data_out_reg_r;
@@ -192,13 +199,17 @@ always @(posedge clk) begin
 				addr_strobe <= ~addr_strobe;
 			end
 
-			MIST_WRITE_MEMORY:
+			MIST_WRITE_MEMORY, UIO_FILE_TX_DAT:
 			begin
 				lo <= ~lo;
 				if (~lo) latch[15: 8] <= spi_byte_in;
 				else begin
 					data_in_reg <= { latch[15:8], spi_byte_in };
-					data_in_strobe <= ~data_in_strobe;
+					if (acmd == UIO_FILE_TX_DAT)
+						data_in_strobe_uio <= ~data_in_strobe_uio;
+					else
+						data_in_strobe_mist <= ~data_in_strobe_mist;
+					data_addr <= data_addr + 1'd1;
 				end
 			end
 
@@ -213,6 +224,22 @@ always @(posedge clk) begin
 				dma_ack <= ~dma_ack;
 				dma_status <= spi_byte_in;
 			end
+
+			UIO_FILE_TX:
+			// prepare
+			if(spi_byte_in) begin
+				data_download <= 1;
+			end else begin
+				data_download <= 0;
+			end
+
+			// index
+			UIO_FILE_INDEX:
+			case (spi_byte_in)
+				8'h00: data_addr <= (24'he00000 - 2'd2) >> 1; // TOS 256k
+				8'h01: data_addr <= (24'hfc0000 - 2'd2) >> 1; // TOS 192k
+				8'h02: data_addr <= (24'hfa0000 - 2'd2) >> 1; // Cartridge
+			endcase
 
 			endcase;
 		end
