@@ -104,7 +104,10 @@ wire        sint;
 wire [15:0] mcu_dout;
 wire        ras_n = ras0_n & ras1_n;
 
-// compatibility for existing dma and blitter
+// dma
+wire        rdy_o, rdy_i, mcu_bg_n = blitter_bg_n & ~blitter_bgack, mcu_br_n, mcu_bgack_n;
+
+// compatibility for existing blitter
 wire  [1:0] bus_cycle;
 
 // CPU signals
@@ -119,14 +122,16 @@ wire [23:1] cpu_a;
 
 wire        rom_n = rom0_n & rom1_n & rom2_n & rom3_n & rom4_n & rom5_n & rom6_n & romp_n;
 assign      cpu_din = 
-              dma_sel ? dma_data_out :
-				  blitter_sel ? blitter_data_out :
+              ~fcs_n ? dma_data_out :
+              blitter_sel ? blitter_data_out :
               !rdat_n  ? shifter_dout :
-				  !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
+              !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
               !rom_n   ? rom_data_out :
               !n6850   ? { acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
               mcu_dout;
+
+wire [15:0] mbus_dout = ~rdy_i ? dma_data_out : cpu_dout; // dout from the current bus master
 
 // Shifter signals
 wire        cmpcs_n, latch, de, blank_n, rdat_n, wdat_n, dcyc_n, sreq, sload_n, mono;
@@ -142,7 +147,6 @@ gstmcu gstmcu (
 	.clk32      ( clk_32 ),
 	.resb       ( mcu_reset_n ),
 	.porb       ( mcu_reset_n ),
-	.BR_N       ( ~br ),
 	.FC0        ( fc0 ),
 	.FC1        ( fc1 ),
 	.FC2        ( fc2 ),
@@ -161,6 +165,13 @@ gstmcu gstmcu (
 	.MHZ8_EN2   ( mhz8_en2 ),
 	.MHZ4       ( mhz4 ),
 	.MHZ4_EN    ( mhz4_en ),
+	.RDY_N_I    ( rdy_o ),
+	.RDY_N_O    ( rdy_i ),
+	.BG_N       ( mcu_bg_n ),
+	.BR_N_I     ( ~blitter_br ),
+	.BR_N_O     ( mcu_br_n ),
+	.BGACK_N_I  ( ~blitter_bgack ),
+	.BGACK_N_O  ( mcu_bgack_n ),
 	.BERR_N     ( berr_n ),
 	.IPL0_N     ( ipl0_n ),
 	.IPL1_N     ( ipl1_n ),
@@ -215,7 +226,7 @@ gstshifter gstshifter (
     // CPU/RAM interface
 	.CS         ( ~cmpcs_n ),
 	.A          ( cpu_a[6:1] ),
-	.DIN        ( cpu_dout ),
+	.DIN        ( mbus_dout ),
 	.DOUT       ( shifter_dout ),
 	.LATCH      ( latch ),
 	.RDAT_N     ( rdat_n ),   // latched MDIN -> DOUT
@@ -262,7 +273,7 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.ypbpr      ( ypbpr )
 );
 
-assign      dtack_n = (mcu_dtack_n & ~mfp_dtack & ~dma_sel & ~blitter_sel) | dma_br;
+assign      dtack_n = mcu_dtack_n & ~mfp_dtack & ~blitter_sel;
 
 fx68k fx68k (
 	.clk        ( clk_32 ),
@@ -280,14 +291,14 @@ fx68k fx68k (
 	.FC0        ( fc0 ),
 	.FC1        ( fc1 ),
 	.FC2        ( fc2 ),
-	.BGn        ( blitter_bg ),
+	.BGn        ( blitter_bg_n ),
 	.oRESETn    (),
 	.oHALTEDn   (),
 	.DTACKn     ( dtack_n ),
 	.VPAn       ( vpa_n ),
 	.BERRn		( berr_n ),
-	.BRn        ( ~blitter_br ),
-	.BGACKn     ( ~blitter_bgack ),
+	.BRn        ( ~blitter_br & mcu_br_n ),
+	.BGACKn     ( ~blitter_bgack & mcu_bgack_n ),
 	.IPL0n      ( ipl0_n ),
 	.IPL1n      ( ipl1_n ),
 	.IPL2n      ( ipl2_n ),
@@ -488,7 +499,7 @@ wire blitter_master_read;
 wire blitter_irq;
 wire blitter_br;
 wire blitter_bgack;
-wire blitter_bg;
+wire blitter_bg_n;
 wire [15:0] blitter_master_data_out;
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
 wire blitter_sel = (system_ctrl[19] || ste) && cpu_a[23:16] == 8'hff && ~as_n && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
@@ -514,17 +525,15 @@ blitter blitter (
 	.bm_read     ( blitter_master_read     ),
 	.bm_data_in  ( ram_data_out            ),
 
-	.br_in       ( dma_br        ),
+	.br_in       ( ~(mcu_br_n & mcu_bgack_n) ),
 	.br_out      ( blitter_br    ),
-	.bg          ( ~blitter_bg   ),
+	.bg          ( ~blitter_bg_n ),
 	.irq         ( blitter_irq   ),
 	.bgack       ( blitter_bgack ),
 
 	.turbo       ( 0             )
 );
 
-wire        dio_addr_strobe;
-wire [31:0] dio_addr_reg;
 wire        dio_data_in_strobe_uio;
 wire        dio_data_in_strobe_mist;
 wire [15:0] dio_data_in_reg;
@@ -546,8 +555,8 @@ data_io data_io (
 	.clk             ( clk_32              ),
 	.ctrl_out        ( system_ctrl         ),
 	.video_adj	     ( video_adj           ),
-	.addr_strobe     ( dio_addr_strobe     ),
-	.addr_reg        ( dio_addr_reg        ),
+	.addr_strobe     ( ),
+	.addr_reg        ( ),
 	.data_in_strobe_uio ( dio_data_in_strobe_uio ),
 	.data_in_strobe_mist( dio_data_in_strobe_mist),
 	.data_in_reg     ( dio_data_in_reg     ),
@@ -565,15 +574,9 @@ data_io data_io (
 // floppy_sel is active low
 wire wr_prot = (floppy_sel == 2'b01)?system_ctrl[7]:system_ctrl[6];
 
-wire [22:0] dma_addr;
-wire [15:0] dma_dout;
+//wire [15:0] dma_dout;
 wire dma_write, dma_read;
-wire dma_br;
-wire dma_sel  = cpu_a[23:16] == 8'hff && ~as_n && ~(uds_n && lds_n) && (
-         ~fcs_n ||                                             // ff8604-ff8607 word only
-         ({cpu_a[15:2], 2'd0} == 16'h8608) ||                  // ff8608-ff860b
-         ({cpu_a[15:1], 1'd0} == 16'h860c) ||                  // ff860c-ff860d
-        (({cpu_a[15:1], 1'd0} == 16'h860e) && ste));           // ff860e-ff860f (hdmode, STE)
+wire dma_br = 0;
 wire [15:0] dma_data_out;
 
 dma dma (
@@ -581,12 +584,9 @@ dma dma (
 	.clk        ( clk_32        ),
 	.clk_en     ( mhz8_en1      ),
 	.reset    	( reset       	 ),
-	.bus_cycle  ( bus_cycle     ),
 	.irq      	( dma_irq     	 ),
 
 	// IO controller interface
-	.dio_addr_strobe     ( dio_addr_strobe     ),
-	.dio_addr_reg        ( dio_addr_reg        ),
 	.dio_data_in_strobe  ( dio_data_in_strobe_mist ),
 	.dio_data_in_reg     ( dio_data_in_reg     ),
 	.dio_data_out_strobe ( dio_data_out_strobe ),
@@ -599,10 +599,8 @@ dma dma (
 
 	// cpu interface
 	.cpu_din      ( cpu_dout      ),
-	.cpu_sel      ( dma_sel       ),
-	.cpu_addr     ( cpu_a[3:1]    ),
-	.cpu_uds      ( uds_n         ),
-	.cpu_lds      ( lds_n         ),
+	.cpu_sel      ( ~fcs_n ),
+	.cpu_a1       ( cpu_a[1]      ),
 	.cpu_rw       ( cpu_rw        ),
 	.cpu_dout     ( dma_data_out  ),
 
@@ -613,12 +611,9 @@ dma dma (
 	.acsi_enable  ( system_ctrl[17:10] ),
 
 	// ram interface
-	.ram_br        ( dma_br       ),
-	.ram_read 	 	( dma_read	   ),
-	.ram_write 	 	( dma_write	   ),
-	.ram_addr		( dma_addr	   ),
-	.ram_dout 		( dma_dout 	   ),
-	.ram_din  		( ram_data_out	)
+	.rdy_i         ( rdy_i        ),
+	.rdy_o         ( rdy_o        ),
+	.ram_din       ( shifter_dout )
 );
 
 assign LED = (floppy_sel == 2'b11);
@@ -628,48 +623,45 @@ assign LED = (floppy_sel == 2'b11);
 /* --------------------------- SDRAM bus multiplexer ---------------------------- */
 /* ------------------------------------------------------------------------------ */
 
-wire dma_has_bus = dma_br;
+// Current blitter implemantation doesn't use the MMU
 wire blitter_has_bus = blitter_bgack;
 
-// no tristate busses exist inside the FPGA. so bus request doesn't do
-// much more than halting the cpu by suppressing 
-wire br = dma_br || blitter_bgack; // dma/blitter are only other bus masters
-
-wire cpu_cycle   = (bus_cycle == 1);
+wire cpu_precycle = (bus_cycle == 0);
+wire cpu_cycle    = (bus_cycle == 1);
 
 reg ras_n_d;
 reg data_wr;
 wire ram_oe = ras_n_d & ~ras_n & ram_we_n & |ram_a;
 wire ram_we = ras_n_d & ~ras_n & ~ram_we_n;
 
+// TOS/cartridge upload via data_io
 always @(posedge clk_32) begin
 	reg dio_data_in_strobe_uioD;
 
 	ras_n_d <= ras_n;
 	data_wr <= 1'b0;
-	if (bus_cycle == 0 && mhz8_en1) begin
+	if (cpu_precycle && mhz8_en1) begin
 		dio_data_in_strobe_uioD <= dio_data_in_strobe_uio;
 		if (dio_data_in_strobe_uio ^ dio_data_in_strobe_uioD) data_wr <= 1'b1;
 	end
 end
 
 // ----------------- RAM address --------------
-wire [23:1] dma_address = dma_has_bus?dma_addr:blitter_master_addr;
-wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:(cpu_cycle & br)?dma_address:ram_a;
+wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:(cpu_cycle & blitter_has_bus)?blitter_master_addr:ram_a;
 
 // ----------------- RAM read -----------------
-wire dma_oe = dma_has_bus?dma_read:blitter_master_read;
-wire sdram_oe = (cpu_cycle & dio_download)?1'b0:(cpu_cycle & br)?dma_oe:ram_oe;
+wire sdram_oe = (cpu_cycle & dio_download)?1'b0:(cpu_cycle & blitter_master_read)?1'b1:ram_oe;
 
 // ----------------- RAM write -----------------
-wire dma_we = dma_has_bus?dma_write:blitter_master_write;
-wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & br)?dma_we:ram_we;
+wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_write)?1'b1:ram_we;
 
-wire [15:0] ram_data_in = dio_download?dio_data_in_reg:dma_has_bus?dma_dout:(blitter_has_bus?blitter_master_data_out:ram_din);
+wire [15:0] ram_data_in = dio_download?dio_data_in_reg:(blitter_has_bus?blitter_master_data_out:ram_din);
 
 // data strobe
-wire sdram_uds = (cpu_cycle & (br | dio_download))?1'b1:ram_uds;
-wire sdram_lds = (cpu_cycle & (br | dio_download))?1'b1:ram_lds;
+// dso inside GSTMCU should be fixed: it is delayed by a half 32MHz cycle, which is an issue
+// when used in the SDRAM controller. Now use mcu_bgack_n.
+wire sdram_uds = (cpu_cycle & (~mcu_bgack_n | blitter_has_bus | dio_download))?1'b1:ram_uds;
+wire sdram_lds = (cpu_cycle & (~mcu_bgack_n | blitter_has_bus | dio_download))?1'b1:ram_lds;
 
 wire [23:1] rom_a = !rom2_n ? { 4'hE, 2'b00, cpu_a[17:1] } : cpu_a;
 wire [15:0] ram_data_out;
@@ -820,6 +812,4 @@ user_io user_io(
 		.CORE_TYPE                 (8'ha7)    // mist2 core id
 );
 
-			
 endmodule
-
