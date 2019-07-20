@@ -9,6 +9,7 @@
 //
 // Copyright (c) 2014-2015 Till Harbaum <till@harbaum.org>
 // Copyright (c) 2019 György Szombathelyi
+
 // This source file is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published
 // by the Free Software Foundation, either version 3 of the License, or
@@ -239,6 +240,7 @@ always @(posedge clk) begin
 				8'h00: data_addr <= (24'he00000 - 2'd2) >> 1; // TOS 256k
 				8'h01: data_addr <= (24'hfc0000 - 2'd2) >> 1; // TOS 192k
 				8'h02: data_addr <= (24'hfa0000 - 2'd2) >> 1; // Cartridge
+				8'h03: data_addr <= 23'h0; // Clear memory
 			endcase
 
 			endcase;
