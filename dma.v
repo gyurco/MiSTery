@@ -256,8 +256,7 @@ wire fifo_empty       = fifo_wptr == fifo_rptr;
 // fifo is considered almost full if more than 8 words (32 bytes) are present
 wire fifo_almost_full = (fifo_wptr - fifo_rptr) > 4'd8;
 wire fifo_full        = (fifo_wptr - fifo_rptr) > 4'd13;
-// Reset fifo via the dma mode direction bit toggling or when
-// IO controller sets address
+// Reset fifo via the dma mode direction bit toggling
 wire fifo_reset = cpu_dma_mode_direction_toggle;
 
 reg fifo_read_in_progress, fifo_write_in_progress;
@@ -338,7 +337,6 @@ assign ram_dout = fifo_data_out;
 // ================================ DMA sector count ========================
 // - register is decremented by one after 512 bytes being transferred
 // - cpu can write this register directly
-// - io controller can write this via the set_address command
    
 // keep track of bytes to decrement sector count register
 // after 512 bytes (256 words)
@@ -390,7 +388,7 @@ always @(posedge clk)
 // DMA in progress flag:
 // - cpu writing the sector count register starts the DMA engine if
 //   dma enable bit 6 in mode register is clear
-// - changing sector count to 0 (cpu, io controller or counter) stops DMA
+// - changing sector count to 0 (cpu or counter) stops DMA
 // - cpu writing toggling dma direction stops dma
 reg dma_in_progress;
 wire dma_stop = cpu_dma_mode_direction_toggle;
@@ -408,7 +406,6 @@ end
 reg dma_direction_out;  // == 1 when transferring from fpga to io controller
 
 // bit 8 == 0 -> dma read -> dma_direction_out
-// cpu or io controller set the dma direction
 always @(posedge clk)
   if (cpu_dma_mode_direction_toggle) dma_direction_out <= cpu_din[8];
 
