@@ -42,9 +42,9 @@ module mist_top (
 );
 
 // enable additional ste/megaste features
-wire ste = 1;//system_ctrl[23] || system_ctrl[24];
-wire mste = system_ctrl[24];
-wire steroids = system_ctrl[23] && system_ctrl[24];  // a STE on steroids
+wire ste = system_ctrl[23] || system_ctrl[24];
+wire mste = 1'b0;//system_ctrl[24];
+wire steroids = 1'b0;//system_ctrl[23] && system_ctrl[24];  // a STE on steroids
 
 // ethernec is enabled by the io controller whenever a USB 
 // ethernet interface is detected
@@ -96,7 +96,7 @@ always @(posedge clk_32) begin
 	if (resetD & ~reset) mcu_reset_n <= 0;
 end
 
-wire        mhz4, mhz4_en;
+wire        mhz4, mhz4_en, clk16, clk16_en = ~clk16;
 wire        mcu_dtack_n;
 wire        hsync_n, vsync_n;
 wire        rom0_n, rom1_n, rom2_n, rom3_n, rom4_n, rom5_n, rom6_n, romp_n;
@@ -115,10 +115,13 @@ wire        rdy_o, rdy_i, mcu_bg_n = blitter_bg_n & ~blitter_bgack, mcu_br_n, mc
 // compatibility for existing blitter
 wire  [1:0] bus_cycle;
 
+// for other peripherals
+wire        iodevice = ~as_n & fc2 & (fc0 ^ fc1) & cpu_a[23:16] == 8'hff;
+
 // CPU signals
 wire        mhz8, mhz8_en1, mhz8_en2;
 wire        berr_n;
-wire        dtack_n;
+wire        cpu_dtack_n;
 wire        ipl0_n, ipl1_n, ipl2_n;
 wire        fc0, fc1, fc2;
 wire        as_n, cpu_rw, uds_n, lds_n, vma_n, vpa_n, cpu_E;
@@ -134,6 +137,7 @@ assign      cpu_din =
               !rom_n   ? rom_data_out :
               !n6850   ? { acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
+              mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
               mcu_dout;
 
 wire [15:0] mbus_dout = ~rdy_i ? dma_data_out : cpu_dout; // dout from the current bus master
@@ -165,6 +169,7 @@ gstmcu gstmcu (
 	.ADDR       ( ram_a ),  // to RAM
 	.DIN        ( cpu_dout ),
 	.DOUT       ( mcu_dout ),
+	.CLK_O      ( clk16 ),
 	.MHZ8       ( mhz8 ),
    .MHZ8_EN1   ( mhz8_en1 ),
 	.MHZ8_EN2   ( mhz8_en2 ),
@@ -342,14 +347,17 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.ypbpr      ( ypbpr )
 );
 
-assign      dtack_n = mcu_dtack_n & ~mfp_dtack & ~blitter_sel;
+assign      cpu_dtack_n = mcu_dtack_n & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
+
+wire        fx68_phi1 = (enable_16mhz | steroids) ?  clk16_en : mhz8_en1;
+wire        fx68_phi2 = (enable_16mhz | steroids) ? ~clk16_en : mhz8_en2;
 
 fx68k fx68k (
 	.clk        ( clk_32 ),
 	.extReset   ( reset ),
 	.pwrUp      ( reset ),
-	.enPhi1     ( mhz8_en1 ),
-	.enPhi2     ( mhz8_en2 ),
+	.enPhi1     ( fx68_phi1 ),
+	.enPhi2     ( fx68_phi2 ),
 
 	.eRWn       ( cpu_rw ),
 	.ASn        ( as_n ),
@@ -363,7 +371,7 @@ fx68k fx68k (
 	.BGn        ( blitter_bg_n ),
 	.oRESETn    (),
 	.oHALTEDn   (),
-	.DTACKn     ( dtack_n ),
+	.DTACKn     ( cpu_dtack_n ),
 	.VPAn       ( vpa_n ),
 	.BERRn		( berr_n ),
 	.BRn        ( ~blitter_br & mcu_br_n ),
@@ -562,6 +570,30 @@ sigma_delta_dac sigma_delta_dac (
 	.right    ( AUDIO_R     )       // right bitsteam output
 );
 
+// mega ste cache controller 8 bit interface at $ff8e20 - $ff8e21
+// STEroids mode does not have this config, it always runs full throttle
+wire       mste_ctrl_sel = !steroids && mste && iodevice && !lds_n && ({cpu_a[15:1], 1'd0} == 16'h8e20);
+wire [7:0] mste_ctrl_data_out;
+wire       enable_16mhz, enable_cache;
+
+mste_ctrl mste_ctrl (
+	// cpu register interface
+	.clk      ( clk_32             ),
+	.reset    ( reset              ),
+	.din      ( cpu_dout[7:0]      ),
+	.sel      ( mste_ctrl_sel      ),
+	.rw       ( cpu_rw             ),
+	.dout     ( mste_ctrl_data_out ),
+
+	.enable_cache ( enable_cache   ),
+	.enable_16mhz ( enable_16mhz   )
+);
+
+// vme controller 8 bit interface at $ffff8e00 - $ffff8e0f
+// (requierd to enable Mega STE cpu speed/cache control)
+wire vme_sel = !steroids && mste && iodevice && ({cpu_a[15:4], 4'd0} == 16'h8e00);
+
+// Blitter
 wire [23:1] blitter_master_addr;
 wire blitter_master_write;
 wire blitter_master_read;
@@ -571,7 +603,7 @@ wire blitter_bgack;
 wire blitter_bg_n;
 wire [15:0] blitter_master_data_out;
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
-wire blitter_sel = (system_ctrl[19] || ste) && cpu_a[23:16] == 8'hff && ~as_n && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
+wire blitter_sel = (system_ctrl[19] || ste) && iodevice && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
 wire [15:0] blitter_data_out;
 
 blitter blitter (

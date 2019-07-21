@@ -21,15 +21,13 @@
 
 module mste_ctrl (
 	// cpu register interface
-	input 		 clk,
-	input        clk_en,
-	input 		 reset,
-	input [7:0] 	 din,
-	input 		 sel,
-	input 		 ds,
-	input 		 rw,
+	input        clk,
+	input        reset,
+	input [7:0]  din,
+	input        sel,
+	input        rw,
 	output reg [7:0] dout,
-	
+
 	output enable_cache,
 	output enable_16mhz
 );
@@ -39,9 +37,9 @@ assign enable_cache = mste_config[1];
 
 reg [7:0] mste_config;
 
-always @(sel, ds, rw, mste_config) begin
+always @(sel, rw, mste_config) begin
 	dout = 8'd0;
-	if(sel && ~ds && rw)
+	if(sel && rw)
 		dout = mste_config;
 end
 
@@ -49,7 +47,7 @@ always @(posedge clk) begin
 	if(reset)
 		mste_config <= 8'h00;
 	else begin
-		if(clk_en && sel && ~ds && ~rw)
+		if(sel && ~rw)
 			mste_config <= din;
 	end
 end
