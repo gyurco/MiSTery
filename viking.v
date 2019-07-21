@@ -70,7 +70,7 @@ localparam VFP  = 9;
 localparam VS   = 4;
 localparam VBP  = 9;
 
-assign read = (bus_cycle == 3) && me;  // memory enable can directly be used as a ram read signal
+assign read = (bus_cycle == 2) && me;  // memory enable can directly be used as a ram read signal
 
 // ---------------------------------------------------------------------------
 // --------------------------- internal state counter ------------------------
@@ -82,7 +82,7 @@ always @(posedge pclk) begin
 
 	clk_8_enD <= clk_8_en;
 	// clk_8_en is at the middle of the cycle
-	if (~clk_8_enD & clk_8_en) t <= 4'h9; else t <= t + 1'd1;
+	if (~clk_8_enD & clk_8_en) t <= 4'hD; else t <= t + 1'd1;
 end
 
 // create internal bus_cycle signal which is stable on the positive clock
@@ -99,7 +99,7 @@ always@(posedge pclk) begin
 	if(h_cnt==HBP1+H+HFP+HS+HBP2-1) begin
 		// make sure a line starts with the "video" bus cyle (0)
 		// cpu has cycles 1 and 2
-		if(bus_cycle_L == { 2'd2, 4'd15 })
+		if(bus_cycle_L == { 2'd3, 4'd15 })
 			h_cnt<=0;
 	end else
 		h_cnt <= h_cnt + 1'd1;
@@ -126,7 +126,7 @@ always@(posedge pclk) begin
 	else if(me && bus_cycle_L == 6'h00)   // directly after read 
 		addr <= addr + 23'd4;              // advance 4 words (64 bits)
 		
-	if(me && (bus_cycle_L == 6'h3f))
+	if(me && (bus_cycle_L == 6'h2f))
 		input_latch <= data;
 		
 	if(bus_cycle_L == 6'h0f)

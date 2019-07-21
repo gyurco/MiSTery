@@ -73,6 +73,9 @@ set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|
 set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -max 1.5 [get_ports SDRAM_CLK]
 set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -min -0.8 [get_ports SDRAM_CLK]
 
+set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -max 0 [get_ports {VGA_*}]
+set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -min -5 [get_ports {VGA_*}]
+
 #**************************************************************
 # Set Clock Groups
 #**************************************************************
@@ -84,8 +87,6 @@ set_clock_groups -asynchronous -group [get_clocks {pll_mfp1|altpll_component|aut
 # Set False Path
 #**************************************************************
 
-# Don't care about the debug overlay
-set_false_path -to [get_ports {VGA_*}]
 set_false_path -to [get_ports {UART_TX}]
 set_false_path -to [get_ports {AUDIO_L}]
 set_false_path -to [get_ports {AUDIO_R}]
@@ -96,14 +97,22 @@ set_false_path -to [get_ports {LED}]
 #**************************************************************
 
 # SDRAM 96 MHz to system 32 MHz
-set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2
-set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 1
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 3
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 2
 
 # FX68K
 set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 2
 set_multicycle_path -start -hold -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 1
 set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|nanoAddr[*]] 2
 set_multicycle_path -start -hold -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|nanoAddr[*]] 1
+
+# Viking 128 MHz to SDRAM 96 MHz
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 1
+
+# VGA
+set_multicycle_path -start -to [get_ports {VGA_*}] -setup 4
+set_multicycle_path -start -to [get_ports {VGA_*}] -hold 3
 
 #**************************************************************
 # Set Maximum Delay

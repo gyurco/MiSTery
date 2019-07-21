@@ -58,18 +58,23 @@ wire psg_stereo = system_ctrl[22];
 
 // clock generation
 wire pll_locked;
+wire clk_2;
 wire clk_32;
 wire clk_96;
+wire clk_128;
 
 // use pll
 clock clock (
   .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
   .c0           (clk_96           ), // output clock c0 (96MHz)
   .c1           (clk_32           ), // output clock c1 (32MHz)
+  .c2           (clk_128          ), // output clock c2 (128MHz)
+  .c3           (clk_2            ), // output clock c3 (2MHz)
   .locked       (pll_locked       )  // pll locked output
 );
-assign SDRAM_CLK = clk_96;
 wire init = ~pll_locked;
+
+assign SDRAM_CLK = clk_96;
 
 // MFP clock
 // required: 2.4576 MHz
@@ -213,7 +218,10 @@ gstmcu gstmcu (
 	.SREQ       ( sreq),
 	.SLOAD_N    ( sload_n),
 	.SINT       ( sint ),
-	.bus_cycle  ( bus_cycle )
+
+	.viking_at_c0  ( viking_enable && !steroids ),
+	.viking_at_e8  ( viking_enable &&  steroids ),
+	.bus_cycle     ( bus_cycle )
 );
 
 wire [15:0] shifter_dout;
@@ -251,24 +259,85 @@ gstshifter gstshifter (
 	.audio_right( dma_snd_r )
 );
 
+// --------------- the Viking compatible 1280x1024 graphics card -----------------
+
+// viking/sm194 is enabled and max 8MB memory may be enabled. In steroids mode
+// video memory is moved to $e80000 and all stram up to 14MB may be used
+wire viking_mem_ok = 1'b1;//MEM512K || MEM1M || MEM2M || MEM4M || MEM8M;
+wire viking_enable = (system_ctrl[28] && viking_mem_ok) || steroids;
+
+// check for cpu access to 0xcxxxxx with viking enabled to switch video
+// output once the driver loads. 256 accesses to the viking memory range
+// are considered a valid sign that the driver is working. Without driver
+// others may also probe that area which is why we want to see 256 accesses
+reg [7:0] viking_in_use;
+reg       viking_active;
+
+always @(posedge clk_32) begin
+	if(reset) begin
+		viking_in_use <= 8'h00;
+		viking_active <= 1'b0;
+	end else begin
+		// cpu writes to $c0xxxx or $e80000
+		if(mhz8_en1 && !as_n && viking_enable &&
+		  (cpu_a[23:18] == (steroids?6'b111010:6'b110000)) && (viking_in_use != 8'hff))
+			viking_in_use <= viking_in_use + 1'd1;
+
+		viking_active <= (viking_in_use == 8'hff);
+	end
+end
+
+wire viking_hs, viking_vs;
+wire [3:0] viking_r, viking_g, viking_b;
+
+wire [23:1] viking_vaddr;
+wire viking_read;
+
+viking viking (
+	.pclk      ( clk_128         ), // 128MHz
+	.himem     ( steroids        ),
+	.clk_8_en  ( mhz8_en1        ), // 8 MHz bus clock
+	.bus_cycle ( bus_cycle       ), // bus-cycle to sync video memory access with cpu
+
+	// memory interface
+	.addr      ( viking_vaddr    ), // video word address
+	.read      ( viking_read     ), // video read cycle
+	.data      ( ram_data_out64  ), // video data read
+
+	// video output
+	.hs        ( viking_hs       ),
+	.vs        ( viking_vs       ),
+	.r         ( viking_r        ),
+	.g         ( viking_g        ),
+	.b         ( viking_b        )
+);
+
+wire       video_clk = viking_active ? clk_128 : clk_32;
+wire [3:0] stvid_r   = viking_active?viking_r:r;
+wire [3:0] stvid_g   = viking_active?viking_g:g;
+wire [3:0] stvid_b   = viking_active?viking_b:b;
+wire       stvid_hs  = viking_active?viking_hs:hsync_n;
+wire       stvid_vs  = viking_active?viking_vs:vsync_n;
+
 mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
-	.clk_sys    ( clk_32 ),
+	.clk_sys    ( video_clk ),
 	.SPI_SCK    ( SPI_SCK ),
 	.SPI_SS3    ( SPI_SS3 ),
 	.SPI_DI     ( SPI_DI ),
-	.R          ( r ),
-	.G          ( g ),
-	.B          ( b ),
-	.HSync      ( hsync_n ),
-   .VSync      ( vsync_n ),
-   .VGA_R      ( VGA_R ),
+	.R          ( stvid_r ),
+	.G          ( stvid_g ),
+	.B          ( stvid_b ),
+	.HSync      ( stvid_hs ),
+	.VSync      ( stvid_vs ),
+	.VGA_R      ( VGA_R ),
 	.VGA_G      ( VGA_G ),
 	.VGA_B      ( VGA_B ),
 	.VGA_VS     ( VGA_VS ),
 	.VGA_HS     ( VGA_HS ),
 	.ce_divider ( 1'b1 ),
 	.rotate     ( 2'b00 ),
-	.scandoubler_disable( scandoubler_disable | mono ),
+	.scandoubler_disable( scandoubler_disable | mono | viking_active ),
+	.no_csync   ( mono | viking_active ),
 	.scanlines  ( system_ctrl[21:20] ),
 	.ypbpr      ( ypbpr )
 );
@@ -554,7 +623,7 @@ data_io data_io (
 	.sdo             ( dio_sdo             ),
 	.clk             ( clk_32              ),
 	.ctrl_out        ( system_ctrl         ),
-	.video_adj	     ( video_adj           ),
+	.video_adj       ( ),
 	.addr_strobe     ( ),
 	.addr_reg        ( ),
 	.data_in_strobe_uio ( dio_data_in_strobe_uio ),
@@ -574,9 +643,7 @@ data_io data_io (
 // floppy_sel is active low
 wire wr_prot = (floppy_sel == 2'b01)?system_ctrl[7]:system_ctrl[6];
 
-//wire [15:0] dma_dout;
 wire dma_write, dma_read;
-wire dma_br = 0;
 wire [15:0] dma_data_out;
 
 dma dma (
@@ -628,6 +695,7 @@ wire blitter_has_bus = blitter_bgack;
 
 wire cpu_precycle = (bus_cycle == 0);
 wire cpu_cycle    = (bus_cycle == 1);
+wire viking_cycle = (bus_cycle == 2);
 
 reg ras_n_d;
 reg data_wr;
@@ -647,10 +715,14 @@ always @(posedge clk_32) begin
 end
 
 // ----------------- RAM address --------------
-wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:(cpu_cycle & blitter_has_bus)?blitter_master_addr:ram_a;
+wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:
+                            (cpu_cycle & blitter_has_bus)?blitter_master_addr:
+                            (viking_cycle & viking_active & viking_read)?viking_vaddr:ram_a;
 
 // ----------------- RAM read -----------------
-wire sdram_oe = (cpu_cycle & dio_download)?1'b0:(cpu_cycle & blitter_master_read)?1'b1:ram_oe;
+wire sdram_oe = (cpu_cycle & dio_download)?1'b0:
+                (cpu_cycle & blitter_master_read)?1'b1:
+                (viking_cycle & viking_active & viking_read)?1'b1:ram_oe;
 
 // ----------------- RAM write -----------------
 wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_write)?1'b1:ram_we;
@@ -665,7 +737,7 @@ wire sdram_lds = (cpu_cycle & (~mcu_bgack_n | blitter_has_bus | dio_download))?1
 
 wire [23:1] rom_a = !rom2_n ? { 4'hE, 2'b00, cpu_a[17:1] } : cpu_a;
 wire [15:0] ram_data_out;
-wire [63:0] ram_data_out_64;
+wire [63:0] ram_data_out64;
 wire [15:0] rom_data_out;
 
 assign SDRAM_CKE = 1'b1;
@@ -693,7 +765,7 @@ sdram sdram (
 	.we            ( sdram_we                 ),
 	.oe            ( sdram_oe                 ),
 	.dout          ( ram_data_out             ),
-	.dout64        ( ram_data_out_64          ),
+	.dout64        ( ram_data_out64           ),
 
 	.rom_oe        ( ~rom_n                   ),
 	.rom_addr      ( rom_a                    ),
