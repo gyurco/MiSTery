@@ -224,6 +224,7 @@ gstmcu gstmcu (
 	.SLOAD_N    ( sload_n),
 	.SINT       ( sint ),
 
+	.st            ( ~ste ),
 	.tos192k       ( tos192k ),
 	.viking_at_c0  ( viking_enable && !steroids ),
 	.viking_at_e8  ( viking_enable &&  steroids ),
