@@ -167,10 +167,6 @@ always @(posedge clk_96) begin
 				sd_addr <= { 1'b0, addr[19:8] };
 				sd_ba <= addr[21:20];
 
-				// always return both bytes in a read. The cpu may not
-				// need it, but the caches need to be able to store everything
-				sd_dqm <= we ? ~ds : 2'b00;
-
 				// lowest address for burst read
 				burst_addr <= addr[1:0];
 
@@ -184,7 +180,6 @@ always @(posedge clk_96) begin
 				sd_cmd <= CMD_ACTIVE;
 				sd_addr <= { 1'b0, rom_addr[19:8] };
 				sd_ba <= rom_addr[21:20];
-				sd_dqm <= 2'b00;
 				burst_addr <= rom_addr[1:0];
 			end else begin
 				oe_latch <= 0;
@@ -200,6 +195,10 @@ always @(posedge clk_96) begin
 			if(t == STATE_CMD_CONT) begin
 				sd_cmd <= we_latch?CMD_WRITE:CMD_READ;
 				if (we_latch) sd_data <= din_latch;
+				// always return both bytes in a read. The cpu may not
+				// need it, but the caches need to be able to store everything
+				sd_dqm <= we_latch ? ~ds : 2'b00;
+
 				sd_addr <= { 4'b0010, addr_latch[22], addr_latch[7:0] };  // auto precharge
 			end
 

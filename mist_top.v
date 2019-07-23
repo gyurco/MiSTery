@@ -224,6 +224,7 @@ gstmcu gstmcu (
 	.SLOAD_N    ( sload_n),
 	.SINT       ( sint ),
 
+	.tos192k       ( tos192k ),
 	.viking_at_c0  ( viking_enable && !steroids ),
 	.viking_at_e8  ( viking_enable &&  steroids ),
 	.bus_cycle     ( bus_cycle )
@@ -735,6 +736,8 @@ wire ram_oe = ras_n_d & ~ras_n & ram_we_n & |ram_a;
 wire ram_we = ras_n_d & ~ras_n & ~ram_we_n;
 
 // TOS/cartridge upload via data_io
+reg tos192k = 1'b0;
+
 always @(posedge clk_32) begin
 	reg dio_data_in_strobe_uioD;
 
@@ -744,6 +747,7 @@ always @(posedge clk_32) begin
 		dio_data_in_strobe_uioD <= dio_data_in_strobe_uio;
 		if (dio_data_in_strobe_uio ^ dio_data_in_strobe_uioD) data_wr <= 1'b1;
 	end
+	if (dio_download) tos192k <= (dio_data_addr[23:18] == 6'b111111);
 end
 
 // ----------------- RAM address --------------
@@ -762,12 +766,12 @@ wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_w
 wire [15:0] ram_data_in = dio_download?dio_data_in_reg:(blitter_has_bus?blitter_master_data_out:ram_din);
 
 // data strobe
-// dso inside GSTMCU should be fixed: it is delayed by a half 32MHz cycle, which is an issue
-// when used in the SDRAM controller. Now use mcu_bgack_n.
-wire sdram_uds = (cpu_cycle & (~mcu_bgack_n | blitter_has_bus | dio_download))?1'b1:ram_uds;
-wire sdram_lds = (cpu_cycle & (~mcu_bgack_n | blitter_has_bus | dio_download))?1'b1:ram_lds;
+wire sdram_uds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_uds;
+wire sdram_lds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_lds;
 
-wire [23:1] rom_a = !rom2_n ? { 4'hE, 2'b00, cpu_a[17:1] } : cpu_a;
+wire [23:1] rom_a = (!rom2_n & ~tos192k) ? { 4'hE, 2'b00, cpu_a[17:1] } :
+                    (!rom2_n &  tos192k) ? { 4'hF, 2'b11, cpu_a[17:1] } : cpu_a;
+
 wire [15:0] ram_data_out;
 wire [63:0] ram_data_out64;
 wire [15:0] rom_data_out;
