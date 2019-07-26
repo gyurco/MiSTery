@@ -700,7 +700,7 @@ dma dma (
 
 	// cpu interface
 	.cpu_din      ( cpu_dout      ),
-	.cpu_sel      ( ~fcs_n ),
+	.cpu_sel      ( ~fcs_n        ),
 	.cpu_a1       ( cpu_a[1]      ),
 	.cpu_rw       ( cpu_rw        ),
 	.cpu_dout     ( dma_data_out  ),
@@ -729,7 +729,7 @@ wire blitter_has_bus = blitter_bgack;
 
 wire cpu_precycle = (bus_cycle == 0);
 wire cpu_cycle    = (bus_cycle == 1);
-wire viking_cycle = (bus_cycle == 2);
+wire viking_cycle = (bus_cycle == 2); // this is the shifter cycle, too
 
 reg ras_n_d;
 reg data_wr;
@@ -748,7 +748,10 @@ always @(posedge clk_32) begin
 		dio_data_in_strobe_uioD <= dio_data_in_strobe_uio;
 		if (dio_data_in_strobe_uio ^ dio_data_in_strobe_uioD) data_wr <= 1'b1;
 	end
-	if (dio_download) tos192k <= (dio_data_addr[23:18] == 6'b111111);
+	if (dio_download) begin
+		if (dio_data_addr[23:18] == 6'b111111) tos192k <= 1'b1;
+		else if (dio_data_addr[23:20] == 4'he) tos192k <= 1'b0;
+	end
 end
 
 // ----------------- RAM address --------------
