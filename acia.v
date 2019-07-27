@@ -49,13 +49,12 @@ reg [7:0] serial_cr;
  
 assign irq = serial_irq;
 
-// ---------------- send acia data to io controller ------------
+// ---------------- CPU read interface ------------
 
-always @(sel, rw, rs, serial_status, serial_rx_data, serial_rx_data_available, serial_tx_empty, serial_irq) begin
+always @(sel, rw, rs, serial_status, serial_rx_data) begin
 	dout = 8'h00;
 
 	if(sel && rw) begin
-      // serial acia read
       if(~rs) dout = serial_status;
       if( rs) dout = serial_rx_data;
    end
@@ -68,9 +67,12 @@ wire serial_irq = (serial_cr[7] && serial_rx_data_available) ||    // rx irq
 wire [7:0] serial_status = { serial_irq, 1'b0 /* parity err */, serial_rx_overrun, serial_rx_frame_error,
 									2'b00 /* CTS & DCD */, serial_tx_empty, serial_rx_data_available};
 
-// serial runs at 31250bit/s which is exactly 1/256 of the 8Mhz system clock
-   
-// 8MHz/256 = 31250Hz -> serial bit rate
+// implemented bitrates:
+// - 500kHz/64 = 7812.5 bps (ST iKBD)
+// - 500kHz/16 = 31250 bps  (ST MIDI)
+// only 8N1 framing
+
+// 32MHz/4096 = 7812.5Hz
 reg [11:0] serial_clk;
 always @(posedge clk)
 	serial_clk <= serial_clk + 1'd1;
