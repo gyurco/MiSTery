@@ -110,7 +110,7 @@ always @(posedge clk_sys) begin
 
 	if(hs && ~HSync) begin
 		cnt    <= 0;
-		if (cnt <= 512) pixsz = 0;
+		if (cnt <= 512) pixsz <= 0;
 		else pixsz  <= (cnt >> 9) - 1;
 		pixcnt <= 0;
 		ce_pix <= 1;

@@ -101,29 +101,29 @@ always @(sel, rw, addr, src_y_inc, src_x_inc, src_addr, endmask1, endmask2, endm
 	dout = 16'h0000;
 
 	if(sel && rw) begin
-	   if((addr >= 5'h00) && (addr <= 5'h0f)) dout <= halftone_ram[addr];
+	   if((addr >= 5'h00) && (addr <= 5'h0f)) dout = halftone_ram[addr];
 	   
-	   if(addr == 5'h10) dout <= { src_x_inc, 1'b0 };
-	   if(addr == 5'h11) dout <= { src_y_inc, 1'b0 };
-	   if(addr == 5'h12) dout <= { 8'h00, src_addr[23:16] };
-	   if(addr == 5'h13) dout <= { src_addr [15:1], 1'b0 };
+	   if(addr == 5'h10) dout = { src_x_inc, 1'b0 };
+	   if(addr == 5'h11) dout = { src_y_inc, 1'b0 };
+	   if(addr == 5'h12) dout = { 8'h00, src_addr[23:16] };
+	   if(addr == 5'h13) dout = { src_addr [15:1], 1'b0 };
 
-	   if(addr == 5'h14) dout <= endmask1;
-	   if(addr == 5'h15) dout <= endmask2;
-	   if(addr == 5'h16) dout <= endmask3;
+	   if(addr == 5'h14) dout = endmask1;
+	   if(addr == 5'h15) dout = endmask2;
+	   if(addr == 5'h16) dout = endmask3;
 			
-	   if(addr == 5'h17) dout <= { dst_x_inc, 1'b0 };
-	   if(addr == 5'h18) dout <= { dst_y_inc, 1'b0 };
-	   if(addr == 5'h19) dout <= { 8'h00, dst_addr[23:16] };
-	   if(addr == 5'h1a) dout <= { dst_addr [15:1], 1'b0 };
+	   if(addr == 5'h17) dout = { dst_x_inc, 1'b0 };
+	   if(addr == 5'h18) dout = { dst_y_inc, 1'b0 };
+	   if(addr == 5'h19) dout = { 8'h00, dst_addr[23:16] };
+	   if(addr == 5'h1a) dout = { dst_addr [15:1], 1'b0 };
 
-	   if(addr == 5'h1b) dout <= x_count;
-	   if(addr == 5'h1c) dout <= y_count;
+	   if(addr == 5'h1b) dout = x_count;
+	   if(addr == 5'h1c) dout = y_count;
 
 	   // since reading them has no side effect we can return the 8 bit registers
 	   // without caring for uds/lds
-	   if(addr == 5'h1d) dout <= { 6'b000000, hop, 4'b0000, op };
-	   if(addr == 5'h1e) dout <= { busy, hog, smudge, 1'b0, line_number_latch, fxsr, nfsr, 2'b00, skew };
+	   if(addr == 5'h1d) dout = { 6'b000000, hop, 4'b0000, op };
+	   if(addr == 5'h1e) dout = { busy, hog, smudge, 1'b0, line_number_latch, fxsr, nfsr, 2'b00, skew };
 	end
 end
 
