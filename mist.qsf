@@ -26,7 +26,7 @@ set_global_assignment -name DEVICE EP3C25E144C8
 set_global_assignment -name TOP_LEVEL_ENTITY mist_top
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 7.2
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:27:29  OCTOBER 30, 2007"
-set_global_assignment -name LAST_QUARTUS_VERSION 13.1
+set_global_assignment -name LAST_QUARTUS_VERSION "13.1 SP4.26"
 set_global_assignment -name USE_GENERATED_PHYSICAL_CONSTRAINTS OFF -section_id eda_palace
 set_global_assignment -name DEVICE_FILTER_PIN_COUNT 144
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "NO HEAT SINK WITH STILL AIR"
@@ -119,7 +119,7 @@ set_location_assignment PIN_43 -to SDRAM_CLK
 set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE SPEED
 set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name ENABLE_SIGNALTAP OFF
-set_global_assignment -name USE_SIGNALTAP_FILE out/cpu.stp
+set_global_assignment -name USE_SIGNALTAP_FILE out/ps2.stp
 set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF
 set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT NORMAL
@@ -306,6 +306,7 @@ set_instance_assignment -name CURRENT_STRENGTH_NEW 8MA -to AUDIO_R
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to UART_RX
 set_location_assignment PLL_1 -to clock|altpll_component|auto_generated|pll1
 set_global_assignment -name SEED 1
+set_global_assignment -name ALLOW_ANY_ROM_SIZE_FOR_RECOGNITION ON
 set_global_assignment -name VERILOG_FILE sigma_delta_dac.v
 set_global_assignment -name VERILOG_FILE acsi.v
 set_global_assignment -name VERILOG_FILE fdc.v
@@ -326,6 +327,15 @@ set_global_assignment -name VERILOG_FILE mfp.v
 set_global_assignment -name VERILOG_FILE mfp_srff16.v
 set_global_assignment -name VERILOG_FILE mfp_timer.v
 set_global_assignment -name VERILOG_FILE mfp_hbit16.v
+set_global_assignment -name SYSTEMVERILOG_FILE ikbd/ps2.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ikbd/ikbd.sv
+set_global_assignment -name VERILOG_FILE ikbd/rom/MCU_BIROM.v
+set_global_assignment -name VERILOG_FILE ikbd/hd63701/HD63701_SEQ.v
+set_global_assignment -name VERILOG_FILE ikbd/hd63701/HD63701_MCROM.v
+set_global_assignment -name VERILOG_FILE ikbd/hd63701/HD63701_EXEC.v
+set_global_assignment -name VERILOG_FILE ikbd/hd63701/HD63701_CORE.v
+set_global_assignment -name VERILOG_FILE ikbd/hd63701/HD63701_ALU.v
+set_global_assignment -name VERILOG_FILE ikbd/hd63701/HD63701.v
 set_global_assignment -name VERILOG_FILE gstmcu/hdl/register.v
 set_global_assignment -name VERILOG_FILE gstmcu/hdl/latch.v
 set_global_assignment -name VERILOG_FILE gstmcu/hdl/mcucontrol.v
@@ -343,4 +353,5 @@ set_global_assignment -name SIGNALTAP_FILE out/shifter.stp
 set_global_assignment -name SIGNALTAP_FILE out/disp.stp
 set_global_assignment -name SIGNALTAP_FILE out/cpu.stp
 set_global_assignment -name SIGNALTAP_FILE out/vid.stp
+set_global_assignment -name SIGNALTAP_FILE out/ps2.stp
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

@@ -135,7 +135,7 @@ assign      cpu_din =
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
               !rom_n   ? rom_data_out :
-              !n6850   ? { acia_data_out, 8'hFF } :
+              !n6850   ? { cpu_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
               mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
               mcu_dout;
@@ -386,7 +386,11 @@ fx68k fx68k (
 	.eab        ( cpu_a )
 );
 
-wire acia_irq, dma_irq;
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------------ MFP ------------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+wire acia_irq = kbd_acia_irq || midi_acia_irq, dma_irq;
 
 // the STE delays the xsirq by 1/250000 second before feeding it into timer_a
 // 74ls164
@@ -415,7 +419,7 @@ wire mfp_io7 = system_ctrl[8] ^ (ste?xsint:1'b0);
 // if no printer redirection is being used this is wired to the extra joystick ports provided
 // by the "gauntlet2 adapter". If no extra joystick ports are present this will return 1
 wire parallel_fifo_full;
-wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy0[4];
+wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy2[4];
 
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
 wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
@@ -455,36 +459,79 @@ mfp mfp (
 	.i        ( mfp_gpio_in   )   // gpio-in
 );
 
-wire [7:0] acia_data_out;
+/* ------------------------------------------------------------------------------ */
+/* ---------------------------------- IKBD -------------------------------------- */
+/* ------------------------------------------------------------------------------ */
 
-acia acia (
+wire ikbd_tx, ikbd_rx;
+
+ikbd ikbd (
+	.clk(clk_2),
+	.res(reset),
+
+	.ps2_kbd_clk(ps2_kbd_clk),
+	.ps2_kbd_data(ps2_kbd_data),
+	.ps2_mouse_clk(ps2_mouse_clk),
+	.ps2_mouse_data(ps2_mouse_data),
+	.tx(ikbd_tx),
+	.rx(ikbd_rx),
+	.joystick({joy1[4], joy1[0], joy1[1], joy1[2], joy1[3]})
+);
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------- keyboard ACIA -------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+wire [7:0] kbd_acia_data_out;
+wire       kbd_acia_irq;
+
+acia kbd_acia (
 	// cpu interface
-	.clk      ( clk_32        ),
-	.E        ( cpu_E         ),
-	.reset    ( reset         ),
-	.din      ( cpu_dout[15:8]),
-	.sel      ( ~n6850        ),
-	.addr     ( cpu_a[2:1]    ),
-	.rw       ( cpu_rw        ),
-	.dout     ( acia_data_out ),
-	.irq      ( acia_irq      ),
+	.clk      ( clk_32             ),
+	.E        ( cpu_E              ),
+	.reset    ( reset              ),
+	.din      ( cpu_dout[15:8]     ),
+	.sel      ( ~n6850 & ~cpu_a[2] ),
+	.rs       ( cpu_a[1]           ),
+	.rw       ( cpu_rw             ),
+	.dout     ( kbd_acia_data_out  ),
+	.irq      ( kbd_acia_irq       ),
 
-	// physical MIDI interface
-	.midi_out ( UART_TX       ),
-	.midi_in  ( UART_RX       ),
-	 
-	// ikbd interface
-	.ikbd_data_out_available 	(ikbd_data_from_acia_available),
-	.ikbd_strobe_out 				(ikbd_strobe_from_acia),
-	.ikbd_data_out 	   		(ikbd_data_from_acia),
-	.ikbd_strobe_in 				(ikbd_strobe_to_acia),
-	.ikbd_data_in 	   			(ikbd_data_to_acia),
+	.rx       ( ikbd_tx            ),
+	.tx       ( ikbd_rx            ),
+);
+
+/* ------------------------------------------------------------------------------ */
+/* --------------------------------- MIDI ACIA ---------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+wire [7:0] midi_acia_data_out;
+wire       midi_acia_irq;
+
+acia midi_acia (
+	// cpu interface
+	.clk      ( clk_32             ),
+	.E        ( cpu_E              ),
+	.reset    ( reset              ),
+	.din      ( cpu_dout[15:8]     ),
+	.sel      ( ~n6850 & cpu_a[2]  ),
+	.rs       ( cpu_a[1]           ),
+	.rw       ( cpu_rw             ),
+	.dout     ( midi_acia_data_out ),
+	.irq      ( midi_acia_irq      ),
+
+	.rx       ( ~UART_RX           ),
+	.tx       ( UART_TX            ),
 
 	// redirected midi interface
-	.midi_data_out_available 	(midi_data_from_acia_available),
-	.midi_strobe_out 				(midi_strobe_from_acia),
-	.midi_data_out 	   		(midi_data_from_acia)
+	.serial_data_out_available     (midi_data_from_acia_available),
+	.serial_strobe_out             (midi_strobe_from_acia),
+	.serial_data_out               (midi_data_from_acia)
 );
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------------ PSG ------------------------------------- */
+/* ------------------------------------------------------------------------------ */
 
 wire [7:0] snd_data_out;
 wire [7:0] ym_a_out, ym_b_out, ym_c_out;
@@ -502,8 +549,8 @@ end
 // extra joysticks are wired to the printer port
 // using the "gauntlet2 interface", fire of
 // joystick 0 is connected to the mfp I0 (busy)
-wire [7:0] port_b_in = { ~joy0[0], ~joy0[1], ~joy0[2], ~joy0[3],~joy1[0], ~joy1[1], ~joy1[2], ~joy1[3]};
-wire [7:0] port_a_in = { 2'b11, ~joy1[4], 5'b11111 };
+wire [7:0] port_b_in = { ~joy2[0], ~joy2[1], ~joy2[2], ~joy2[3],~joy3[0], ~joy3[1], ~joy3[2], ~joy3[3]};
+wire [7:0] port_a_in = { 2'b11, ~joy3[4], 5'b11111 };
 wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 wire       floppy_side = port_a_out[0];
@@ -572,6 +619,10 @@ sigma_delta_dac sigma_delta_dac (
 	.right    ( AUDIO_R     )       // right bitsteam output
 );
 
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------ Mega STe control ------------------------------ */
+/* ------------------------------------------------------------------------------ */
+
 // mega ste cache controller 8 bit interface at $ff8e20 - $ff8e21
 // STEroids mode does not have this config, it always runs full throttle
 wire       mste_ctrl_sel = !steroids && mste && iodevice && !lds_n && ({cpu_a[15:1], 1'd0} == 16'h8e20);
@@ -595,7 +646,10 @@ mste_ctrl mste_ctrl (
 // (requierd to enable Mega STE cpu speed/cache control)
 wire vme_sel = !steroids && mste && iodevice && ({cpu_a[15:4], 4'd0} == 16'h8e00);
 
-// Blitter
+/* ------------------------------------------------------------------------------ */
+/* ---------------------------------- Blitter ----------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
 wire [23:1] blitter_master_addr;
 wire blitter_master_write;
 wire blitter_master_read;
@@ -636,6 +690,10 @@ blitter blitter (
 
 	.turbo       ( 0             )
 );
+
+/* ------------------------------------------------------------------------------ */
+/* ----------------------------- MiST data IO + DMA ----------------------------- */
+/* ------------------------------------------------------------------------------ */
 
 wire        dio_data_in_strobe_uio;
 wire        dio_data_in_strobe_mist;
@@ -812,6 +870,10 @@ sdram sdram (
 	.rom_dout      ( rom_data_out             )
 );
 
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------ MiST user IO ---------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
 // multiplex spi_do, drive it from user_io if that's selected, drive
 // it from data_io if it's selected and leave it open else (also
 // to be able to monitor sd card data directly)
@@ -821,15 +883,6 @@ assign SPI_DO = (CONF_DATA0 == 1'b0)?user_io_sdo:
 	((SPI_SS2 == 1'b0)?dio_sdo:1'bZ);
 
 wire [31:0] system_ctrl;
-
-// connection to transfer ikbd data from io controller to acia
-wire [7:0] ikbd_data_to_acia;
-wire ikbd_strobe_to_acia;
-
-// connection to transfer ikbd data from acia to io controller
-wire [7:0] ikbd_data_from_acia;
-wire ikbd_strobe_from_acia;
-wire ikbd_data_from_acia_available;
 
 // connection to transfer midi data from acia to io controller
 wire [7:0] midi_data_from_acia;
@@ -851,7 +904,7 @@ wire parallel_strobe_out;
 wire parallel_data_out_available;
 
 // extra joystick interface
-wire [5:0] joy0, joy1;
+wire [5:0] joy0, joy1, joy2, joy3;
 
 // connection between io controller and ethernet controller
 //   mac address transfer io controller -> ethernec
@@ -863,29 +916,31 @@ wire eth_tx_read_strobe, eth_tx_read_begin;
 wire [7:0] eth_rx_write_byte;
 wire eth_rx_write_strobe, eth_rx_write_begin;
 
+// ps2 keyboard-mouse emulation
+wire ps2_kbd_clk;
+wire ps2_kbd_data;
+wire ps2_mouse_clk;
+wire ps2_mouse_data;
+
 wire [2:0] switches;
 wire scandoubler_disable;
 wire ypbpr;
 
 //// user io has an extra spi channel outside minimig core ////
 user_io user_io(
+		.clk_sys                   (clk_32),
 		// the spi interface
 		.SPI_CLK                	(SPI_SCK),
 		.SPI_SS_IO						(CONF_DATA0),
 		.SPI_MISO						(user_io_sdo),
 		.SPI_MOSI						(SPI_DI),
-		
-		// ikbd interface
-      .ikbd_strobe_out				(ikbd_strobe_from_acia),
-      .ikbd_data_out					(ikbd_data_from_acia),
-      .ikbd_data_out_available	(ikbd_data_from_acia_available),
-      .ikbd_strobe_in				(ikbd_strobe_to_acia),
-      .ikbd_data_in					(ikbd_data_to_acia),
 
 		// extra joysticks
 		.joy0                  		(joy0),
 		.joy1                  		(joy1),
-		
+		.joy2                  		(joy2),
+		.joy3                  		(joy3),
+
 		// serial/rs232 interface
       .serial_strobe_out			(serial_strobe_from_mfp),
       .serial_data_out				(serial_data_from_mfp),
@@ -894,7 +949,7 @@ user_io user_io(
       .serial_strobe_in				(serial_strobe_to_mfp),
       .serial_data_in				(serial_data_to_mfp),
       .serial_status_in				(serial_status_to_mfp),
-		
+
 		// parallel interface
       .parallel_strobe_out			(parallel_strobe_out),
       .parallel_data_out			(parallel_data_out),
@@ -916,6 +971,12 @@ user_io user_io(
 		.eth_rx_write_begin			(eth_rx_write_begin),
 		.eth_rx_write_strobe			(eth_rx_write_strobe),
 		.eth_rx_write_byte			(eth_rx_write_byte),
+
+		// PS2 keyboard data
+		.ps2_kbd_clk               (ps2_kbd_clk),
+		.ps2_kbd_data              (ps2_kbd_data),
+		.ps2_mouse_clk             (ps2_mouse_clk),
+		.ps2_mouse_data            (ps2_mouse_data),
 
 		// io controller requests to disable vga scandoubler
 		.scandoubler_disable       (scandoubler_disable),

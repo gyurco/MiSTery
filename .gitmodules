@@ -4,3 +4,6 @@
 [submodule "gstmcu"]
 	path = gstmcu
 	url = https://github.com/gyurco/gstmcu
+[submodule "ikbd"]
+	path = ikbd
+	url = https://github.com/gyurco/ikbd
