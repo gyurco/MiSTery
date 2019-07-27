@@ -93,7 +93,7 @@ always @(posedge clk_32) begin
 	reg resetD;
 	mcu_reset_n <= 1;
 	resetD <= reset;
-	if (resetD & ~reset) mcu_reset_n <= 0;
+	if (~resetD & reset) mcu_reset_n <= 0;
 end
 
 wire        mhz4, mhz4_en, clk16, clk16_en = ~clk16;
