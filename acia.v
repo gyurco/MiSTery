@@ -205,12 +205,12 @@ always @(posedge clk) begin
 			if(rs) begin
 				if(serial_tx_cnt == 8'd0) begin
 					// transmitter idle? start immediately ...
-					serial_tx_shift_reg <= { 1'b1, din, 1'b0, 1'b1 };  // 8N1, lsb first
+					serial_tx_shift_reg <= { 1'b1, ~din, 1'b0, 1'b1 };  // 8N1, lsb first
 					serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
 					serial_tx_empty <= 1'b0;
 				end else begin
 					// ... otherwise store in data buffer
-					serial_tx_data <= din;
+					serial_tx_data <= ~din;
 					serial_tx_data_valid <= 1'b1;
 				end
 			end
