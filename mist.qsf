@@ -321,8 +321,8 @@ set_global_assignment -name VERILOG_FILE dma.v
 set_global_assignment -name VERILOG_FILE sdram.v
 set_global_assignment -name VERILOG_FILE io_fifo.v
 set_global_assignment -name SYSTEMVERILOG_FILE ym2149.sv
-set_global_assignment -name QIP_FILE out/clock32.qip
-set_global_assignment -name QIP_FILE out/clock.qip
+set_global_assignment -name QIP_FILE clock.qip
+set_global_assignment -name QIP_FILE clock32.qip
 set_global_assignment -name QIP_FILE pll_mfp1.qip
 set_global_assignment -name VERILOG_FILE mfp.v
 set_global_assignment -name VERILOG_FILE mfp_srff16.v
