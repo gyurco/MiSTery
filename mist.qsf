@@ -306,7 +306,7 @@ set_instance_assignment -name CURRENT_STRENGTH_NEW 8MA -to AUDIO_R
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to UART_RX
 set_location_assignment PLL_1 -to clock|altpll_component|auto_generated|pll1
 set_global_assignment -name SEED 1
-set_global_assignment -name ALLOW_ANY_ROM_SIZE_FOR_RECOGNITION ON
+set_global_assignment -name ALLOW_ANY_ROM_SIZE_FOR_RECOGNITION OFF
 set_global_assignment -name VERILOG_FILE sigma_delta_dac.v
 set_global_assignment -name VERILOG_FILE acsi.v
 set_global_assignment -name VERILOG_FILE fdc.v
@@ -316,12 +316,13 @@ set_global_assignment -name VERILOG_FILE mste_ctrl.v
 set_global_assignment -name VERILOG_FILE ethernec.v
 set_global_assignment -name VERILOG_FILE blitter.v
 set_global_assignment -name VERILOG_FILE acia.v
-set_global_assignment -name VERILOG_FILE clock.v
 set_global_assignment -name VERILOG_FILE mist_top.v
 set_global_assignment -name VERILOG_FILE dma.v
 set_global_assignment -name VERILOG_FILE sdram.v
 set_global_assignment -name VERILOG_FILE io_fifo.v
 set_global_assignment -name SYSTEMVERILOG_FILE ym2149.sv
+set_global_assignment -name QIP_FILE out/clock32.qip
+set_global_assignment -name QIP_FILE out/clock.qip
 set_global_assignment -name QIP_FILE pll_mfp1.qip
 set_global_assignment -name VERILOG_FILE mfp.v
 set_global_assignment -name VERILOG_FILE mfp_srff16.v

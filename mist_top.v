@@ -63,14 +63,20 @@ wire clk_32;
 wire clk_96;
 wire clk_128;
 
-// use pll
+// 32.084 MHz base clock
+wire mainclock;
+clock32 clock32 (
+	.inclk0      (CLOCK_27[0]),
+	.c0          (mainclock  )
+);
+
 clock clock (
-  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
-  .c0           (clk_96           ), // output clock c0 (96MHz)
-  .c1           (clk_32           ), // output clock c1 (32MHz)
-  .c2           (clk_128          ), // output clock c2 (128MHz)
-  .c3           (clk_2            ), // output clock c3 (2MHz)
-  .locked       (pll_locked       )  // pll locked output
+  .inclk0       (mainclock  ), // input clock (32.084MHz)
+  .c0           (clk_96     ), // output clock c0 (96MHz)
+  .c1           (clk_32     ), // output clock c1 (32MHz)
+  .c2           (clk_128    ), // output clock c2 (128MHz)
+  .c3           (clk_2      ), // output clock c3 (2MHz)
+  .locked       (pll_locked )  // pll locked output
 );
 wire init = ~pll_locked;
 
@@ -80,8 +86,8 @@ assign SDRAM_CLK = clk_96;
 // required: 2.4576 MHz
 wire clk_mfp;
 pll_mfp1 pll_mfp1 (
-  .inclk0       (CLOCK_27[0]      ), // input clock (27MHz)
-  .c0           (clk_mfp          )  // output clock c0 (2.4576MHz)
+  .inclk0       (CLOCK_27[0]), // input clock (27MHz)
+  .c0           (clk_mfp    )  // output clock c0 (2.4576MHz)
 );
 
 wire reset = system_ctrl[0];
