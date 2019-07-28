@@ -109,27 +109,35 @@ always @(posedge clk) begin
 		serial_cpu_data_readD <= serial_cpu_data_read;
 
 		// read on uart data register
-		if(sel && ~ds && rw && (addr == 5'h17))
+		if(bus_sel && rw && (addr == 5'h17))
 			serial_cpu_data_read <= 1'b1;
 	end
 end
 
-wire write = sel & clk_en & ~ds & ~rw;
-reg bus_dtack;
-always @(posedge clk)
-	if (~sel) bus_dtack <= 0;
-	else if (clk_en & sel & ~ds) bus_dtack <= 1;
+wire bus_sel = sel & ~ds;
+reg  bus_selD;
+reg  bus_dtack;
+wire write = clk_en & ~bus_selD & bus_sel & ~rw;
+
+always @(posedge clk) begin
+	if (clk_en) begin
+		bus_selD <= bus_sel;
+		if (bus_selD & bus_sel) bus_dtack <= 1'b1;
+		if (~bus_sel) bus_dtack <= 1'b0;
+	end
+end
 
 reg iack_dtack;
 reg iackD;
 always @(posedge clk) begin
-	iackD <= iack;
-	if (~iack) iack_dtack <= 0;
-	else if (iack_sel) iack_dtack <= 1;
+	if (clk_en) begin
+		iackD <= iack;
+		if (iackD & iack) iack_dtack <= 1'b1;
+		if (~iack) iack_dtack <= 1'b0;
+	end
 end
 
-wire iack_sel = ~iackD & iack;
-
+wire iack_sel = clk_en & ~iackD & iack;
 assign dtack = bus_dtack || iack_dtack;
 
 // timer a/b is in pulse mode
@@ -305,7 +313,7 @@ reg [7:0] uart_sync_chr;
 always @(*) begin
 
 	dout = 8'd0;
-	if(sel && ~ds && rw) begin
+	if(bus_sel && rw) begin
 		if(addr == 5'h00) dout = gpip_cpu_out;
 		if(addr == 5'h01) dout = aer;
 		if(addr == 5'h02) dout = ddr;
