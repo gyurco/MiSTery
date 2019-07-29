@@ -21,7 +21,7 @@ module acia (
 
 reg E_d;
 always @(posedge clk) E_d <= E;
-wire clk_en = ~E_d & E;
+wire clk_en = E_d & ~E;
 
 // --- serial output fifo ---
 // filled by the CPU when writing to the acia data register
@@ -135,7 +135,7 @@ always @(posedge clk) begin
 			   // received a bit
 				if(serial_rx_cnt[3:0] == 4'd0) begin
 					// in the middle of the bit -> shift new bit into msb
-					serial_rx_shift_reg <= { ~serial_in_filtered, serial_rx_shift_reg[7:1] };
+					serial_rx_shift_reg <= { serial_in_filtered, serial_rx_shift_reg[7:1] };
 				end
 
 				// receiving last (stop) bit
@@ -207,12 +207,12 @@ always @(posedge clk) begin
 			if(rs) begin
 				if(serial_tx_cnt == 8'd0) begin
 					// transmitter idle? start immediately ...
-					serial_tx_shift_reg <= { 1'b1, ~din, 1'b0, 1'b1 };  // 8N1, lsb first
+					serial_tx_shift_reg <= { 1'b1, din, 1'b0, 1'b1 };  // 8N1, lsb first
 					serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
 					serial_tx_empty <= 1'b0;
 				end else begin
 					// ... otherwise store in data buffer
-					serial_tx_data <= ~din;
+					serial_tx_data <= din;
 					serial_tx_data_valid <= 1'b1;
 				end
 			end

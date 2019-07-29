@@ -504,7 +504,7 @@ acia kbd_acia (
 	.irq      ( kbd_acia_irq       ),
 
 	.rx       ( ikbd_tx            ),
-	.tx       ( ikbd_rx            ),
+	.tx       ( ikbd_rx            )
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -526,7 +526,7 @@ acia midi_acia (
 	.dout     ( midi_acia_data_out ),
 	.irq      ( midi_acia_irq      ),
 
-	.rx       ( ~UART_RX           ),
+	.rx       ( UART_RX            ),
 	.tx       ( UART_TX            ),
 
 	// redirected midi interface
