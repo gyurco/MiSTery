@@ -246,16 +246,11 @@ end
 // ============================= DMA FIFO ================================
 // =======================================================================
 
-// 32 byte dma fifo (actually a 16 word fifo)
-reg [15:0] fifo [15:0];
-reg [3:0] fifo_wptr;         // word pointers
-reg [3:0] fifo_rptr;
+// 64 byte dma fifo (actually a 2x16 word fifo)
+reg [15:0] fifo [31:0];
+reg [4:0] fifo_wptr;         // word pointers
+reg [4:0] fifo_rptr;
 
-// stop reading from fifo if it is empty
-wire fifo_empty       = fifo_wptr == fifo_rptr;
-// fifo is considered almost full if more than 8 words (32 bytes) are present
-wire fifo_almost_full = (fifo_wptr - fifo_rptr) > 4'd8;
-wire fifo_full        = (fifo_wptr - fifo_rptr) > 4'd13;
 // Reset fifo via the dma mode direction bit toggling
 wire fifo_reset = cpu_dma_mode_direction_toggle;
 
@@ -270,10 +265,11 @@ end
 
 
 // ============= FIFO WRITE ENGINE ==================
-
-// start condition for fifo write
-wire fifo_write_start = dma_in_progress && dma_direction_out && 
-     !fifo_write_in_progress && !fifo_almost_full;
+// Fill the FIFO from RAM in 16 word chunks
+wire fifo_write_start = dma_in_progress && dma_direction_out && !fifo_write_in_progress &&
+     (fifo_wptr - fifo_rptr < 5'd16);
+wire fifo_write_stop = dma_direction_out && fifo_write_in_progress &&
+     (ram_access_strobe && (fifo_wptr == 5'd15 || fifo_wptr == 5'd31));
 
 // state machine for DMA ram read access
 always @(posedge clk or posedge fifo_reset) begin
@@ -282,7 +278,7 @@ always @(posedge clk or posedge fifo_reset) begin
 	end else begin
 		// start dma read engine if 8 more words can be stored
 		if(fifo_write_start) fifo_write_in_progress <= 1'b1;
-		else if (fifo_full || !dma_in_progress) fifo_write_in_progress <= 1'b0;
+		else if (fifo_write_stop) fifo_write_in_progress <= 1'b0;
 	end
 end
 
@@ -292,7 +288,7 @@ wire fifo_data_in_strobe = dma_direction_out?ram_access_strobe:io_data_in_strobe
 // write to fifo on rising edge of fifo_data_in_strobe
 always @(posedge clk or posedge fifo_reset) begin
    if(fifo_reset == 1'b1)
-     fifo_wptr <= 4'd0;
+     fifo_wptr <= 5'd0;
    else if (fifo_data_in_strobe) begin
       fifo[fifo_wptr] <= fifo_data_in;
       fifo_wptr <= fifo_wptr + 1'd1;
@@ -301,8 +297,11 @@ end
 
 // ============= FIFO READ ENGINE ==================
 // start condition for fifo read
-wire fifo_read_start = dma_in_progress && !dma_direction_out && 
-     !fifo_read_in_progress && (fifo_almost_full || word_in_cnt == 8'd0);
+// allow to fill 16 words by the FDC/HDD, then transfer them to the CPU
+wire fifo_read_start = dma_in_progress && !dma_direction_out && !fifo_read_in_progress &&
+     ((fifo_rptr == 5'd0 && fifo_wptr == 5'd16) || (fifo_rptr == 5'd16 && fifo_wptr == 5'd0));
+wire fifo_read_stop = !dma_direction_out && fifo_read_in_progress &&
+     ram_access_strobe && (fifo_rptr == 5'd15 || fifo_rptr == 5'd31);
 
 // state machine for DMA ram write access
 always @(posedge clk or posedge fifo_reset) begin
@@ -312,7 +311,7 @@ always @(posedge clk or posedge fifo_reset) begin
 	end else begin
 		// start dma read engine if 8 more words can be stored
 		if (fifo_read_start) fifo_read_in_progress <= 1'b1;
-		if (fifo_empty) fifo_read_in_progress <= 1'b0;
+		else if (fifo_read_stop) fifo_read_in_progress <= 1'b0;
 	end
 end
 
@@ -323,7 +322,7 @@ always @(posedge clk)
    fifo_data_out <= fifo[fifo_rptr];
 
 always @(posedge clk or posedge fifo_reset) begin
-   if(fifo_reset == 1'b1)         fifo_rptr <= 4'd0;
+   if(fifo_reset == 1'b1)         fifo_rptr <= 5'd0;
    else if (fifo_data_out_strobe) fifo_rptr <= fifo_rptr + 1'd1;
 end
 
@@ -427,7 +426,7 @@ wire [7:0] dma_io_status =
 	   ((bcnt >= 9)&&(bcnt <= 19))?acsi_status_byte:
 		// DMA debug signals
 	   (bcnt == 20)?8'ha5:
-	   (bcnt == 21)?{ fifo_rptr, fifo_wptr}:
+	   (bcnt == 21)?{ fifo_rptr[3:0], fifo_wptr[3:0]}:
 	   (bcnt == 22)?{ 4'd0, fdc_irq, acsi_irq, 1'b0, dma_in_progress }:
 	   (bcnt == 23)?dio_dma_status:
 	   (bcnt == 24)?dma_mode[8:1]:
