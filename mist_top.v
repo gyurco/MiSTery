@@ -481,7 +481,8 @@ ikbd ikbd (
 	.ps2_mouse_data(ps2_mouse_data),
 	.tx(ikbd_tx),
 	.rx(ikbd_rx),
-	.joystick({joy1[4], joy1[0], joy1[1], joy1[2], joy1[3]})
+	.joystick0({joy0[4], joy0[0], joy0[1], joy0[2], joy0[3]}),
+	.joystick1({joy1[4], joy1[0], joy1[1], joy1[2], joy1[3]})
 );
 
 /* ------------------------------------------------------------------------------ */
