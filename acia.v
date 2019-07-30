@@ -197,6 +197,7 @@ always @(posedge clk) begin
 		serial_tx_cnt <= 8'd0;
 		serial_tx_empty <= 1'b1;
 		serial_tx_data_valid <= 1'b0;
+		serial_tx_shift_reg[0] <= 1'b1;
 	end else if(clk_en && sel && ~rw) begin
 
 			// write to serial control register
