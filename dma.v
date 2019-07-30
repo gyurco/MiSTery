@@ -85,7 +85,9 @@ module dma (
 
 assign irq = fdc_irq || acsi_irq;
 
-assign rdy_o = cpu_sel | ram_br;
+// some games access right after writing the sector count
+// then this access won't be ack'ed if the DMA already started
+assign rdy_o = cpu_sel ? cpu_rdy : ram_br;
 
 // for debug: count irqs
 reg [7:0] fdc_irq_count;
@@ -111,6 +113,12 @@ end
 reg cpu_selD;
 always @(posedge clk) if (clk_en) cpu_selD <= cpu_sel;
 wire cpu_req = ~cpu_selD & cpu_sel;
+
+reg cpu_rdy;
+always @(posedge clk) begin
+	if (!cpu_sel) cpu_rdy <= 1'b0;
+	else if (clk_en && cpu_req ) cpu_rdy <= 1'b1;
+end
 
 // dma sector count and mode registers
 reg [7:0]  dma_scnt;
