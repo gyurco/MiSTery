@@ -67,7 +67,7 @@ module user_io(
 		output           ypbpr
 );
 
-parameter PS2DIV = 1100;
+parameter PS2DIV = 100;
 
 wire spi_sck = SPI_CLK;
 
