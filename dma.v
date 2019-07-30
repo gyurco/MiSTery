@@ -276,7 +276,6 @@ always @(posedge clk or posedge fifo_reset) begin
 	if(fifo_reset == 1'b1) begin
 		fifo_write_in_progress <= 1'b0;
 	end else begin
-		// start dma read engine if 8 more words can be stored
 		if(fifo_write_start) fifo_write_in_progress <= 1'b1;
 		else if (fifo_write_stop) fifo_write_in_progress <= 1'b0;
 	end
@@ -309,7 +308,6 @@ always @(posedge clk or posedge fifo_reset) begin
 		// not reading from fifo, not writing into ram
 		fifo_read_in_progress <= 1'b0;
 	end else begin
-		// start dma read engine if 8 more words can be stored
 		if (fifo_read_start) fifo_read_in_progress <= 1'b1;
 		else if (fifo_read_stop) fifo_read_in_progress <= 1'b0;
 	end
@@ -339,7 +337,6 @@ assign ram_dout = fifo_data_out;
    
 // keep track of bytes to decrement sector count register
 // after 512 bytes (256 words)
-reg [7:0] word_in_cnt;
 reg [7:0] word_out_cnt;
 reg       sector_done;   
 reg       sector_strobe;
@@ -347,7 +344,6 @@ reg       sector_strobe_prepare;
 
 always @(posedge clk) begin
 	if(dma_scnt_write_strobe) begin
-		word_in_cnt <= 8'd0;
 		word_out_cnt <= 8'd0;
 		sector_strobe <= 1'b0;
 		sector_done <= 1'b0;
@@ -360,8 +356,6 @@ always @(posedge clk) begin
 			// trigger scnt decrement
 			sector_strobe <= 1'b1;
 		end
-
-      if (io_data_in_strobe) word_in_cnt <= word_in_cnt + 1'b1;
 
 		// and ram read or write increases the word counter by one
 		if(ram_access_strobe) begin
