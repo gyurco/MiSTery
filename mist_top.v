@@ -90,17 +90,25 @@ pll_mfp1 pll_mfp1 (
   .c0           (clk_mfp    )  // output clock c0 (2.4576MHz)
 );
 
-wire reset = system_ctrl[0];
 
-
-// MCU signals
+// registered reset signals
+reg         reset;
+reg         ikbd_reset;
 reg         mcu_reset_n;
+
 always @(posedge clk_32) begin
 	reg resetD;
+
+	reset <= system_ctrl[0];
+
 	mcu_reset_n <= 1;
 	resetD <= reset;
 	if (~resetD & reset) mcu_reset_n <= 0;
 end
+
+always @(posedge clk_2) ikbd_reset <= system_ctrl[0];
+
+// MCU signals
 
 wire        mhz4, mhz4_en, clk16, clk16_en = ~clk16;
 wire        mcu_dtack_n;
@@ -473,7 +481,7 @@ wire ikbd_tx, ikbd_rx;
 
 ikbd ikbd (
 	.clk(clk_2),
-	.res(reset),
+	.res(ikbd_reset),
 
 	.ps2_kbd_clk(ps2_kbd_clk),
 	.ps2_kbd_data(ps2_kbd_data),
