@@ -141,7 +141,7 @@ wire iack_sel = clk_en & ~iackD & iack;
 assign dtack = bus_dtack || iack_dtack;
 
 // timer a/b is in pulse mode
-wire [1:0] pulse_mode;
+wire [1:0] delay_mode;
    
 wire timera_done;
 wire [7:0] timera_dat_o;
@@ -158,7 +158,7 @@ mfp_timer timer_a (
    .DAT_I		(din),
    .DAT_O		(timera_dat_o),
    .DAT_WE		((addr == 5'h0f) && write),
-	.PULSE_MODE (pulse_mode[1]),
+	.DELAY_MODE (delay_mode[1]),
    .T_I			(t_i[0] ^ ~aer[4]),
    .T_O_PULSE	(timera_done)
 );
@@ -178,7 +178,7 @@ mfp_timer timer_b (
    .DAT_I		(din),
    .DAT_O		(timerb_dat_o),
    .DAT_WE		((addr == 5'h10) && write),
-	.PULSE_MODE (pulse_mode[0]),
+	.DELAY_MODE (delay_mode[0]),
    .T_I			(t_i[1] ^ ~aer[3]),
    .T_O_PULSE	(timerb_done)
 );
@@ -350,7 +350,7 @@ always @(*) begin
 end 
 
 // mask of input irqs which are overwritten by timer a/b inputs
-wire [7:0] ti_irq_mask = { 3'b000, pulse_mode, 3'b000};
+wire [7:0] ti_irq_mask = { 3'b000, ~delay_mode, 3'b000};
 wire [7:0] ti_irq      = { 3'b000, t_i[0], t_i[1], 3'b000};
 
 // latch to keep irq vector stable during irq ack cycle
