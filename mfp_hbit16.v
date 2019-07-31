@@ -22,8 +22,8 @@
 
 module mfp_hbit16 (
         input [15:0] value,
-        output [15:0] mask,		  
-        output [3:0] index		  
+        output [15:0] mask,
+        output [3:0] index
 );
 
 assign index =
