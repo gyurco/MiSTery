@@ -417,15 +417,6 @@ end
 
 wire xsint_delayed = xsint_delay[7];
 
-// according to hatari video.h/video.c the timer_b irq comes 28 8MHz cycles after
-// the last pixel has been displayed. There's no delaying on the STe schematics, but
-// bottom border removing fails (set to 60Hz comes a bit early) without this delay.
-// Maybe it's inside the MFP?
-reg [27:0] st_de_delay;
-wire st_de = st_de_delay[27];
-always @(posedge clk_32)
-   if (mhz8_en1) st_de_delay <= { st_de_delay[26:0], de };
-
 // mfp io7 is mono_detect which in ste is xor'd with the dma sound irq
 wire mfp_io7 = system_ctrl[8] ^ (ste?xsint:1'b0);
 
@@ -437,7 +428,7 @@ wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy2[4];
 
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
 wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
-wire  [1:0] mfp_timer_in = {st_de, ste?xsint_delayed:!parallel_fifo_full};
+wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_fifo_full};
 wire        mfp_dtack;
 wire        mfp_int, mfp_iack = ~mfpiack_n;
 assign      mfpint_n = ~mfp_int;

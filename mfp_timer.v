@@ -65,54 +65,41 @@ wire      delay_mode;
 wire      event_mode;
 wire      pulse_mode;
 
-// trigger edge detect registers
-reg trigger_r, trigger_r2;
-
 // async clock edge detect
 reg xclk, xclk_r, xclk_r2;
+
+// generate xclk_en from async clock input
+always @(posedge XCLK_I) xclk <= ~xclk;
+
+wire xclk_en = xclk_r2 ^ xclk_r;
+always @(posedge CLK) begin
+	xclk_r <= xclk;
+	xclk_r2 <= xclk_r;
+end
 
 // from datasheet: 
 // read value when the DS pin last gone high prior to the current read cycle
 always @(posedge CLK)
 	if (DS) cur_counter <= down_counter;
 
-// generate clock from async clock input
-always @(posedge XCLK_I) begin
-	if(RST | !started)
-		prescaler_counter <= 8'd0;
-	else begin
-		if(prescaler_counter >= prescaler) begin
-			prescaler_counter <= 8'd0;
-			xclk <= ~xclk;
-		end else
-			prescaler_counter <= prescaler_counter + 8'd1;
-	end
-end
-
-// pulse is generate in rising edge and detected in main mfp on falling edge   
 always @(posedge CLK) begin
-	T_O_PULSE <= 1'b0;
+	reg trigger_r, trigger_r2;
+	reg timer_tick, timer_tick_r;
 
-	if (!RST && count && (down_counter === 8'd1))
-		T_O_PULSE <= 1'b1;
-end
-
-always @(posedge CLK) begin
-      
 	if (RST === 1'b1) begin
 		T_O     <= 1'b0;
 		control <= 4'd0;
 		data    <= 8'd0;
 		down_counter <= 8'd0;
 		count <= 1'b0;
+		prescaler_counter <= 8'd0;
 	end else begin
 
-		// bring trigger/xclk edges into our clock domain.
-		trigger_r <= T_I;
-		trigger_r2 <= trigger_r;
-
-		xclk_r <= xclk;
-		xclk_r2 <= xclk_r;
+		// register timer input with the timer clock rate
+		if (xclk_en) begin
+			trigger_r <= T_I;
+			trigger_r2 <= trigger_r;
+		end
 
 		// if a write request comes from the main unit
 		// then write the data to the appropriate register.
@@ -129,38 +116,52 @@ always @(posedge CLK) begin
 				T_O <= 1'b0;
 		end 
 
+		timer_tick_r <= timer_tick;
+
 		if (started) begin
-			count <= 1'b0;
+			if (xclk_en) begin
+				if(prescaler_counter >= prescaler) begin
+					prescaler_counter <= 8'd0;
+					timer_tick <= ~timer_tick;
+				end else
+					prescaler_counter <= prescaler_counter + 8'd1;
+			end
+
+			T_O_PULSE <= 1'b0;
 
 			// handle event mode
 			if (event_mode === 1'b1)
-				if ((~trigger_r2 & trigger_r) === 1'b1)
+				if (xclk_en & (~trigger_r2 & trigger_r))
 					count <= 1'b1;
-	    
+
 			// handle delay mode
 			if (delay_mode === 1'b1)
-				if (xclk_r2 ^ xclk_r)
+				if (timer_tick ^ timer_tick_r)
 					count <= 1'b1;
 
 			// handle pulse mode
 			if (pulse_mode === 1'b1)
-				if ((xclk_r2 ^ xclk_r) && T_I)
+				if ((timer_tick ^ timer_tick_r) && trigger_r)
 					count <= 1'b1;
-	    
+
 			if (count) begin
+				count <= 1'b0;
 
 				// timeout pulse
 				if (down_counter === 8'd1) begin
-		  
+
 					// pulse the timer out
 					T_O <= ~T_O;
+					T_O_PULSE <= 1'b1;
 					down_counter <= data;
-		  
+
 				end else begin
 
 					down_counter <= down_counter - 8'd1;
 				end
 			end
+		end else begin
+			prescaler_counter <= 8'd0;
 		end
 	end
 end
