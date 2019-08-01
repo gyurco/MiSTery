@@ -111,16 +111,16 @@ always @(posedge clk) begin
 			serial_rx_frame_error <= 1'b0;
 		end
 
+		serial_rx_filter <= { serial_rx_filter[2:0], rx};
+		
+		// serial input must be stable for 4 cycles to change state
+		if(serial_rx_filter == 4'b0000) serial_in_filtered <= 1'b0;
+		if(serial_rx_filter == 4'b1111) serial_in_filtered <= 1'b1;
+			
 		// 16 times serial clock
 		if((serial_cr[1:0] == 2'b01 && serial_clk[5:0] == 6'd0) || // 31250 bps
 		   (serial_cr[1:0] == 2'b10 && serial_clk[7:0] == 8'd0))   // 7812.5 bps
 		begin
-			serial_rx_filter <= { serial_rx_filter[2:0], rx};
-		
-			// serial input must be stable for 4 cycles to change state
-			if(serial_rx_filter == 4'b0000) serial_in_filtered <= 1'b0;
-			if(serial_rx_filter == 4'b1111) serial_in_filtered <= 1'b1;
-
 			// receiver not running
 			if(serial_rx_cnt == 8'd0) begin
 				// seeing start bit?
