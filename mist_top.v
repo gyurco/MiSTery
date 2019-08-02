@@ -56,6 +56,14 @@ wire [1:0] usb_redirection = system_ctrl[27:26];
 
 wire psg_stereo = system_ctrl[22];
 
+// RAM size selects
+wire MEM512K = (system_ctrl[3:1] == 3'd0);
+wire MEM1M   = (system_ctrl[3:1] == 3'd1);
+wire MEM2M   = (system_ctrl[3:1] == 3'd2);
+wire MEM4M   = (system_ctrl[3:1] == 3'd3);
+wire MEM8M   = (system_ctrl[3:1] == 3'd4);
+wire MEM14M  = (system_ctrl[3:1] == 3'd5);
+
 // clock generation
 wire pll_locked;
 wire clk_2;
@@ -239,6 +247,7 @@ gstmcu gstmcu (
 	.SINT       ( sint ),
 
 	.st            ( ~ste ),
+	.extra_ram     ( MEM8M | MEM14M ),
 	.tos192k       ( tos192k ),
 	.viking_at_c0  ( viking_enable && !steroids ),
 	.viking_at_e8  ( viking_enable &&  steroids ),
@@ -284,7 +293,7 @@ gstshifter gstshifter (
 
 // viking/sm194 is enabled and max 8MB memory may be enabled. In steroids mode
 // video memory is moved to $e80000 and all stram up to 14MB may be used
-wire viking_mem_ok = 1'b1;//MEM512K || MEM1M || MEM2M || MEM4M || MEM8M;
+wire viking_mem_ok = MEM512K || MEM1M || MEM2M || MEM4M || MEM8M;
 wire viking_enable = (system_ctrl[28] && viking_mem_ok) || steroids;
 
 // check for cpu access to 0xcxxxxx with viking enabled to switch video
@@ -823,13 +832,20 @@ wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:
                             (cpu_cycle & blitter_has_bus)?blitter_master_addr:
                             (viking_cycle & viking_active & viking_read)?viking_vaddr:ram_a;
 
+wire        ram_en = (MEM512K & ram_a[23:19] == 5'b00000) ||
+                     (MEM1M   & ram_a[23:20] == 4'b0000)  ||
+                     (MEM2M   & ram_a[23:21] == 3'b000)   ||
+                     (MEM4M   & ram_a[23:22] == 2'b00)    ||
+                     (MEM8M   & ram_a[23] == 1'b0)        ||
+                     (MEM14M  & (~ram_a[23] | ~ram_a[22] | (ram_a[23] & ram_a[22] & ~ram_a[21])));
+
 // ----------------- RAM read -----------------
 wire sdram_oe = (cpu_cycle & dio_download)?1'b0:
                 (cpu_cycle & blitter_master_read)?1'b1:
-                (viking_cycle & viking_active & viking_read)?1'b1:ram_oe;
+                (viking_cycle & viking_active & viking_read)?1'b1:(ram_oe & ram_en);
 
 // ----------------- RAM write -----------------
-wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_write)?1'b1:ram_we;
+wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_write)?1'b1:(ram_we & ram_en);
 
 wire [15:0] ram_data_in = dio_download?dio_data_in_reg:(blitter_has_bus?blitter_master_data_out:ram_din);
 
