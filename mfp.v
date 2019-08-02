@@ -118,6 +118,7 @@ wire bus_sel = sel & ~ds;
 reg  bus_selD;
 reg  bus_dtack;
 wire write = clk_en & ~bus_selD & bus_sel & ~rw;
+wire bus_desel = bus_selD & ~bus_sel;
 
 always @(posedge clk) begin
 	if (clk_en) begin
@@ -149,7 +150,7 @@ wire [3:0] timera_ctrl_o;
 
 mfp_timer timer_a (
 	.CLK        ( clk                      ),
-	.DS         ( ds                       ),
+	.DS         ( bus_desel                ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
 	.CTRL_I     ( din[4:0]                 ),
@@ -169,7 +170,7 @@ wire [3:0] timerb_ctrl_o;
 
 mfp_timer timer_b (
 	.CLK        ( clk                      ),
-	.DS         ( ds                       ),
+	.DS         ( bus_desel                ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
 	.CTRL_I     ( din[4:0]                 ),
@@ -189,7 +190,7 @@ wire [3:0] timerc_ctrl_o;
 
 mfp_timer timer_c (
 	.CLK        ( clk                      ),
-	.DS         ( ds                       ),
+	.DS         ( bus_desel                ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
 	.CTRL_I     ( {2'b00, din[6:4]}        ),
@@ -208,7 +209,7 @@ wire [7:0] timerd_set_data;
 
 mfp_timer timer_d (
 	.CLK        ( clk                      ),
-	.DS         ( ds                       ),
+	.DS         ( bus_desel                ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
 	.CTRL_I     ( {2'b00, din[2:0]}        ),
