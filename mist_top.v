@@ -948,6 +948,22 @@ wire [2:0] switches;
 wire scandoubler_disable;
 wire ypbpr;
 
+// sd-card emulation for 2 images
+wire [31:0] sd_lba;
+wire  [1:0] sd_rd;
+wire  [1:0] sd_wr;
+wire        sd_ack;
+wire        sd_ack_conf;
+wire        sd_conf;
+wire        sd_sdhc = 1'b1;
+wire  [7:0] sd_dout;
+wire        sd_dout_strobe;
+wire  [7:0] sd_din;
+wire        sd_din_strobe;
+wire  [8:0] sd_buff_addr;
+wire  [1:0] img_mounted;
+wire [31:0] img_size;
+
 //// user io has an extra spi channel outside minimig core ////
 user_io user_io(
 		.clk_sys                   (clk_32),
@@ -999,6 +1015,22 @@ user_io user_io(
 		.ps2_kbd_data              (ps2_kbd_data),
 		.ps2_mouse_clk             (ps2_mouse_clk),
 		.ps2_mouse_data            (ps2_mouse_data),
+
+		// sd-card IO
+		.sd_lba                    (sd_lba        ),
+		.sd_rd                     (sd_rd         ),
+		.sd_wr                     (sd_wr         ),
+		.sd_ack                    (sd_ack        ),
+		.sd_ack_conf               (sd_ack_conf   ),
+		.sd_conf                   (sd_conf       ),
+		.sd_sdhc                   (sd_sdhc       ),
+		.sd_dout                   (sd_dout       ),
+		.sd_dout_strobe            (sd_dout_strobe),
+		.sd_din                    (sd_din        ),
+		.sd_din_strobe             (sd_din_strobe ),
+		.sd_buff_addr              (sd_buff_addr  ),
+		.img_mounted               (img_mounted   ),
+		.img_size                  (img_size      ),
 
 		// io controller requests to disable vga scandoubler
 		.scandoubler_disable       (scandoubler_disable),

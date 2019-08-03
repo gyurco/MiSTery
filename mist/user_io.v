@@ -1,10 +1,10 @@
 module user_io( 
-	   input      clk_sys,
-	   input      SPI_CLK,
-	   input      SPI_SS_IO,
-	   output     reg SPI_MISO,
-	   input      SPI_MOSI,
-	   input [7:0] CORE_TYPE,
+		input      clk_sys,
+		input      SPI_CLK,
+		input      SPI_SS_IO,
+		output     reg SPI_MISO,
+		input      SPI_MOSI,
+		input [7:0] CORE_TYPE,
 
 		// four extra joysticks
 		output reg [5:0] joy0, joy1, joy2, joy3,
@@ -64,7 +64,24 @@ module user_io(
 		output [1:0] 	  BUTTONS,
 		output [1:0]     SWITCHES,
 		output           scandoubler_disable,
-		output           ypbpr
+		output           ypbpr,
+
+		// connection to sd card emulation
+		input     [31:0] sd_lba,
+		input      [1:0] sd_rd,
+		input      [1:0] sd_wr,
+		output reg       sd_ack,
+		output reg       sd_ack_conf,
+		input            sd_conf,
+		input            sd_sdhc,
+		output reg [7:0] sd_dout,     // valid on rising edge of sd_dout_strobe
+		output reg       sd_dout_strobe,
+		input      [7:0] sd_din,
+		output reg       sd_din_strobe,
+		output reg [8:0] sd_buff_addr,
+
+		output reg [1:0] img_mounted, // rising edge if a new image is mounted
+		output reg[31:0] img_size     // size of image in bytes
 );
 
 parameter PS2DIV = 100;
@@ -242,12 +259,22 @@ end
 // prepent "a5" to status to make sure io controller can detect that a core
 // doesn't support the command
 wire [63+8:0] serial_status_out_x = { 8'ha5, serial_status_out };
-	
+
+wire drive_sel = sd_rd[1] | sd_wr[1];
+
 always@(negedge spi_sck) begin
-      if(bit_cnt <= 7)
-		  SPI_MISO <= CORE_TYPE[7-bit_cnt];
-		else begin
-			
+    reg [31:0] sd_lba_r;
+    reg  [7:0] drive_sel_r;
+    reg  [7:0] sd_cmd;
+    reg  [7:0] sd_din_r;
+
+	sd_cmd <= { 4'h6, sd_conf, sd_sdhc, sd_wr[drive_sel], sd_rd[drive_sel] };
+	if(&bit_cnt[2:0]) sd_din_r <= sd_din;
+
+	if(bit_cnt <= 7)
+		SPI_MISO <= CORE_TYPE[7-bit_cnt];
+	else begin
+
 			// serial mfp->io controller
 			if(cmd == 8'h25) begin
 				if(!byte_cnt[0])
@@ -283,8 +310,22 @@ always@(negedge spi_sck) begin
 			// serial status
 			if(cmd == 8'h0d)
 				SPI_MISO <= serial_status_out_x[{4'h8-byte_cnt, tx_bit}];
-		end
+
+			// reading sd card status
+			if(cmd == 8'h16) begin
+				if(byte_cnt == 1) begin
+					SPI_MISO <= sd_cmd[tx_bit];
+					sd_lba_r <= sd_lba;
+					drive_sel_r <= {7'b0, drive_sel};
+				end
+				else if(byte_cnt == 2) SPI_MISO <= drive_sel_r[tx_bit];
+				else if(byte_cnt < 7) SPI_MISO <= sd_lba_r[{6-byte_cnt, tx_bit}];
+			end
+
+			// reading sd card write data
+			if(cmd == 8'h18) SPI_MISO <= sd_din_r[tx_bit];
 	end
+end
 
 // SPI receiver IO -> FPGA
 
@@ -482,5 +523,92 @@ always @(posedge clk_sys) begin
 		end
 	end
 end
-      
+
+// Process SD-card related bytes from SPI at the clk_sys domain
+always @(posedge clk_sys) begin
+
+	reg       spi_receiver_strobe;
+	reg       spi_transfer_end;
+	reg       spi_receiver_strobeD;
+	reg       spi_transfer_endD;
+	reg [1:0] sd_wrD;
+	reg [7:0] acmd;
+	reg [7:0] abyte_cnt;   // counts bytes
+
+	//synchronize between SPI and sd clock domains
+	spi_receiver_strobeD <= spi_receiver_strobe_r;
+	spi_receiver_strobe <= spi_receiver_strobeD;
+	spi_transfer_endD	<= spi_transfer_end_r;
+	spi_transfer_end	<= spi_transfer_endD;
+
+    if(sd_dout_strobe) begin
+        sd_dout_strobe<= 0;
+        if(~&sd_buff_addr) sd_buff_addr <= sd_buff_addr + 1'b1;
+    end
+
+    sd_din_strobe<= 0;
+    sd_wrD <= sd_wr;
+    // fetch the first byte immediately after the write command seen
+    if ((~sd_wrD[0] & sd_wr[0]) || (~sd_wrD[1] & sd_wr[1])) begin
+        sd_buff_addr <= 0;
+        sd_din_strobe <= 1;
+    end
+
+	img_mounted <= 0;
+
+	if (~spi_transfer_endD & spi_transfer_end) begin
+		abyte_cnt <= 8'd0;
+		sd_ack <= 1'b0;
+		sd_ack_conf <= 1'b0;
+		sd_dout_strobe <= 1'b0;
+		sd_din_strobe <= 1'b0;
+		sd_buff_addr<= 0;
+	end else if (spi_receiver_strobeD ^ spi_receiver_strobe) begin
+
+		if(~&abyte_cnt) 
+			abyte_cnt <= abyte_cnt + 8'd1;
+
+		if(abyte_cnt == 0) begin
+			acmd <= spi_byte_in;
+
+			if((spi_byte_in == 8'h17) || (spi_byte_in == 8'h18))
+				sd_ack <= 1'b1;
+
+			if (spi_byte_in == 8'h18) begin
+				sd_din_strobe <= 1'b1;
+				sd_buff_addr <= sd_buff_addr + 1'b1;
+			end
+
+		end else begin
+			case(acmd)
+
+				// send sector IO -> FPGA
+				8'h17: begin
+					// flag that download begins
+					sd_dout_strobe <= 1'b1;
+					sd_dout <= spi_byte_in;
+				end
+
+				8'h18: begin
+					sd_din_strobe <= 1'b1;
+					if(~&sd_buff_addr) sd_buff_addr <= sd_buff_addr + 1'b1;
+				end
+
+				// send SD config IO -> FPGA
+				8'h19: begin
+					// flag that download begins
+					sd_dout_strobe <= 1'b1;
+					sd_ack_conf <= 1'b1;
+					sd_dout <= spi_byte_in;
+				end
+
+				8'h1c: img_mounted[spi_byte_in[0]] <= 1;
+
+				// send image info
+				8'h1d: if(abyte_cnt<5) img_size[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
+			endcase
+		end
+	end
+end
+
 endmodule
