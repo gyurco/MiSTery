@@ -79,8 +79,11 @@ end
 
 // from datasheet: 
 // read value when the DS pin last gone high prior to the current read cycle
-always @(posedge CLK)
-	if (DS) cur_counter <= down_counter;
+always @(posedge CLK) begin
+	reg DS_last;
+	DS_last <= DS;
+	if (~DS_last & DS) cur_counter <= down_counter;
+end
 
 always @(posedge CLK) begin
 	reg trigger_r, trigger_r2;
