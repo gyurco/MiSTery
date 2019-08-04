@@ -23,8 +23,9 @@
 
 module mfp_timer(
 	input        CLK,
-	input        DS,
+	input        CLK_EN,
 	input        RST, 
+	input        DS,
 
 	input        DAT_WE,
 	input  [7:0] DAT_I,
@@ -86,7 +87,7 @@ always @(posedge CLK) begin
 end
 
 always @(posedge CLK) begin
-	reg trigger_r, trigger_r2;
+	reg trigger_r, trigger_r2, trigger_r3, trigger_r4;
 	reg timer_tick, timer_tick_r;
 
 	if (RST === 1'b1) begin
@@ -98,10 +99,14 @@ always @(posedge CLK) begin
 		prescaler_counter <= 8'd0;
 	end else begin
 
-		// register timer input with the timer clock rate
-		if (xclk_en) begin
+		// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
+		// In the "Atari ST internals", it's 1/4 of the MFP clock frequency
+		// Use the later, it has less jitter to the CPU clock
+		if (CLK_EN) begin
 			trigger_r <= T_I;
 			trigger_r2 <= trigger_r;
+			trigger_r3 <= trigger_r2;
+			trigger_r4 <= trigger_r3;
 		end
 
 		// if a write request comes from the main unit
@@ -134,7 +139,7 @@ always @(posedge CLK) begin
 
 			// handle event mode
 			if (event_mode === 1'b1)
-				if (xclk_en & (~trigger_r2 & trigger_r))
+				if (CLK_EN && (~trigger_r4 & trigger_r3))
 					count <= 1'b1;
 
 			// handle delay mode

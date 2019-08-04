@@ -149,6 +149,7 @@ wire [3:0] timera_ctrl_o;
 
 mfp_timer timer_a (
 	.CLK        ( clk                      ),
+	.CLK_EN     ( clk_en                   ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
@@ -169,6 +170,7 @@ wire [3:0] timerb_ctrl_o;
 
 mfp_timer timer_b (
 	.CLK        ( clk                      ),
+	.CLK_EN     ( clk_en                   ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
@@ -189,6 +191,7 @@ wire [3:0] timerc_ctrl_o;
 
 mfp_timer timer_c (
 	.CLK        ( clk                      ),
+	.CLK_EN     ( clk_en                   ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
@@ -208,6 +211,7 @@ wire [7:0] timerd_set_data;
 
 mfp_timer timer_d (
 	.CLK        ( clk                      ),
+	.CLK_EN     ( clk_en                   ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
 	.RST        ( reset                    ),
@@ -227,25 +231,12 @@ reg [7:0] aer, ddr, gpip;
 reg [15:0] imr, ier;   // interrupt registers
 reg [7:0] vr;
 
-wire irq_trigger = ((ipr & imr) != 16'h0000) && (highest_irq_pending > irq_in_service);
 // generate irq signal if an irq is pending and no other irq of same or higher prio is in service
-always @(posedge clk) begin
-	// delay the interrupt some clocks, clear immediately
-	// the delay chain length determined by experiments
-	// adjusted until timer B interrupts used for bottom border removal worked
-	// Unfortunately a sporadic crash in Bunny Bricks is not fixed
-	// due to a race condition between IRQ triggering and masking (maybe need PAL clock?)
-	reg [3:0] irq_delay;
-	if (clk_en) begin
-		if (irq_trigger) begin
-			irq_delay <= { irq_delay[2:0], 1'b1 };
-			irq <= irq_delay[3];
-		end else begin
-			irq <= 1'b0;
-			irq_delay <= 4'd0;
-		end
-	end
-end
+wire irq_trigger = ((ipr & imr) != 16'h0000) && (highest_irq_pending > irq_in_service);
+
+// Delay to Falling XINTR from External Input Active Transition: max 380ns
+// Let's try with one clock enable cycle (250ns on ST)
+always @(posedge clk) if (clk_en) irq <= irq_trigger;
 
 // check number of current interrupt in service
 wire [3:0] irq_in_service;
