@@ -38,7 +38,8 @@ module mfp_timer(
 	input        XCLK_I,
 	input        T_I, // ext. trigger in
 
-	output       DELAY_MODE,  // pulse and event mode disables input port irq
+	output       PULSE_MODE,  // pulse and event mode disables input port irq
+	output       EVENT_MODE,
 
 	output reg   T_O,
 	output reg   T_O_PULSE,
@@ -53,7 +54,8 @@ assign SET_DATA_OUT = data;
 reg [7:0] data, down_counter, cur_counter;
 reg [3:0] control;
 
-assign DELAY_MODE = delay_mode;
+assign PULSE_MODE = pulse_mode;
+assign EVENT_MODE = event_mode;
 
 wire[7:0] prescaler;         // prescaler value
 reg [7:0] prescaler_counter; // prescaler counter
