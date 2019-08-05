@@ -43,8 +43,8 @@ module mist_top (
 
 // enable additional ste/megaste features
 wire ste = system_ctrl[23] || system_ctrl[24];
-wire mste = 1'b0;//system_ctrl[24];
-wire steroids = 1'b0;//system_ctrl[23] && system_ctrl[24];  // a STE on steroids
+wire mste = system_ctrl[24];
+wire steroids = system_ctrl[23] && system_ctrl[24];  // a STE on steroids
 
 // ethernec is enabled by the io controller whenever a USB 
 // ethernet interface is detected
@@ -193,7 +193,7 @@ gstmcu gstmcu (
 	.DOUT       ( mcu_dout ),
 	.CLK_O      ( clk16 ),
 	.MHZ8       ( mhz8 ),
-   .MHZ8_EN1   ( mhz8_en1 ),
+	.MHZ8_EN1   ( mhz8_en1 ),
 	.MHZ8_EN2   ( mhz8_en2 ),
 	.MHZ4       ( mhz4 ),
 	.MHZ4_EN    ( mhz4_en ),
@@ -219,7 +219,7 @@ gstmcu gstmcu (
 	.ROM6_N     ( rom6_n ),
 	.ROMP_N     ( romp_n ),
 	.RAM_N      ( ),
-   .RAS0_N     ( ras0_n ),
+	.RAS0_N     ( ras0_n ),
 	.RAS1_N     ( ras1_n ),
 	.RAM_LDS    ( ram_lds ),
 	.RAM_UDS    ( ram_uds ),
@@ -374,8 +374,12 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 
 assign      cpu_dtack_n = mcu_dtack_n & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
 
-wire        fx68_phi1 = (enable_16mhz | steroids) ?  clk16_en : mhz8_en1;
-wire        fx68_phi2 = (enable_16mhz | steroids) ? ~clk16_en : mhz8_en2;
+reg         use_16mhz;
+always @(posedge clk_32) if (mhz8_en2) use_16mhz <= (enable_16mhz | steroids);
+wire        fx68_phi1 = use_16mhz ?  clk16_en : mhz8_en1;
+wire        fx68_phi2 = use_16mhz ? ~clk16_en : mhz8_en2;
+
+wire        dtack_n_16mhz = ~rom_n ? (cpu_dtack_n | bus_cycle == 2'd2) : cpu_dtack_n;
 
 fx68k fx68k (
 	.clk        ( clk_32 ),
@@ -396,7 +400,7 @@ fx68k fx68k (
 	.BGn        ( blitter_bg_n ),
 	.oRESETn    (),
 	.oHALTEDn   (),
-	.DTACKn     ( cpu_dtack_n ),
+	.DTACKn     ( use_16mhz ? dtack_n_16mhz : cpu_dtack_n ),
 	.VPAn       ( vpa_n ),
 	.BERRn		( berr_n ),
 	.BRn        ( ~blitter_br & mcu_br_n ),
@@ -438,10 +442,11 @@ wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy2[4];
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
 wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
 wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_fifo_full};
+wire  [7:0] mfp_data_out;
 wire        mfp_dtack;
+
 wire        mfp_int, mfp_iack = ~mfpiack_n;
 assign      mfpint_n = ~mfp_int;
-wire  [7:0] mfp_data_out;
 
 mfp mfp (
 	// cpu register interface
