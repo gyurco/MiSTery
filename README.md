@@ -12,18 +12,25 @@
 - ACSI hard disc support
 - Viking compatible hi-res monochrome card support
 - [Real IKBD](https://github.com/harbaum/ikbd) with HD63701 MCU
+- Real MIDI input/output using MiST's UART pins
+- Serial/parallel port redirect to USB
+- Gauntlet type 4 joystick interface support
+- Optional scandoubled/YPbPr video output
 
 ## Usage:
 
-Put the core.rbf and the TOS as tos.img to the SD-Card.
+Put the core.rbf and the TOS as tos.img to the SD-Card. TOS/hard disc/floppy images are selectable in the OSD (F12).
 
-## Current issues:
+## Current issues/limitations:
 
 - Some MFP imperfections
 - Some bugs in ST mode
 - Blitter is not cycle accurate (affects STe demos)
 - No RAM cache for Mega STe
 - Missing Ethernec support
+- No RTC
+- Only fake LMC1992
+- PAL clock only (32.084 MHz)
 
 ## Thanks to:
 
