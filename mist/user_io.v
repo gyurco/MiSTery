@@ -276,7 +276,7 @@ always@(negedge spi_sck) begin
 	else begin
 
 			// serial mfp->io controller
-			if(cmd == 8'h25) begin
+			if(cmd == 8'h1b) begin
 				if(!byte_cnt[0])
 					SPI_MISO <= serial_data_out_available;
 				else
@@ -407,13 +407,13 @@ always@(posedge spi_sck, posedge SPI_SS_IO) begin
 				eth_mac_begin <= 1'b0;
 
 				// send serial byte to mfp
-			   if(cmd == 8'h24) begin
+			   if(cmd == 8'h20) begin
 					 serial_data_in <= { sbuf, SPI_MOSI }; 
 					 serial_strobe_in <= 1'b1;
 				end
 				
 				// give strobe after second serial byte (byte_cnt[0]==1)
-			   if((cmd == 8'h25) && byte_cnt[0])
+			   if((cmd == 8'h1b) && byte_cnt[0])
 					 serial_strobe_out <= 1'b1;
 					 
 				// give strobe after second parallel byte (byte_cnt[0]==1)
