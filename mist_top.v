@@ -1,44 +1,44 @@
 /********************************************/
-/*                                          */
+/*       Atari ST/STe/Mega STe core         */
 /********************************************/
 
 module mist_top ( 
-  // clock inputs	
-  input wire [ 2-1:0] 	CLOCK_27, // 27 MHz
-  // LED outputs
-  output wire 		LED, // LED Yellow
-  // UART
-  output wire 		UART_TX, // UART Transmitter (MIDI out)
-  input wire 		UART_RX, // UART Receiver (MIDI in)
-  // VGA
-  output wire 		VGA_HS, // VGA H_SYNC
-  output wire 		VGA_VS, // VGA V_SYNC
-  output wire [ 6-1:0] 	VGA_R, // VGA Red[5:0]
-  output wire [ 6-1:0] 	VGA_G, // VGA Green[5:0]
-  output wire [ 6-1:0] 	VGA_B, // VGA Blue[5:0]
-  // SDRAM
-  inout wire [ 16-1:0] 	SDRAM_DQ, // SDRAM Data bus 16 Bits
-  output wire [ 13-1:0] SDRAM_A, // SDRAM Address bus 13 Bits
-  output wire 		SDRAM_DQML, // SDRAM Low-byte Data Mask
-  output wire 		SDRAM_DQMH, // SDRAM High-byte Data Mask
-  output wire 		SDRAM_nWE, // SDRAM Write Enable
-  output wire 		SDRAM_nCAS, // SDRAM Column Address Strobe
-  output wire 		SDRAM_nRAS, // SDRAM Row Address Strobe
-  output wire 		SDRAM_nCS, // SDRAM Chip Select
-  output wire [ 2-1:0] 	SDRAM_BA, // SDRAM Bank Address
-  output wire 		SDRAM_CLK, // SDRAM Clock
-  output wire 		SDRAM_CKE, // SDRAM Clock Enable
-  // MINIMIG specific
-  output wire 		AUDIO_L, // sigma-delta DAC output left
-  output wire 		AUDIO_R, // sigma-delta DAC output right
-  // SPI
-  inout wire 		SPI_DO,
-  input wire 		SPI_DI,
-  input wire 		SPI_SCK,
-  input wire 		SPI_SS2,    // fpga
-  input wire 		SPI_SS3,    // OSD
-  input wire 		SPI_SS4,    // "sniff" mode
-  input wire 		CONF_DATA0  // SPI_SS for user_io
+	// clock inputs
+	input wire   [ 2-1:0] CLOCK_27,   // 27 MHz
+	// LED outputs
+	output wire           LED,        // LED Yellow
+	// UART
+	output wire           UART_TX,    // UART Transmitter (MIDI out)
+	input wire            UART_RX,    // UART Receiver (MIDI in)
+	// VGA
+	output wire           VGA_HS,     // VGA H_SYNC
+	output wire           VGA_VS,     // VGA V_SYNC
+	output wire  [ 6-1:0] VGA_R,      // VGA Red[5:0]
+	output wire  [ 6-1:0] VGA_G,      // VGA Green[5:0]
+	output wire  [ 6-1:0] VGA_B,      // VGA Blue[5:0]
+	// SDRAM
+	inout wire  [ 16-1:0] SDRAM_DQ,   // SDRAM Data bus 16 Bits
+	output wire [ 13-1:0] SDRAM_A,    // SDRAM Address bus 13 Bits
+	output wire           SDRAM_DQML, // SDRAM Low-byte Data Mask
+	output wire           SDRAM_DQMH, // SDRAM High-byte Data Mask
+	output wire           SDRAM_nWE,  // SDRAM Write Enable
+	output wire           SDRAM_nCAS, // SDRAM Column Address Strobe
+	output wire           SDRAM_nRAS, // SDRAM Row Address Strobe
+	output wire           SDRAM_nCS,  // SDRAM Chip Select
+	output wire  [ 2-1:0] SDRAM_BA,   // SDRAM Bank Address
+	output wire           SDRAM_CLK,  // SDRAM Clock
+	output wire           SDRAM_CKE,  // SDRAM Clock Enable
+	// AUDIO
+	output wire           AUDIO_L,    // sigma-delta DAC output left
+	output wire           AUDIO_R,    // sigma-delta DAC output right
+	// SPI
+	inout wire            SPI_DO,
+	input wire            SPI_DI,
+	input wire            SPI_SCK,
+	input wire            SPI_SS2,    // fpga
+	input wire            SPI_SS3,    // OSD
+	input wire            SPI_SS4,    // "sniff" mode
+	input wire            CONF_DATA0  // SPI_SS for user_io
 );
 
 // enable additional ste/megaste features
@@ -74,8 +74,8 @@ wire clk_128;
 // 32.084 MHz base clock
 wire mainclock;
 clock32 clock32 (
-	.inclk0      (CLOCK_27[0]),
-	.c0          (mainclock  )
+	.inclk0     (CLOCK_27[0]),
+	.c0         (mainclock  )
 );
 
 clock clock (
@@ -464,13 +464,13 @@ mfp mfp (
 	.dtack    ( mfp_dtack     ),
 
 	// serial/rs232 interface io-controller<->mfp
-	.serial_data_out_available 	(serial_data_from_mfp_available),
-	.serial_strobe_out 				(serial_strobe_from_mfp),
-	.serial_data_out 	   			(serial_data_from_mfp),
-	.serial_status_out 	   		(serial_status_from_mfp),
-	.serial_strobe_in 				(serial_strobe_to_mfp),
-	.serial_data_in 	   			(serial_data_to_mfp),
-	.serial_status_in 	   		(serial_status_to_mfp),
+	.serial_data_out_available (serial_data_from_mfp_available),
+	.serial_strobe_out         (serial_strobe_from_mfp),
+	.serial_data_out           (serial_data_from_mfp),
+	.serial_status_out         (serial_status_from_mfp),
+	.serial_strobe_in          (serial_strobe_to_mfp),
+	.serial_data_in            (serial_data_to_mfp),
+	.serial_status_in          (serial_status_to_mfp),
 
 	// input signals
 	.clk_ext  ( clk_mfp       ),  // 2.457MHz clock
@@ -728,6 +728,8 @@ wire  [4:0] dio_status_index;
 wire [23:1] dio_data_addr;
 wire        dio_download;
 
+wire [31:0] system_ctrl;
+
 data_io data_io (
 	.sck             ( SPI_SCK             ),
 	.ss			     ( SPI_SS2             ),
@@ -928,22 +930,23 @@ sdram sdram (
 	.sd_cas      	( SDRAM_nCAS               ),
 
 	// system interface
-	.clk_96        ( clk_96                   ),
-	.clk_8_en      ( mhz8_en1                 ),
+	.clk_96         ( clk_96                   ),
+	.clk_8_en       ( mhz8_en1                 ),
 	.init         	( init                     ),
 
 	// cpu/chipset interface
-	.din           ( ram_data_in              ),
-	.addr          ( { 1'b0, sdram_address }  ),
-	.ds            ( { sdram_uds, sdram_lds } ),
-	.we            ( sdram_we                 ),
-	.oe            ( sdram_oe                 ),
-	.dout          ( ram_data_out             ),
-	.dout64        ( ram_data_out64           ),
+	.din            ( ram_data_in              ),
+	.addr           ( { 1'b0, sdram_address }  ),
+	.ds             ( { sdram_uds, sdram_lds } ),
+	.we             ( sdram_we                 ),
+	.oe             ( sdram_oe                 ),
+	.dout           ( ram_data_out             ),
+	.dout64         ( ram_data_out64           ),
 
-	.rom_oe        ( ~rom_n                   ),
-	.rom_addr      ( rom_a                    ),
-	.rom_dout      ( rom_data_out             )
+	// ROM access port
+	.rom_oe         ( ~rom_n                   ),
+	.rom_addr       ( rom_a                    ),
+	.rom_dout       ( rom_data_out             )
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -957,8 +960,6 @@ wire user_io_sdo, dio_sdo;
 
 assign SPI_DO = (CONF_DATA0 == 1'b0)?user_io_sdo:
 	((SPI_SS2 == 1'b0)?dio_sdo:1'bZ);
-
-wire [31:0] system_ctrl;
 
 // connection to transfer midi data from acia to io controller
 wire [7:0] midi_data_from_acia;
@@ -1020,77 +1021,78 @@ wire [31:0] img_size;
 
 //// user io has an extra spi channel outside minimig core ////
 user_io user_io(
-		.clk_sys                   (clk_32),
-		// the spi interface
-		.SPI_CLK                	(SPI_SCK),
-		.SPI_SS_IO						(CONF_DATA0),
-		.SPI_MISO						(user_io_sdo),
-		.SPI_MOSI						(SPI_DI),
+	.clk_sys                     (clk_32),
+	// the spi interface
+	.SPI_CLK                     (SPI_SCK),
+	.SPI_SS_IO                   (CONF_DATA0),
+	.SPI_MISO                    (user_io_sdo),
+	.SPI_MOSI                    (SPI_DI),
 
-		// extra joysticks
-		.joy0                  		(joy0),
-		.joy1                  		(joy1),
-		.joy2                  		(joy2),
-		.joy3                  		(joy3),
+	// extra joysticks
+	.joy0                        (joy0),
+	.joy1                        (joy1),
+	.joy2                        (joy2),
+	.joy3                        (joy3),
 
-		// serial/rs232 interface
-      .serial_strobe_out			(serial_strobe_from_mfp),
-      .serial_data_out				(serial_data_from_mfp),
-      .serial_data_out_available	(serial_data_from_mfp_available),
-      .serial_status_out			(serial_status_from_mfp),
-      .serial_strobe_in				(serial_strobe_to_mfp),
-      .serial_data_in				(serial_data_to_mfp),
-      .serial_status_in				(serial_status_to_mfp),
+	// serial/rs232 interface
+	.serial_strobe_out           (serial_strobe_from_mfp),
+	.serial_data_out             (serial_data_from_mfp),
+	.serial_data_out_available   (serial_data_from_mfp_available),
+	.serial_status_out           (serial_status_from_mfp),
+	.serial_strobe_in            (serial_strobe_to_mfp),
+	.serial_data_in              (serial_data_to_mfp),
+	.serial_status_in            (serial_status_to_mfp),
 
-		// parallel interface
-      .parallel_strobe_out			(parallel_strobe_out),
-      .parallel_data_out			(parallel_data_out),
-      .parallel_data_out_available(parallel_data_out_available),
+	// parallel interface
+	.parallel_strobe_out         (parallel_strobe_out),
+	.parallel_data_out           (parallel_data_out),
+	.parallel_data_out_available (parallel_data_out_available),
 
-		// midi interface
-      .midi_strobe_out				(midi_strobe_from_acia),
-      .midi_data_out					(midi_data_from_acia),
-      .midi_data_out_available	(midi_data_from_acia_available),
+	// midi interface
+	.midi_strobe_out             (midi_strobe_from_acia),
+	.midi_data_out               (midi_data_from_acia),
+	.midi_data_out_available     (midi_data_from_acia_available),
 
-		// ethernet
-		.eth_status                (eth_status),
-		.eth_mac_begin					(eth_mac_begin),
-		.eth_mac_strobe				(eth_mac_strobe),
-		.eth_mac_byte					(eth_mac_byte),
-		.eth_tx_read_begin			(eth_tx_read_begin),
-		.eth_tx_read_strobe			(eth_tx_read_strobe),
-		.eth_tx_read_byte				(eth_tx_read_byte),
-		.eth_rx_write_begin			(eth_rx_write_begin),
-		.eth_rx_write_strobe			(eth_rx_write_strobe),
-		.eth_rx_write_byte			(eth_rx_write_byte),
+	// ethernet
+	.eth_status                  (eth_status),
+	.eth_mac_begin               (eth_mac_begin),
+	.eth_mac_strobe              (eth_mac_strobe),
+	.eth_mac_byte                (eth_mac_byte),
+	.eth_tx_read_begin           (eth_tx_read_begin),
+	.eth_tx_read_strobe          (eth_tx_read_strobe),
+	.eth_tx_read_byte            (eth_tx_read_byte),
+	.eth_rx_write_begin          (eth_rx_write_begin),
+	.eth_rx_write_strobe         (eth_rx_write_strobe),
+	.eth_rx_write_byte           (eth_rx_write_byte),
 
-		// PS2 keyboard data
-		.ps2_kbd_clk               (ps2_kbd_clk),
-		.ps2_kbd_data              (ps2_kbd_data),
-		.ps2_mouse_clk             (ps2_mouse_clk),
-		.ps2_mouse_data            (ps2_mouse_data),
+	// PS2 keyboard data
+	.ps2_kbd_clk                 (ps2_kbd_clk),
+	.ps2_kbd_data                (ps2_kbd_data),
+	// PS2 mouse data
+	.ps2_mouse_clk               (ps2_mouse_clk),
+	.ps2_mouse_data              (ps2_mouse_data),
 
-		// sd-card IO
-		.sd_lba                    (sd_lba        ),
-		.sd_rd                     (sd_rd         ),
-		.sd_wr                     (sd_wr         ),
-		.sd_ack                    (sd_ack        ),
-		.sd_ack_conf               (sd_ack_conf   ),
-		.sd_conf                   (sd_conf       ),
-		.sd_sdhc                   (sd_sdhc       ),
-		.sd_dout                   (sd_dout       ),
-		.sd_dout_strobe            (sd_dout_strobe),
-		.sd_din                    (sd_din        ),
-		.sd_din_strobe             (sd_din_strobe ),
-		.sd_buff_addr              (sd_buff_addr  ),
-		.img_mounted               (img_mounted   ),
-		.img_size                  (img_size      ),
+	// sd-card IO
+	.sd_lba                      (sd_lba        ),
+	.sd_rd                       (sd_rd         ),
+	.sd_wr                       (sd_wr         ),
+	.sd_ack                      (sd_ack        ),
+	.sd_ack_conf                 (sd_ack_conf   ),
+	.sd_conf                     (sd_conf       ),
+	.sd_sdhc                     (sd_sdhc       ),
+	.sd_dout                     (sd_dout       ),
+	.sd_dout_strobe              (sd_dout_strobe),
+	.sd_din                      (sd_din        ),
+	.sd_din_strobe               (sd_din_strobe ),
+	.sd_buff_addr                (sd_buff_addr  ),
+	.img_mounted                 (img_mounted   ),
+	.img_size                    (img_size      ),
 
-		// io controller requests to disable vga scandoubler
-		.scandoubler_disable       (scandoubler_disable),
-		.ypbpr                     (ypbpr),
-		.SWITCHES                  (switches ),
-		.CORE_TYPE                 (8'ha7)    // mist2 core id
+	// io controller requests to disable vga scandoubler
+	.scandoubler_disable         (scandoubler_disable),
+	.ypbpr                       (ypbpr),
+	.SWITCHES                    (switches ),
+	.CORE_TYPE                   (8'ha7)    // mist2 core id
 );
 
 endmodule
