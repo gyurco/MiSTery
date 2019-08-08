@@ -44,12 +44,10 @@
 //        |     |0 - pin A0 low, 1 - pin A0 high ------------------'  |
 	 
 module dma (
-	    // clocks and system interface
+	// clocks and system interface
 	input             clk, // 32 MHz
 	input             clk_en,
 	input             reset,
-	output            irq,
-
 	// cpu interface
 	input      [15:0] cpu_din,
 	input 		      cpu_sel,
@@ -57,6 +55,7 @@ module dma (
 	input 		      cpu_rw,
 	output reg [15:0] cpu_dout,
 
+	// data interface for ACSI
 	input             dio_data_in_strobe,
 	input      [15:0] dio_data_in_reg,
 
@@ -70,12 +69,17 @@ module dma (
 	output      [7:0] dio_status_in,
 	input       [4:0] dio_status_index,
 
-	// additional fdc control signals provided by PSG and OSD
-	input             fdc_wr_prot,
-	input             drv_side,
-	input [1:0]       drv_sel,
-	// additional acsi control signals provided by OSD
+	// additional acsi control signals
+	output            acsi_irq,
 	input [7:0]       acsi_enable,
+
+	// FDC interface
+	output            fdc_sel,
+	output [1:0]      fdc_addr,
+	output            fdc_rw,
+	output [7:0]      fdc_din,
+	input  [7:0]      fdc_dout,
+	input             fdc_drq,
 
 	// ram interface for dma engine
 	input             rdy_i,
@@ -83,22 +87,11 @@ module dma (
 	input [15:0]      ram_din
 );
 
-assign irq = fdc_irq || acsi_irq;
-
 // some games access right after writing the sector count
 // then this access won't be ack'ed if the DMA already started
 assign rdy_o = cpu_sel ? cpu_rdy : ram_br;
 
 // for debug: count irqs
-reg [7:0] fdc_irq_count;
-always @(posedge clk or posedge reset) begin
-	reg fdc_irqD;
-	if(reset) fdc_irq_count <= 8'd0;
-	else begin
-		fdc_irqD <= fdc_irq;
-		if (~fdc_irqD & fdc_irq) fdc_irq_count <= fdc_irq_count + 8'd1;
-	end
-end
 
 reg [7:0] acsi_irq_count;
 always @(posedge clk or posedge reset) begin
@@ -126,45 +119,56 @@ reg [15:0] dma_mode;
 
 // ============= FDC submodule ============   
 
-// select signal for the fdc controller registers   
-wire    fdc_reg_sel = cpu_sel && !cpu_a1 && (dma_mode[4:3] == 2'b00);
-wire    fdc_irq;   
-wire [7:0] fdc_status_byte;
-wire [7:0] fdc_dout;
-   
-fdc fdc(
-	 .clk         ( clk                   ),
-	 .clk_en      ( clk_en                ),
-	 .reset       ( reset                 ),
-	 
-	 .irq         ( fdc_irq               ),
+assign  fdc_sel = fdc_dma_sel | (cpu_sel && !cpu_a1 && (dma_mode[4:3] == 2'b00));
+assign  fdc_din = fdc_dma_sel ? (fdc_bs ? fifo_data_out[7:0] : fifo_data_out[15:8]) : cpu_din[7:0];
+assign  fdc_rw  = fdc_dma_sel ? fdc_dma_rw : cpu_rw;
+assign  fdc_addr = fdc_dma_sel ? 2'b11 : dma_mode[2:1];
 
-	 // external floppy control signals
-	 .drv_sel     ( drv_sel               ),
-	 .drv_side    ( drv_side              ),
-	 .wr_prot     ( fdc_wr_prot				),
+reg [15:0] fdc_fifo_in;
+reg        fdc_fifo_strobe;
+reg        fdc_dma_sel;
+wire       fdc_dma_rw = ~dma_direction_out;
+reg        fdc_bs;
 
-	 // signals from/to io controller
-	 .dma_ack     ( io_dma_ack            ),
-	 .status_sel  ( bcnt-4'd4             ),
-	 .status_byte ( fdc_status_byte       ),
-	 
-	 // cpu interfaces, passed trough dma in st
-	 .cpu_sel     ( fdc_reg_sel           ),
-	 .cpu_addr    ( dma_mode[2:1]         ),
-	 .cpu_rw      ( cpu_rw                ),
-	 .cpu_din     ( cpu_din[7:0]          ),
-	 .cpu_dout    ( fdc_dout              )
-);
+always @(posedge clk) begin
+	reg fdc_drqD;
+	reg fdc_state;
+
+	if (reset | fifo_reset) begin
+		fdc_fifo_strobe <= 1'b0;
+		fdc_state <= 1'b0;
+		fdc_bs <= 1'b0;
+		fdc_dma_sel <= 1'b0;
+	end else begin
+		fdc_drqD <= fdc_drq;
+		fdc_fifo_strobe <= 1'b0;
+
+		case (fdc_state)
+		0: if (~fdc_drqD & fdc_drq) begin
+			fdc_dma_sel <= 1'b1;
+			fdc_state <= 1'b1;
+		   end
+		1: if (clk_en) begin
+			fdc_dma_sel <= 1'b0;
+			fdc_bs <= ~fdc_bs;
+			if (fdc_bs) begin
+				fdc_fifo_in[7:0] <= fdc_dout;
+				fdc_fifo_strobe <= 1'b1;
+			end else
+				fdc_fifo_in[15:8] <= fdc_dout;
+			fdc_state <= 1'b0;
+		   end
+		endcase
+	end
+end
 
 // ============= ACSI submodule ============   
 
 // select signal for the acsi controller access (write only, status comes from io controller)
 wire    acsi_reg_sel = cpu_sel && !cpu_a1 && (dma_mode[4:3] == 2'b01);
-wire    acsi_irq;   
 wire [7:0] acsi_status_byte;
 wire [7:0] acsi_dout;
- 
+
 acsi acsi(
 	 .clk         ( clk                   ),
 	 .clk_en      ( clk_en                ),
@@ -289,8 +293,8 @@ always @(posedge clk or posedge fifo_reset) begin
 	end
 end
 
-wire [15:0] fifo_data_in = dma_direction_out?ram_din:dio_data_in_reg;
-wire fifo_data_in_strobe = dma_direction_out?ram_access_strobe:io_data_in_strobe;
+wire [15:0] fifo_data_in = dma_direction_out?ram_din:(fdc_fifo_strobe?fdc_fifo_in:dio_data_in_reg);
+wire fifo_data_in_strobe = dma_direction_out?ram_access_strobe:(io_data_in_strobe | fdc_fifo_strobe);
 
 // write to fifo on rising edge of fifo_data_in_strobe
 always @(posedge clk or posedge fifo_reset) begin
@@ -322,7 +326,7 @@ always @(posedge clk or posedge fifo_reset) begin
 end
 
 reg [15:0] fifo_data_out;
-wire fifo_data_out_strobe = dma_direction_out?io_data_out_strobe:ram_access_strobe;
+wire fifo_data_out_strobe = dma_direction_out?(io_data_out_strobe | fdc_fifo_strobe):ram_access_strobe;
 
 always @(posedge clk)
    fifo_data_out <= fifo[fifo_rptr];
@@ -423,16 +427,16 @@ wire [7:0] dma_io_status =
 	   (bcnt == 2)?{ 7'd0, dma_direction_out }:
 	   (bcnt == 3)?dma_scnt:
 	   // 5 bytes FDC status
-	   ((bcnt >= 4)&&(bcnt <= 8))?fdc_status_byte:
+	   ((bcnt >= 4)&&(bcnt <= 8))?8'd0/*fdc_status_byte*/:
 	   // 11 bytes ACSI status
 	   ((bcnt >= 9)&&(bcnt <= 19))?acsi_status_byte:
 		// DMA debug signals
 	   (bcnt == 20)?8'ha5:
 	   (bcnt == 21)?{ fifo_rptr, fifo_wptr}:
-	   (bcnt == 22)?{ 4'd0, fdc_irq, acsi_irq, 1'b0, dma_in_progress }:
+	   (bcnt == 22)?{ 4'd0, 1'b0 /*fdc_irq*/, acsi_irq, 1'b0, dma_in_progress }:
 	   (bcnt == 23)?dio_dma_status:
 	   (bcnt == 24)?dma_mode[8:1]:
-	   (bcnt == 25)?fdc_irq_count:
+	   (bcnt == 25)?8'd0/*fdc_irq_count*/:
 	   (bcnt == 26)?acsi_irq_count:
 	   8'h00;
 

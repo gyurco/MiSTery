@@ -313,13 +313,13 @@ always@(negedge spi_sck) begin
 
 			// reading sd card status
 			if(cmd == 8'h16) begin
-				if(byte_cnt == 1) begin
+				if(byte_cnt == 0) begin
 					SPI_MISO <= sd_cmd[tx_bit];
 					sd_lba_r <= sd_lba;
 					drive_sel_r <= {7'b0, drive_sel};
 				end
-				else if(byte_cnt == 2) SPI_MISO <= drive_sel_r[tx_bit];
-				else if(byte_cnt < 7) SPI_MISO <= sd_lba_r[{6-byte_cnt, tx_bit}];
+				else if(byte_cnt == 1) SPI_MISO <= drive_sel_r[tx_bit];
+				else if(byte_cnt < 6) SPI_MISO <= sd_lba_r[{5-byte_cnt, tx_bit}];
 			end
 
 			// reading sd card write data

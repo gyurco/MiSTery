@@ -417,7 +417,7 @@ fx68k fx68k (
 /* ------------------------------------ MFP ------------------------------------- */
 /* ------------------------------------------------------------------------------ */
 
-wire acia_irq = kbd_acia_irq || midi_acia_irq, dma_irq;
+wire acia_irq = kbd_acia_irq || midi_acia_irq;
 
 // the STE delays the xsirq by 1/250000 second before feeding it into timer_a
 // 74ls164
@@ -440,7 +440,7 @@ wire parallel_fifo_full;
 wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy2[4];
 
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
-wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !dma_irq, !acia_irq, !blitter_irq, 2'b00, mfp_io0};
+wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !(acsi_irq | fdc_irq), !acia_irq, !blitter_irq, 2'b00, mfp_io0};
 wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_fifo_full};
 wire  [7:0] mfp_data_out;
 wire        mfp_dtack;
@@ -752,20 +752,25 @@ data_io data_io (
 	.status_index    ( dio_status_index    )
 );
 
-// floppy_sel is active low
-wire wr_prot = (floppy_sel == 2'b01)?system_ctrl[7]:system_ctrl[6];
-
 wire dma_write, dma_read;
 wire [15:0] dma_data_out;
 
+wire acsi_irq;
+
 dma dma (
 	// system interface
-	.clk        ( clk_32        ),
-	.clk_en     ( mhz8_en1      ),
-	.reset    	( reset       	 ),
-	.irq      	( dma_irq     	 ),
+	.clk          ( clk_32        ),
+	.clk_en       ( mhz8_en1      ),
+	.reset        ( reset         ),
 
-	// IO controller interface
+	// cpu interface
+	.cpu_din      ( cpu_dout      ),
+	.cpu_sel      ( ~fcs_n        ),
+	.cpu_a1       ( cpu_a[1]      ),
+	.cpu_rw       ( cpu_rw        ),
+	.cpu_dout     ( dma_data_out  ),
+
+	// IO controller interface for ACSI
 	.dio_data_in_strobe  ( dio_data_in_strobe_mist ),
 	.dio_data_in_reg     ( dio_data_in_reg     ),
 	.dio_data_out_strobe ( dio_data_out_strobe ),
@@ -776,27 +781,71 @@ dma dma (
 	.dio_status_in       ( dio_status_in       ),
 	.dio_status_index    ( dio_status_index    ),
 
-	// cpu interface
-	.cpu_din      ( cpu_dout      ),
-	.cpu_sel      ( ~fcs_n        ),
-	.cpu_a1       ( cpu_a[1]      ),
-	.cpu_rw       ( cpu_rw        ),
-	.cpu_dout     ( dma_data_out  ),
-
-	// additional signals for floppy/acsi interface
-	.fdc_wr_prot  ( wr_prot       ),
-	.drv_sel      ( floppy_sel    ),
-	.drv_side     ( floppy_side   ),
+	// additional signals for ACSI interface
+	.acsi_irq     ( acsi_irq           ),
 	.acsi_enable  ( system_ctrl[17:10] ),
 
+	// FDC interface
+	.fdc_drq      ( fdc_drq  ),
+	.fdc_addr     ( fdc_addr ),
+	.fdc_sel      ( fdc_sel  ),
+	.fdc_rw       ( fdc_rw   ),
+	.fdc_din      ( fdc_din  ),
+	.fdc_dout     ( fdc_dout ),
+
 	// ram interface
-	.rdy_i         ( rdy_i        ),
-	.rdy_o         ( rdy_o        ),
-	.ram_din       ( shifter_dout )
+	.rdy_i        ( rdy_i        ),
+	.rdy_o        ( rdy_o        ),
+	.ram_din      ( shifter_dout )
 );
 
-assign LED = (floppy_sel == 2'b11);
+assign     LED = (floppy_sel == 2'b11);
+wire       fdc_irq;
+wire       fdc_drq;
+wire [1:0] fdc_addr;
+wire       fdc_sel;
+wire       fdc_rw;
+wire [7:0] fdc_din;
+wire [7:0] fdc_dout;
 
+// Some broken software selects both drives at the same time. On real hardware this
+// only works if no second drive is present. In our setup the second drive is present
+// but we can simply map all such broken accesses to drive A only
+wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
+
+fdc1772 fdc1772 (
+	.clkcpu         ( clk_32           ), // system cpu clock.
+	.clk8m_en       ( mhz8_en1         ),
+
+	// external set signals
+	.floppy_drive   ( {2'b11, floppy_sel_exclusive} ),
+	.floppy_side    ( floppy_side      ),
+	.floppy_reset   ( ~reset           ),
+
+	// interrupts
+	.irq            ( fdc_irq          ),
+	.drq            ( fdc_drq          ),
+
+	.cpu_addr       ( fdc_addr         ),
+	.cpu_sel        ( fdc_sel          ),
+	.cpu_rw         ( fdc_rw           ),
+	.cpu_din        ( fdc_din          ),
+	.cpu_dout       ( fdc_dout         ),
+
+	// place any signals that need to be passed up to the top after here.
+	.img_mounted    ( img_mounted      ), // signaling that new image has been mounted
+	.img_wp         ( system_ctrl[7:6] ), // write protect. latched at img_mounted
+	.img_size       ( img_size         ), // size of image in bytes
+	.sd_lba         ( sd_lba           ),
+	.sd_rd          ( sd_rd            ),
+	.sd_wr          ( sd_wr            ),
+	.sd_ack         ( sd_ack           ),
+	.sd_buff_addr   ( sd_buff_addr     ),
+	.sd_dout        ( sd_dout          ),
+	.sd_din         ( sd_din           ),
+	.sd_dout_strobe ( sd_dout_strobe   ),
+	.sd_din_strobe  ( sd_din_strobe    )
+);
 
 /* ------------------------------------------------------------------------------ */
 /* --------------------------- SDRAM bus multiplexer ---------------------------- */
