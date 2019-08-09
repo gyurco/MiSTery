@@ -157,7 +157,7 @@ assign      cpu_din =
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
               !rom_n   ? rom_data_out :
-              !n6850   ? { cpu_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
+              n6850    ? { cpu_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
               mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
               mcu_dout;
@@ -515,7 +515,7 @@ acia kbd_acia (
 	.E        ( cpu_E              ),
 	.reset    ( reset              ),
 	.din      ( cpu_dout[15:8]     ),
-	.sel      ( ~n6850 & ~cpu_a[2] ),
+	.sel      ( n6850 & ~cpu_a[2]  ),
 	.rs       ( cpu_a[1]           ),
 	.rw       ( cpu_rw             ),
 	.dout     ( kbd_acia_data_out  ),
@@ -538,7 +538,7 @@ acia midi_acia (
 	.E        ( cpu_E              ),
 	.reset    ( reset              ),
 	.din      ( cpu_dout[15:8]     ),
-	.sel      ( ~n6850 & cpu_a[2]  ),
+	.sel      ( n6850 & cpu_a[2]   ),
 	.rs       ( cpu_a[1]           ),
 	.rw       ( cpu_rw             ),
 	.dout     ( midi_acia_data_out ),
