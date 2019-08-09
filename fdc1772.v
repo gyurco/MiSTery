@@ -87,8 +87,8 @@ reg   [9:0] image_gap_len;
 reg         image_doubleside;
 
 always @(*) begin
-	image_doubleside <= 1'b0;
-	if (image_sectors > (85*12)) image_doubleside <= 1'b1;
+	image_doubleside = 1'b0;
+	if (image_sectors > (85*12)) image_doubleside = 1'b1;
 
 	// spt : 9-12, tracks: 80-85
 	case (image_sectors)
@@ -396,6 +396,7 @@ reg sector_inc_strobe;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
+	reg verify_state;
 
 	sector_inc_strobe <= 1'b0;
 	if(!floppy_reset) begin
@@ -409,6 +410,7 @@ always @(posedge clkcpu) begin
 		data_transfer_start <= 1'b0;
 		data_transfer_can_start <= 0;
 		sector_inc_strobe <= 1'b0;
+		verify_state <= 1'b0;
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
@@ -454,9 +456,15 @@ always @(posedge clkcpu) begin
 			if(cmd_type_1) begin
 				// all type 1 commands are step commands and step_to has been set
 				if(fd_track == step_to) begin
-					busy <= 1'b0;   // done if reached track 0
-					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-					irq_set <= 1'b1; // emit irq when command done
+					if (cmd[2] && verify_state == 1'b0) begin
+						verify_state <= 1'b1;
+						step_rate_cnt <= step_rate_clk; // TODO: implement verify, now just delay one more step
+					end else begin
+						verify_state <= 1'b0;
+						busy <= 1'b0;   // done if reached track 0
+						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						irq_set <= 1'b1; // emit irq when command done
+					end
 				end else begin
 					// do the step
 					if(step_to < fd_track) step_in  <= 1'b1;
