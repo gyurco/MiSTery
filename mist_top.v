@@ -372,14 +372,18 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.ypbpr      ( ypbpr )
 );
 
-assign      cpu_dtack_n = mcu_dtack_n & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------------ CPU ------------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+assign      cpu_dtack_n = mcu_dtack_n_adj & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
 
 reg         use_16mhz;
 always @(posedge clk_32) if (mhz8_en2) use_16mhz <= (enable_16mhz | steroids);
 wire        fx68_phi1 = use_16mhz ?  clk16_en : mhz8_en1;
 wire        fx68_phi2 = use_16mhz ? ~clk16_en : mhz8_en2;
 
-wire        dtack_n_16mhz = ~rom_n ? (cpu_dtack_n | bus_cycle == 2'd2) : cpu_dtack_n;
+wire        mcu_dtack_n_adj = (use_16mhz & ~rom_n) ? (mcu_dtack_n | bus_cycle == 2'd2) : mcu_dtack_n;
 
 fx68k fx68k (
 	.clk        ( clk_32 ),
@@ -400,7 +404,7 @@ fx68k fx68k (
 	.BGn        ( blitter_bg_n ),
 	.oRESETn    (),
 	.oHALTEDn   (),
-	.DTACKn     ( use_16mhz ? dtack_n_16mhz : cpu_dtack_n ),
+	.DTACKn     ( cpu_dtack_n ),
 	.VPAn       ( vpa_n ),
 	.BERRn		( berr_n ),
 	.BRn        ( ~blitter_br & mcu_br_n ),
