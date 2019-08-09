@@ -128,16 +128,17 @@ always @(posedge clk) begin
 end
 
 reg iack_dtack;
-reg iackD;
+reg iack_sel;
+reg iack_ack;
 always @(posedge clk) begin
+	iack_sel <= 1'b0;
 	if (clk_en) begin
-		iackD <= iack;
-		if (iackD & iack) iack_dtack <= 1'b1;
+		if (iack && !iack_ack && highest_irq_pending_mask != 16'h0000) iack_sel <= 1'b1;
+		if (iack_ack) iack_dtack <= 1'b1;
 		if (~iack) iack_dtack <= 1'b0;
 	end
 end
 
-wire iack_sel = clk_en & ~iackD & iack;
 assign dtack = bus_dtack || iack_dtack;
 
 // timer a/b is in pulse mode
@@ -432,13 +433,16 @@ always @(posedge clk) begin
 		ier <= 16'h0000; 
 		imr <= 16'h0000;
 		isr_set <= 16'h0000;
+		iack_ack <= 1'b0;
 	end else begin 
 		// remove active bit from ipr and set it in isr
 		if(iack_sel) begin
 			ipr_reset[highest_irq_pending] <= 1'b1;
 			isr_set <= (vr[3] && iack)?highest_irq_pending_mask:16'h0000;
 			irq_vec <= { vr[7:4], highest_irq_pending };
+			iack_ack <= 1'b1;
 		end
+		if (~iack) iack_ack <= 1'b0;
 
 		if(write) begin
 			// -------- GPIO ---------
