@@ -67,7 +67,7 @@ module dma (
 
 	input             dio_dma_nak,
 	output      [7:0] dio_status_in,
-	input       [4:0] dio_status_index,
+	input       [3:0] dio_status_index,
 
 	// additional acsi control signals
 	output            acsi_irq,
@@ -166,7 +166,6 @@ end
 
 // select signal for the acsi controller access (write only, status comes from io controller)
 wire    acsi_reg_sel = cpu_sel && !cpu_a1 && (dma_mode[4:3] == 2'b01);
-wire [7:0] acsi_status_byte;
 wire [7:0] acsi_dout;
 
 acsi acsi(
@@ -183,10 +182,10 @@ acsi acsi(
 	 .dma_ack     ( io_dma_ack            ),
 	 .dma_nak     ( io_dma_nak            ),
 	 .dma_status  ( dio_dma_status        ),
-	  
-	 .status_sel  ( bcnt-4'd9             ),
-	 .status_byte ( acsi_status_byte      ),
-	 
+
+	 .status_sel  ( dio_status_index      ),
+	 .status_byte ( dio_status_in         ),
+
 	 // cpu interface, passed through dma in st
 	 .cpu_sel     ( acsi_reg_sel          ),
 	 .cpu_addr    ( dma_mode[2:1]         ),
@@ -418,29 +417,6 @@ always @(posedge clk)
 // ======================= Client to IO controller ====================
 // ====================================================================
 
-wire [4:0] bcnt = dio_status_index - 1'd1;
-
-// dma status byte as signalled to the io controller
-wire [7:0] dma_io_status =
-	   (bcnt == 0)?8'd0:
-	   (bcnt == 1)?8'd0:
-	   (bcnt == 2)?{ 7'd0, dma_direction_out }:
-	   (bcnt == 3)?dma_scnt:
-	   // 5 bytes FDC status
-	   ((bcnt >= 4)&&(bcnt <= 8))?8'd0/*fdc_status_byte*/:
-	   // 11 bytes ACSI status
-	   ((bcnt >= 9)&&(bcnt <= 19))?acsi_status_byte:
-		// DMA debug signals
-	   (bcnt == 20)?8'ha5:
-	   (bcnt == 21)?{ fifo_rptr, fifo_wptr}:
-	   (bcnt == 22)?{ 4'd0, 1'b0 /*fdc_irq*/, acsi_irq, 1'b0, dma_in_progress }:
-	   (bcnt == 23)?dio_dma_status:
-	   (bcnt == 24)?dma_mode[8:1]:
-	   (bcnt == 25)?8'd0/*fdc_irq_count*/:
-	   (bcnt == 26)?acsi_irq_count:
-	   8'h00;
-
-assign dio_status_in = dma_io_status;
 assign dio_data_out_reg = fifo_data_out;
 
 wire io_data_in_strobe = dio_data_in_strobe ^ dio_data_in_strobeD;

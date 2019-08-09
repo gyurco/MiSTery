@@ -2,7 +2,7 @@
 // data_io.v
 //
 // Data interface for the Atari ST core on the MiST board. 
-// Providing ROM and floppy data up- and download via the MISTs
+// Providing ROM and ACSI data up- and download via the MISTs
 // own arm7 cpu.
 //
 // http://code.google.com/p/mist-board/
@@ -37,9 +37,6 @@ module data_io #(parameter ADDR_WIDTH=24, START_ADDR = 0) (
 	// horizontal and vertical screen adjustments
 	output reg [15:0] video_adj,
 
-	output reg        addr_strobe,
-	output reg [31:0] addr_reg, //31-24 sector count, 23 direction, 22-0 mem address
-
 	// data_in_reg valid
 	output reg        data_in_strobe_mist,
 	output reg        data_in_strobe_uio,
@@ -58,7 +55,7 @@ module data_io #(parameter ADDR_WIDTH=24, START_ADDR = 0) (
 	output reg        dma_nak,
 
 	input       [7:0] status_in,
-	output      [4:0] status_index
+	output      [3:0] status_index
 );
 
 // *********************************************************************************
@@ -68,17 +65,17 @@ module data_io #(parameter ADDR_WIDTH=24, START_ADDR = 0) (
 reg [6:0]      sbuf;
 reg [7:0]      data;
 reg [2:0]      bit_cnt;
-reg [4:0]      byte_cnt;
+reg [3:0]      byte_cnt;
 reg [7:0]      cmd;
 reg            odd;
 
-assign status_index = byte_cnt;
+assign status_index = byte_cnt - 1'd1;
 
-localparam MIST_SET_ADDRESS  = 8'h01;
+localparam MIST_SET_ADDRESS  = 8'h01;  // set DMA address - not used
 localparam MIST_WRITE_MEMORY = 8'h02;
 localparam MIST_READ_MEMORY  = 8'h03;
 localparam MIST_SET_CONTROL  = 8'h04;
-localparam MIST_GET_DMASTATE = 8'h05;  // reads state of dma and floppy controller
+localparam MIST_GET_DMASTATE = 8'h05;  // reads state of ACSI
 localparam MIST_ACK_DMA      = 8'h06;  // acknowledge a dma command
 localparam MIST_BUS_REQ      = 8'h07;  // request bus - not used
 localparam MIST_BUS_REL      = 8'h08;  // release bus - not used
@@ -191,26 +188,17 @@ always @(posedge clk) begin
 			else if (abyte_cnt == 3) latch[15: 8] <= spi_byte_in;
 			else if (abyte_cnt == 4) ctrl_out <= { latch[31:8], spi_byte_in };
 
-			MIST_SET_ADDRESS:
-			if (abyte_cnt == 1)      latch[31:24] <= spi_byte_in;
-			else if (abyte_cnt == 2) latch[23:16] <= spi_byte_in;
-			else if (abyte_cnt == 3) latch[15: 8] <= spi_byte_in;
-			else if (abyte_cnt == 4) begin
-				addr_reg <= { latch[31:8], spi_byte_in };
-				addr_strobe <= ~addr_strobe;
-			end
-
 			MIST_WRITE_MEMORY, UIO_FILE_TX_DAT:
 			begin
 				lo <= ~lo;
 				if (~lo) latch[15: 8] <= spi_byte_in;
 				else begin
 					data_in_reg <= { latch[15:8], spi_byte_in };
-					if (acmd == UIO_FILE_TX_DAT)
+					if (acmd == UIO_FILE_TX_DAT) begin
 						data_in_strobe_uio <= ~data_in_strobe_uio;
-					else
+						data_addr <= data_addr + 1'd1;
+					end else
 						data_in_strobe_mist <= ~data_in_strobe_mist;
-					data_addr <= data_addr + 1'd1;
 				end
 			end
 

@@ -728,7 +728,7 @@ wire        dio_dma_ack;
 wire  [7:0] dio_dma_status;
 wire        dio_dma_nak;
 wire  [7:0] dio_status_in;
-wire  [4:0] dio_status_index;
+wire  [3:0] dio_status_index;
 wire [23:1] dio_data_addr;
 wire        dio_download;
 
@@ -742,8 +742,6 @@ data_io data_io (
 	.clk             ( clk_32              ),
 	.ctrl_out        ( system_ctrl         ),
 	.video_adj       ( ),
-	.addr_strobe     ( ),
-	.addr_reg        ( ),
 	.data_in_strobe_uio ( dio_data_in_strobe_uio ),
 	.data_in_strobe_mist( dio_data_in_strobe_mist),
 	.data_in_reg     ( dio_data_in_reg     ),
