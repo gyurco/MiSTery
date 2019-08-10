@@ -434,10 +434,10 @@ always @(posedge clkcpu) begin
 			busy <= 1'b1;
 			RNF <= 1'b0;
 
-			// 'h' flag '0' -> start spin up sequence
-			if((cmd_type_1 || cmd_type_2 || cmd_type_3) && !cmd[3] && !motor_on) begin
+			if(cmd_type_1 || cmd_type_2 || cmd_type_3) begin
 				motor_on <= 1'b1;
-				motor_spin_up_sequence <= 6;   // wait for 6 full rotations
+				// 'h' flag '0' -> wait for spin up
+				if (!motor_on && !cmd[3]) motor_spin_up_sequence <= 6;   // wait for 6 full rotations
 			end
 
 			// handle "forced interrupt"
