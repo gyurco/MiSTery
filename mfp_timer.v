@@ -126,7 +126,9 @@ always @(posedge CLK) begin
 				T_O <= 1'b0;
 		end 
 
-		timer_tick_r <= timer_tick;
+		if (xclk_en) timer_tick_r <= timer_tick;
+
+		count <= 1'b0;
 
 		if (started) begin
 			if (xclk_en) begin
@@ -146,16 +148,15 @@ always @(posedge CLK) begin
 
 			// handle delay mode
 			if (delay_mode === 1'b1)
-				if (timer_tick ^ timer_tick_r)
+				if (xclk_en && (timer_tick ^ timer_tick_r))
 					count <= 1'b1;
 
 			// handle pulse mode
 			if (pulse_mode === 1'b1)
-				if ((timer_tick ^ timer_tick_r) && trigger_r)
+				if (xclk_en && (timer_tick ^ timer_tick_r) && trigger_r)
 					count <= 1'b1;
 
 			if (count) begin
-				count <= 1'b0;
 
 				// timeout pulse
 				if (down_counter === 8'd1) begin
