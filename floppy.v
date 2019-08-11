@@ -26,12 +26,13 @@ module floppy (
 	input 	     step_out,
 
 	input [10:0] sector_len,
-	input  [3:0] spt,     // sectors/track
+	input  [4:0] spt,     // sectors/track
 	input  [9:0] sector_gap_len, // gap len/sector
+	input        hd,
 
 	output 	     dclk_en,      // data clock enable
 	output [6:0] track,        // number of track under head
-	output [3:0] sector,       // number of sector under head, 0 = no sector
+	output [4:0] sector,       // number of sector under head, 0 = no sector
 	output 	     sector_hdr,   // valid sector header under head
 	output 	     sector_data,  // valid sector data under head
 	       
@@ -47,7 +48,8 @@ assign sector_hdr = (sec_state == SECTOR_STATE_HDR);
 assign sector_data = (sec_state == SECTOR_STATE_DATA);
 
 // a standard DD floppy has a data rate of 250kBit/s and rotates at 300RPM
-localparam RATE = 20'd250000;
+localparam RATEDD = 20'd250000;
+localparam RATEHD = 20'd500000;
 localparam RPM = 10'd300;
 localparam STEPBUSY = 8'd18;       // 18ms after step data can be read
 localparam SPINUP = 10'd500;       // drive spins up in up to 800ms
@@ -57,15 +59,17 @@ localparam SECTOR_HDR_LEN = 4'd6;  // GUESSED: Sector header is 6 bytes
 localparam TRACKS = 8'd85;         // max allowed track
 
 // Archimedes specific values
-//localparam SECTOR_LEN = 11'd512;  // Default sector size is 512 on ST ...
+//localparam SECTOR_LEN = 11'd1024 // Default sector size is 1024 on Archie
+//localparam SECTOR_LEN = 11'd512; // Default sector size is 512 on ST ...
 //localparam SPT = 4'd10;           // ... with 5 sectors per track
 localparam SECTOR_BASE = 4'd1;    // number of first sector on track (archie 0, dos 1)
 
 // number of physical bytes per track
-localparam BPT = RATE*60/(8*RPM);
+localparam BPTDD = RATEDD*60/(8*RPM);
+localparam BPTHD = RATEHD*60/(8*RPM);
 
 // report disk ready if it spins at full speed and head is not moving
-assign ready = select && (rate == RATE) && (step_busy == 0);
+assign ready = select && (rate == (hd ? RATEHD : RATEDD)) && (step_busy == 0);
 
 // ================================================================
 // ========================= INDEX PULSE ==========================
@@ -134,11 +138,11 @@ localparam SECTOR_STATE_HDR  = 2'd1;
 localparam SECTOR_STATE_DATA = 2'd2;
 
 // we simulate an interleave of 1
-reg [3:0] start_sector = SECTOR_BASE;
+reg [4:0] start_sector = SECTOR_BASE;
 
 reg [1:0] sec_state;
 reg [9:0] sec_byte_cnt;  // counting bytes within sectors
-reg [3:0] current_sector = SECTOR_BASE;
+reg [4:0] current_sector = SECTOR_BASE;
   
 always @(posedge clk) begin
 	if (byte_clk_en) begin
@@ -165,7 +169,7 @@ always @(posedge clk) begin
 					if(current_sector == SECTOR_BASE+spt-1) 
 						current_sector <= SECTOR_BASE;
 					else
-						current_sector <= sector + 4'd1;
+						current_sector <= sector + 1'd1;
 					end
 
 				default:
@@ -190,7 +194,7 @@ always @(posedge clk) begin
 	if (byte_clk_en) begin
 		index_pulse_start <= 1'b0;
 
-		if(byte_cnt == BPT-1) begin
+		if(byte_cnt == ((hd ? BPTHD : BPTDD)-1'd1)) begin
 			byte_cnt <= 0;
 			index_pulse_start <= 1'b1;
 		end else
@@ -220,7 +224,7 @@ end
 localparam SPIN_UP_CLKS = SYS_CLK/1000*SPINUP;
 localparam SPIN_DOWN_CLKS = SYS_CLK/1000*SPINDOWN;
 reg [31:0] spin_up_counter;
-   
+
 // internal motor on signal that is only true if the drive is selected
 wire motor_on_sel = motor_on && select;
    
@@ -235,21 +239,21 @@ always @(posedge clk) begin
 	if(motor_onD != motor_on_sel)
 		spin_up_counter <= 32'd0;
 	else begin
-		spin_up_counter <= spin_up_counter + RATE;
+		spin_up_counter <= spin_up_counter + (hd ? RATEHD : RATEDD);
       
 		if(motor_on_sel) begin
 			// spinning up
 			if(spin_up_counter > SPIN_UP_CLKS) begin
-				if(rate < RATE)
+				if(rate < (hd ? RATEHD : RATEDD))
 					rate <= rate + 32'd1;
-				spin_up_counter <= spin_up_counter - (SPIN_UP_CLKS - RATE);
+				spin_up_counter <= spin_up_counter - (SPIN_UP_CLKS - (hd ? RATEHD : RATEDD));
 			end
 		end else begin
 			// spinning down
 			if(spin_up_counter > SPIN_DOWN_CLKS) begin
 				if(rate > 0)
 					rate <= rate - 32'd1;
-				spin_up_counter <= spin_up_counter - (SPIN_DOWN_CLKS - RATE);
+				spin_up_counter <= spin_up_counter - (SPIN_DOWN_CLKS - (hd ? RATEHD : RATEDD));
 			end
 		end // else: !if(motor_on)
 	end // else: !if(motor_onD != motor_on)
