@@ -89,8 +89,8 @@ always @(posedge CLK) begin
 end
 
 always @(posedge CLK) begin
-	reg trigger_r, trigger_r2, trigger_r3, trigger_r4;
 	reg timer_tick, timer_tick_r;
+	reg [8:0] trigger_adj;
 
 	if (RST === 1'b1) begin
 		T_O     <= 1'b0;
@@ -104,12 +104,7 @@ always @(posedge CLK) begin
 		// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
 		// In the "Atari ST internals", it's 1/4 of the MFP clock frequency
 		// Use the later, it has less jitter to the CPU clock
-		if (CLK_EN) begin
-			trigger_r <= T_I;
-			trigger_r2 <= trigger_r;
-			trigger_r3 <= trigger_r2;
-			trigger_r4 <= trigger_r3;
-		end
+		if (CLK_EN) trigger_adj <= { trigger_adj[7:0], T_I };
 
 		// if a write request comes from the main unit
 		// then write the data to the appropriate register.
@@ -143,7 +138,7 @@ always @(posedge CLK) begin
 
 			// handle event mode
 			if (event_mode === 1'b1)
-				if (CLK_EN && (~trigger_r4 & trigger_r3))
+				if (CLK_EN && (~trigger_adj[8] & trigger_adj[7]))
 					count <= 1'b1;
 
 			// handle delay mode
@@ -153,7 +148,7 @@ always @(posedge CLK) begin
 
 			// handle pulse mode
 			if (pulse_mode === 1'b1)
-				if (xclk_en && (timer_tick ^ timer_tick_r) && trigger_r)
+				if (xclk_en && (timer_tick ^ timer_tick_r) && trigger_adj[7])
 					count <= 1'b1;
 
 			if (count) begin
@@ -167,7 +162,6 @@ always @(posedge CLK) begin
 					down_counter <= data;
 
 				end else begin
-
 					down_counter <= down_counter - 8'd1;
 				end
 			end
