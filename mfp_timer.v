@@ -59,6 +59,7 @@ assign EVENT_MODE = event_mode;
 
 wire[7:0] prescaler;         // prescaler value
 reg [7:0] prescaler_counter; // prescaler counter
+wire      prescaler_active;
 
 reg       count;
 
@@ -127,7 +128,7 @@ always @(posedge CLK) begin
 
 		count <= 1'b0;
 
-		if (started) begin
+		if (prescaler_active) begin
 			if (xclk_en) begin
 				if(prescaler_counter >= prescaler) begin
 					prescaler_counter <= 8'd0;
@@ -182,6 +183,7 @@ assign prescaler = control[2:0] === 3'd1 ?  8'd03 :
                    control[2:0] === 3'd6 ?  8'd99 :
                    control[2:0] === 3'd7 ?  8'd199 : 8'd1;
 
+assign prescaler_active = |control[2:0];
 assign delay_mode = control[3] === 1'b0;
 assign pulse_mode = control[3] === 1'b1 & !event_mode;
 assign event_mode = control[3:0] === 4'b1000;
