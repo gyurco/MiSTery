@@ -18,7 +18,6 @@
 //
 
 // TODO: 
-// - Don't directly set track register but control it with the step commands
 // - 30ms settle time after step before data can be read
 // - some parts are hard coded for archie floppy format (not dos)
 
@@ -148,14 +147,9 @@ always @(posedge clkcpu)
 
 wire irq_clr = !floppy_reset || cpu_rw_cmdstatus;
 
-always @(posedge clkcpu or posedge irq_clr) begin
-	reg irq_setD;
-
+always @(posedge clkcpu) begin
 	if(irq_clr) irq <= 1'b0;
-	else begin
-		irq_setD <= irq_set;
-		if(~irq_setD & irq_set) irq <= 1'b1;
-	end
+	else if(irq_set) irq <= 1'b1;
 end
 
 reg drq_set;
@@ -166,7 +160,7 @@ always @(posedge clkcpu)
 
 wire drq_clr = !floppy_reset || cpu_rw_data;
 
-always @(posedge clkcpu or posedge drq_clr) begin
+always @(posedge clkcpu) begin
 	if(drq_clr) drq <= 1'b0;
 	else if(drq_set) drq <= 1'b1;
 end
@@ -388,10 +382,10 @@ reg [15:0] step_pulse_cnt;
 
 // the step rate is only valid for command type I
 wire [15:0] step_rate_clk = 
-           (cmd[1:0]==2'b00)?(2*CLK_EN/1000-1):    // 2ms
-           (cmd[1:0]==2'b01)?(3*CLK_EN/1000-1):    // 3ms
-           (cmd[1:0]==2'b10)?(5*CLK_EN/1000-1):    // 5ms
-           (6*CLK_EN/1000-1);                      // 6ms
+           (cmd[1:0]==2'b00)?(6*CLK_EN/1000-1):    //  6ms
+           (cmd[1:0]==2'b01)?(3*CLK_EN/1000-1):    // 12ms
+           (cmd[1:0]==2'b10)?(5*CLK_EN/1000-1):    //  2ms
+           (6*CLK_EN/1000-1);                      //  3ms
 
 reg [15:0] step_rate_cnt;
 
@@ -400,28 +394,33 @@ wire step_busy = (step_rate_cnt != 0);
 reg [7:0] step_to;
 reg RNF;
 reg sector_inc_strobe;
+reg track_inc_strobe;
+reg track_dec_strobe;
+reg track_clear_strobe;
 
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
-	reg verify_state;
+	reg [1:0] seek_state;
 
 	sector_inc_strobe <= 1'b0;
+	track_inc_strobe <= 1'b0;
+	track_dec_strobe <= 1'b0;
+	track_clear_strobe <= 1'b0;
+	irq_set <= 1'b0;
+
 	if(!floppy_reset) begin
 		motor_on <= 1'b0;
 		busy <= 1'b0;
 		step_in <= 1'b0;
 		step_out <= 1'b0;
-		irq_set <= 1'b0;
 		sd_card_read <= 0;
 		sd_card_write <= 0;
 		data_transfer_start <= 1'b0;
 		data_transfer_can_start <= 0;
-		sector_inc_strobe <= 1'b0;
-		verify_state <= 1'b0;
+		seek_state <= 0;
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
-		irq_set <= 1'b0;
 		data_transfer_start <= 1'b0;
 
 		// disable step signal after 1 msec
@@ -461,32 +460,79 @@ always @(posedge clkcpu) begin
 
 			// ------------------------ TYPE I -------------------------
 			if(cmd_type_1) begin
-				// all type 1 commands are step commands and step_to has been set
-				if(fd_track == step_to) begin
-					if (cmd[2] && verify_state == 1'b0) begin
-						verify_state <= 1'b1;
-						step_rate_cnt <= step_rate_clk; // TODO: implement verify, now just delay one more step
-					end else begin
-						verify_state <= 1'b0;
-						busy <= 1'b0;   // done if reached track 0
-						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-						irq_set <= 1'b1; // emit irq when command done
+				// evaluate command
+				case (seek_state)
+				0: begin
+					// restore
+					if(cmd[7:4] == 4'b0000) begin
+						if (fd_track0) begin
+							track_clear_strobe <= 1'b1;
+							seek_state <= 2;
+						end else begin
+							step_dir <= 1'b1;
+							seek_state <= 1;
+						end
 					end
-				end else begin
-					// do the step
-					if(step_to < fd_track) step_in  <= 1'b1;
-					else step_out  <= 1'b1;
 
-					// update track register
-//	       if( (!cmd[6] && !cmd[5]) ||               // restore/seek
-//		       ((cmd[6] || cmd[5]) && cmd[4])) begin // step(in/out) with update flag
-//		      if(step_to < fd_track) track <= track - 1'd0;
-//		      else                   track <= track + 1'd0;
-//	       end
+					// seek
+					if(cmd[7:4] == 4'b0001) begin
+						if (track == step_to) seek_state <= 2;
+						else begin
+							step_dir <= (step_to < track);
+							seek_state <= 1;
+						end
+					end
+
+					// step
+					if(cmd[7:5] == 3'b001) seek_state <= 1;
+
+					// step-in
+					if(cmd[7:5] == 3'b010) begin
+						step_dir <= 1'b0;
+						seek_state <= 1;
+					end
+
+					// step-out
+					if(cmd[7:5] == 3'b011) begin
+						step_dir <= 1'b1;
+						seek_state <= 1;
+					end
+				   end
+
+				// do the step
+				1: begin
+					if (step_dir)
+						step_in <= 1'b1;
+					else
+						step_out <= 1'b1;
+
+					// update the track register if seek/restore or the update flag set
+					if( (!cmd[6] && !cmd[5]) || ((cmd[6] || cmd[5]) && cmd[4]))
+						if (step_dir)
+							track_dec_strobe <= 1'b1;
+						else
+							track_inc_strobe <= 1'b1;
 
 					step_pulse_cnt <= STEP_PULSE_CLKS - 1'd1;
 					step_rate_cnt <= step_rate_clk;
-				end
+
+					seek_state <= (!cmd[6] && !cmd[5]) ? 0 : 2; // loop for seek/restore
+				   end
+
+				// verify
+				2: begin
+					if (cmd[2]) step_rate_cnt <= step_rate_clk; // TODO: implement verify, now just delay one more step
+					seek_state <= 3;
+				   end
+
+				// finish
+				3: begin
+					busy <= 1'b0;
+					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+					irq_set <= 1'b1; // emit irq when command done
+					seek_state <= 0;
+				   end
+				endcase
 			end // if (cmd_type_1)
 
 			// ------------------------ TYPE II -------------------------
@@ -496,7 +542,7 @@ always @(posedge clkcpu) begin
 					busy <= 1'b0;
 					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 					irq_set <= 1'b1; // emit irq when command done
-				end else if (!sector_inc_strobe) begin
+				end else begin
 					// read sector
 					if(cmd[7:5] == 3'b100) begin
 						if (sector > fd_spt) begin
@@ -751,7 +797,7 @@ wire [7:0] status = { motor_on,
 		      cmd_type_1?motor_spin_up_done:1'b0,  // data mark
 		      !floppy_present | RNF,               // record not found
 		      1'b0,                                // crc error
-		      cmd_type_1?(fd_track == 0):1'b0,
+		      cmd_type_1?fd_track0:1'b0,
 		      cmd_type_1?~fd_index:drq,
 		      busy } /* synthesis keep */;
 
@@ -823,29 +869,20 @@ always @(posedge clkcpu) begin
 				// ------------- TYPE I commands -------------
 				if(cpu_din[7:4] == 4'b0000) begin               // RESTORE
 					step_to <= 8'd0;
-					track <= 8'd0;
+					track <= 8'hff;
 				end
 
 				if(cpu_din[7:4] == 4'b0001) begin               // SEEK
 					step_to <= data_in;
-					track <= data_in;
 				end
 
 				if(cpu_din[7:5] == 3'b001) begin                // STEP
-					step_to <= (step_dir == 1)?(track + 8'd1):(track - 8'd1);
-					if(cpu_din[4]) track <= (step_dir == 1)?(track + 8'd1):(track - 8'd1);
 				end
 
 				if(cpu_din[7:5] == 3'b010) begin                // STEP-IN
-					step_to <= track + 8'd1;
-					step_dir <= 1'b1;
-					if(cpu_din[4]) track <= track + 8'd1;
 				end
 
 				if(cpu_din[7:5] == 3'b011) begin                // STEP-OUT
-					step_to <= track - 8'd1;
-					step_dir <= 1'b0;
-					if(cpu_din[4]) track <= track - 8'd1;
 				end
 
 				// ------------- TYPE II commands -------------
@@ -883,6 +920,9 @@ always @(posedge clkcpu) begin
 		end
 
 		if (sector_inc_strobe) sector <= sector + 1'd1;
+		if (track_inc_strobe) track <= track + 1'd1;
+		if (track_dec_strobe) track <= track - 1'd1;
+		if (track_clear_strobe) track <= 8'd0;
 	end
 end
 
