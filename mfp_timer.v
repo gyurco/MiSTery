@@ -135,41 +135,42 @@ always @(posedge CLK) begin
 				end else
 					prescaler_counter <= prescaler_counter + 8'd1;
 			end
-
-			T_O_PULSE <= 1'b0;
-
-			// handle event mode
-			if (event_mode === 1'b1)
-				if (CLK_EN && (~trigger_adj[8] & trigger_adj[7]))
-					count <= 1'b1;
-
-			// handle delay mode
-			if (delay_mode === 1'b1)
-				if (CLK_EN && (timer_tick_adj[7] ^ timer_tick_adj[6]))
-					count <= 1'b1;
-
-			// handle pulse mode
-			if (pulse_mode === 1'b1)
-				if (CLK_EN && (timer_tick_adj[7] ^ timer_tick_adj[6]) && trigger_adj[7])
-					count <= 1'b1;
-
-			if (count) begin
-
-				// timeout pulse
-				if (down_counter === 8'd1) begin
-
-					// pulse the timer out
-					T_O <= ~T_O;
-					T_O_PULSE <= 1'b1;
-					down_counter <= data;
-
-				end else begin
-					down_counter <= down_counter - 8'd1;
-				end
-			end
 		end else begin
 			prescaler_counter <= 8'd0;
 		end
+
+		T_O_PULSE <= 1'b0;
+
+		// handle event mode
+		if (event_mode === 1'b1)
+			if (CLK_EN && (~trigger_adj[8] & trigger_adj[7]))
+				count <= 1'b1;
+
+		// handle delay mode
+		if (delay_mode === 1'b1)
+			if (CLK_EN && (timer_tick_adj[7] ^ timer_tick_adj[6]))
+				count <= 1'b1;
+
+		// handle pulse mode
+		if (pulse_mode === 1'b1)
+			if (CLK_EN && (timer_tick_adj[7] ^ timer_tick_adj[6]) && trigger_adj[7])
+				count <= 1'b1;
+
+		if (count) begin
+
+			// timeout pulse
+			if (down_counter === 8'd1) begin
+
+				// pulse the timer out
+				T_O <= ~T_O;
+				T_O_PULSE <= 1'b1;
+				down_counter <= data;
+
+			end else begin
+				down_counter <= down_counter - 8'd1;
+			end
+		end
+
 	end
 end
 
