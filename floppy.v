@@ -26,7 +26,8 @@ module floppy (
 	input 	     step_out,
 
 	input [10:0] sector_len,
-	input  [4:0] spt,     // sectors/track
+	input        sector_base,    // number of first sector on track (archie 0, dos 1)
+	input  [4:0] spt,            // sectors/track
 	input  [9:0] sector_gap_len, // gap len/sector
 	input        hd,
 
@@ -62,7 +63,7 @@ localparam TRACKS = 8'd85;         // max allowed track
 //localparam SECTOR_LEN = 11'd1024 // Default sector size is 1024 on Archie
 //localparam SECTOR_LEN = 11'd512; // Default sector size is 512 on ST ...
 //localparam SPT = 4'd10;           // ... with 5 sectors per track
-localparam SECTOR_BASE = 4'd1;    // number of first sector on track (archie 0, dos 1)
+//localparam SECTOR_BASE = 4'd1;    // number of first sector on track (archie 0, dos 1)
 
 // number of physical bytes per track
 localparam BPTDD = RATEDD*60/(8*RPM);
@@ -138,11 +139,11 @@ localparam SECTOR_STATE_HDR  = 2'd1;
 localparam SECTOR_STATE_DATA = 2'd2;
 
 // we simulate an interleave of 1
-reg [4:0] start_sector = SECTOR_BASE;
+reg [4:0] start_sector = 4'd1;
 
 reg [1:0] sec_state;
 reg [9:0] sec_byte_cnt;  // counting bytes within sectors
-reg [4:0] current_sector = SECTOR_BASE;
+reg [4:0] current_sector = 4'd1;
   
 always @(posedge clk) begin
 	if (byte_clk_en) begin
@@ -166,8 +167,8 @@ always @(posedge clk) begin
 				SECTOR_STATE_DATA: begin
 					sec_state <= SECTOR_STATE_GAP;
 					sec_byte_cnt <= sector_gap_len-1'd1;
-					if(current_sector == SECTOR_BASE+spt-1) 
-						current_sector <= SECTOR_BASE;
+					if(current_sector == sector_base+spt-1) 
+						current_sector <= sector_base;
 					else
 						current_sector <= sector + 1'd1;
 					end
