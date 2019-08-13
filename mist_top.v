@@ -349,6 +349,13 @@ wire [3:0] stvid_b   = viking_active?viking_b:b;
 wire       stvid_hs  = viking_active?viking_hs:hsync_n;
 wire       stvid_vs  = viking_active?viking_vs:vsync_n;
 
+// assume mono mode only if it's set during VSYNC
+// demos like to switch it on/off during active display to get rid of borders
+reg        monomode = 1'b0;
+always @(posedge clk_32) begin
+	if (!vsync_n) monomode <= mono;
+end
+
 mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
 	.clk_sys    ( video_clk ),
 	.SPI_SCK    ( SPI_SCK ),
@@ -366,8 +373,8 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.VGA_HS     ( VGA_HS ),
 	.ce_divider ( 1'b1 ),
 	.rotate     ( 2'b00 ),
-	.scandoubler_disable( scandoubler_disable | mono | viking_active ),
-	.no_csync   ( mono | viking_active ),
+	.scandoubler_disable( scandoubler_disable | monomode | viking_active ),
+	.no_csync   ( monomode | viking_active ),
 	.scanlines  ( system_ctrl[21:20] ),
 	.ypbpr      ( ypbpr )
 );
