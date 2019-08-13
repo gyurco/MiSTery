@@ -91,7 +91,7 @@ end
 
 always @(posedge CLK) begin
 	reg       timer_tick;
-	reg [8:0] timer_tick_adj;
+	reg       timer_tick_r;
 	reg [8:0] trigger_adj;
 
 	if (RST === 1'b1) begin
@@ -108,8 +108,7 @@ always @(posedge CLK) begin
 		// Use the later, it has less jitter to the CPU clock
 		if (CLK_EN) trigger_adj <= { trigger_adj[7:0], T_I };
 
-		// delay chain calibrated with Dark side of the Spoon and Ovescan 2k demos
-		if (CLK_EN) timer_tick_adj <= { timer_tick_adj[7:0], timer_tick };
+		if (CLK_EN) timer_tick_r <= timer_tick;
 
 		// if a write request comes from the main unit
 		// then write the data to the appropriate register.
@@ -149,12 +148,12 @@ always @(posedge CLK) begin
 
 		// handle delay mode
 		if (delay_mode === 1'b1)
-			if (CLK_EN && (timer_tick_adj[7] ^ timer_tick_adj[6]))
+			if (CLK_EN && (timer_tick_r ^ timer_tick))
 				count <= 1'b1;
 
 		// handle pulse mode
 		if (pulse_mode === 1'b1)
-			if (CLK_EN && (timer_tick_adj[7] ^ timer_tick_adj[6]) && trigger_adj[7])
+			if (CLK_EN && (timer_tick_r ^ timer_tick) && trigger_adj[7])
 				count <= 1'b1;
 
 		if (count) begin

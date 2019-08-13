@@ -90,9 +90,9 @@ module pll_mfp1 (
 				.vcounderrange ());
 	defparam
 		altpll_component.bandwidth_type = "HIGH",
-		altpll_component.clk0_divide_by = 802,
+		altpll_component.clk0_divide_by = 868,
 		altpll_component.clk0_duty_cycle = 50,
-		altpll_component.clk0_multiply_by = 73,
+		altpll_component.clk0_multiply_by = 79,
 		altpll_component.clk0_phase_shift = "0",
 		altpll_component.compensate_clock = "CLK0",
 		altpll_component.inclk0_input_frequency = 37037,
@@ -166,9 +166,9 @@ endmodule
 // Retrieval info: PRIVATE: CUR_DEDICATED_CLK STRING "c0"
 // Retrieval info: PRIVATE: CUR_FBIN_CLK STRING "c0"
 // Retrieval info: PRIVATE: DEVICE_SPEED_GRADE STRING "8"
-// Retrieval info: PRIVATE: DIV_FACTOR0 NUMERIC "802"
+// Retrieval info: PRIVATE: DIV_FACTOR0 NUMERIC "868"
 // Retrieval info: PRIVATE: DUTY_CYCLE0 STRING "50.00000000"
-// Retrieval info: PRIVATE: EFF_OUTPUT_FREQ_VALUE0 STRING "2.457606"
+// Retrieval info: PRIVATE: EFF_OUTPUT_FREQ_VALUE0 STRING "2.457373"
 // Retrieval info: PRIVATE: EXPLICIT_SWITCHOVER_COUNTER STRING "0"
 // Retrieval info: PRIVATE: EXT_FEEDBACK_RADIO STRING "0"
 // Retrieval info: PRIVATE: GLOCKED_COUNTER_EDIT_CHANGED STRING "1"
@@ -191,7 +191,7 @@ endmodule
 // Retrieval info: PRIVATE: LVDS_PHASE_SHIFT_UNIT0 STRING "deg"
 // Retrieval info: PRIVATE: MIG_DEVICE_SPEED_GRADE STRING "Any"
 // Retrieval info: PRIVATE: MIRROR_CLK0 STRING "0"
-// Retrieval info: PRIVATE: MULT_FACTOR0 NUMERIC "73"
+// Retrieval info: PRIVATE: MULT_FACTOR0 NUMERIC "79"
 // Retrieval info: PRIVATE: NORMAL_MODE_RADIO STRING "1"
 // Retrieval info: PRIVATE: OUTPUT_FREQ0 STRING "2.45760000"
 // Retrieval info: PRIVATE: OUTPUT_FREQ_MODE0 STRING "0"
@@ -232,9 +232,9 @@ endmodule
 // Retrieval info: PRIVATE: ZERO_DELAY_RADIO STRING "0"
 // Retrieval info: LIBRARY: altera_mf altera_mf.altera_mf_components.all
 // Retrieval info: CONSTANT: BANDWIDTH_TYPE STRING "HIGH"
-// Retrieval info: CONSTANT: CLK0_DIVIDE_BY NUMERIC "802"
+// Retrieval info: CONSTANT: CLK0_DIVIDE_BY NUMERIC "868"
 // Retrieval info: CONSTANT: CLK0_DUTY_CYCLE NUMERIC "50"
-// Retrieval info: CONSTANT: CLK0_MULTIPLY_BY NUMERIC "73"
+// Retrieval info: CONSTANT: CLK0_MULTIPLY_BY NUMERIC "79"
 // Retrieval info: CONSTANT: CLK0_PHASE_SHIFT STRING "0"
 // Retrieval info: CONSTANT: COMPENSATE_CLOCK STRING "CLK0"
 // Retrieval info: CONSTANT: INCLK0_INPUT_FREQUENCY NUMERIC "37037"
