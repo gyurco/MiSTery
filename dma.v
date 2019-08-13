@@ -188,7 +188,7 @@ acsi acsi(
 
 	 // cpu interface, passed through dma in st
 	 .cpu_sel     ( acsi_reg_sel          ),
-	 .cpu_addr    ( dma_mode[2:1]         ),
+	 .cpu_a1      ( dma_mode[1]           ),
 	 .cpu_rw      ( cpu_rw                ),
 	 .cpu_din     ( cpu_din[7:0]          ),
 	 .cpu_dout    ( acsi_dout             )

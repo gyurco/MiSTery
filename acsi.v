@@ -36,13 +36,13 @@ module acsi (
 	output [7:0] status_byte,
 
    // cpu interface
-   input [1:0]  cpu_addr,
-   input 	     cpu_sel,
-   input 	     cpu_rw,
-   input [7:0]  cpu_din,
-   output [7:0] cpu_dout,
+	input        cpu_a1,
+	input        cpu_sel,
+	input        cpu_rw,
+	input  [7:0] cpu_din,
+	output [7:0] cpu_dout,
 
-	output reg   irq		 
+	output reg   irq
 );
 
 reg cpu_selD;
@@ -110,7 +110,7 @@ always @(posedge clk) begin
 
 		// acsi register access
 		if(clk_en && cpu_req && !cpu_rw) begin
-			if(!cpu_addr[0]) begin
+			if(!cpu_a1) begin
 				// a0 == 0 -> first command byte
 				target <= cpu_din[7:5];
 
