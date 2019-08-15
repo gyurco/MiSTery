@@ -82,23 +82,30 @@ reg   [1:0] doubleside;
 reg   [1:0] hd;
 
 wire [11:0] image_sectors = img_size[20:9];
-reg   [4:0] image_spt;
+reg  [11:0] image_sps; // sectors/side
+reg   [4:0] image_spt; // sectors/track
 reg   [9:0] image_gap_len;
 reg         image_doubleside;
 wire        image_hd = img_size[20];
 
 always @(*) begin
 	image_doubleside = 1'b0;
-	if (image_sectors > (85*12)) image_doubleside = 1'b1;
+	image_sps = image_sectors;
+	if (image_sectors > (85*12)) begin
+		image_doubleside = 1'b1;
+		image_sps = image_sectors >> 1'b1;
+	end
+	if (image_hd) image_sps = image_sps >> 1'b1;
 
 	// spt : 9-12, tracks: 79-85
-	case (image_sectors)
-		1422,1440,1458,1476,1494,1512,1530,711,720,729,738,747,756,765   : image_spt = 5'd9;
-		1580,1600,1620,1640,1660,1680,1700,790,800,810,820,830,840,850   : image_spt = 5'd10;
-		1896,1920,1944,1968,1992,2016,2040,948,960,972,984,996,1008,1020 : image_spt = 5'd12;
-		2880 : image_spt = 5'd18;
+	case (image_sps)
+		711,720,729,738,747,756,765   : image_spt = 5'd9;
+		790,800,810,820,830,840,850   : image_spt = 5'd10;
+		948,960,972,984,996,1008,1020 : image_spt = 5'd12;
 		default : image_spt = 5'd11;
 	endcase;
+
+	if (image_hd) image_spt = image_spt << 1'b1;
 
 	// SECTOR_GAP_LEN = BPT/SPT - (SECTOR_LEN + SECTOR_HDR_LEN) = 6250/SPT - (512+6)
 	case (image_spt)
