@@ -259,7 +259,7 @@ wire [15:0] shifter_dout;
 gstshifter gstshifter (
 	.clk32      ( clk_32 ),
 	.ste        ( ste ),
-	.resb       ( !reset ),
+	.resb       ( mcu_reset_n ),
 
     // CPU/RAM interface
 	.CS         ( ~cmpcs_n ),
