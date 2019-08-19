@@ -438,7 +438,8 @@ always @(posedge clk) begin
 		// remove active bit from ipr and set it in isr
 		if(iack_sel) begin
 			ipr_reset[highest_irq_pending] <= 1'b1;
-			isr_set <= (vr[3] && iack)?highest_irq_pending_mask:16'h0000;
+			isr_set <= vr[3]?highest_irq_pending_mask:16'h0000;
+			isr_reset <= !vr[3]?highest_irq_pending_mask:16'h0000;
 			irq_vec <= { vr[7:4], highest_irq_pending };
 			iack_ack <= 1'b1;
 		end
