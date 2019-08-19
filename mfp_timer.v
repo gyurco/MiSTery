@@ -93,6 +93,7 @@ always @(posedge CLK) begin
 	reg       timer_tick;
 	reg       timer_tick_r;
 	reg [8:0] trigger_adj;
+	reg       timer_fire;
 
 	if (RST === 1'b1) begin
 		T_O     <= 1'b0;
@@ -101,6 +102,7 @@ always @(posedge CLK) begin
 		down_counter <= 8'd0;
 		count <= 1'b0;
 		prescaler_counter <= 8'd0;
+		timer_fire <= 1'b0;
 	end else begin
 
 		// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
@@ -157,18 +159,18 @@ always @(posedge CLK) begin
 				count <= 1'b1;
 
 		if (count) begin
+			down_counter <= down_counter - 8'd1;
 
 			// timeout pulse
-			if (down_counter === 8'd1) begin
+			if (down_counter === 8'd1) timer_fire <= 1'b1;
+		end
 
-				// pulse the timer out
-				T_O <= ~T_O;
-				T_O_PULSE <= 1'b1;
-				down_counter <= data;
-
-			end else begin
-				down_counter <= down_counter - 8'd1;
-			end
+		if (started && timer_fire) begin
+			// pulse the timer out
+			timer_fire <= 1'b0;
+			T_O <= ~T_O;
+			T_O_PULSE <= 1'b1;
+			down_counter <= data;
 		end
 
 	end
