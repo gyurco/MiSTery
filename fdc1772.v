@@ -56,7 +56,7 @@ module fdc1772 (
 );
 
 parameter CLK = 32000000;
-parameter CLK_EN = 8000000;
+parameter CLK_EN = 16'd8000; // in kHz
 parameter SECTOR_SIZE_CODE = 2'd3; // sec size 0=128, 1=256, 2=512, 3=1024
 parameter SECTOR_BASE = 1'b0; // number of first sector on track (archie 0, dos 1)
 
@@ -415,21 +415,24 @@ wire motor_spin_up_done = (!motor_on) || (motor_on && (motor_spin_up_sequence ==
 
 // ---------------------------- step handling ------------------------------
 
-localparam STEP_PULSE_LEN = 1;
-localparam STEP_PULSE_CLKS = (STEP_PULSE_LEN * CLK_EN)/1000;
+localparam STEP_PULSE_LEN = 16'd1;
+localparam STEP_PULSE_CLKS = STEP_PULSE_LEN * CLK_EN;
 reg [15:0] step_pulse_cnt;
 
 // the step rate is only valid for command type I
 wire [15:0] step_rate_clk = 
-           (cmd[1:0]==2'b00)?(6*CLK_EN/1000-1):    //  6ms
-           (cmd[1:0]==2'b01)?(3*CLK_EN/1000-1):    // 12ms
-           (cmd[1:0]==2'b10)?(5*CLK_EN/1000-1):    //  2ms
-           (6*CLK_EN/1000-1);                      //  3ms
+           (cmd[1:0]==2'b00)?(16'd6*CLK_EN-1'd1):    //  6ms
+           (cmd[1:0]==2'b01)?(16'd12*CLK_EN-1'd1):   // 12ms
+           (cmd[1:0]==2'b10)?(16'd2*CLK_EN-1'd1):    //  2ms
+           (16'd3*CLK_EN-1'd1);                      //  3ms
 
 reg [15:0] step_rate_cnt;
+reg [15:0] delay_cnt;
 
 // flag indicating that a "step" is in progress
 wire step_busy = (step_rate_cnt != 0);
+wire delaying = (delay_cnt != 0);
+
 reg [7:0] step_to;
 reg RNF;
 reg sector_inc_strobe;
@@ -440,6 +443,7 @@ reg track_clear_strobe;
 always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
 	reg [1:0] seek_state;
+	reg notready_wait;
 
 	sector_inc_strobe <= 1'b0;
 	track_inc_strobe <= 1'b0;
@@ -457,6 +461,7 @@ always @(posedge clkcpu) begin
 		data_transfer_start <= 1'b0;
 		data_transfer_can_start <= 0;
 		seek_state <= 0;
+		notready_wait <= 1'b0;
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
@@ -474,10 +479,15 @@ always @(posedge clkcpu) begin
 		if(step_rate_cnt != 0) 
 			step_rate_cnt <= step_rate_cnt - 16'd1;
 
+		// delay timer
+		if(delay_cnt != 0) 
+			delay_cnt <= delay_cnt - 16'd1;
+
 		// just received a new command
 		if(cmd_rx) begin
 			busy <= 1'b1;
 			RNF <= 1'b0;
+			notready_wait <= 1'b0;
 
 			if(cmd_type_1 || cmd_type_2 || cmd_type_3) begin
 				motor_on <= 1'b1;
@@ -495,7 +505,7 @@ always @(posedge clkcpu) begin
 
 		// execute command if motor is not supposed to be running or
 		// wait for motor spinup to finish
-		if(busy && motor_spin_up_done && !step_busy) begin
+		if(busy && motor_spin_up_done && !step_busy && !delaying) begin
 
 			// ------------------------ TYPE I -------------------------
 			if(cmd_type_1) begin
@@ -560,7 +570,7 @@ always @(posedge clkcpu) begin
 
 				// verify
 				2: begin
-					if (cmd[2]) step_rate_cnt <= step_rate_clk; // TODO: implement verify, now just delay one more step
+					if (cmd[2]) delay_cnt <= 16'd3*CLK_EN; // TODO: implement verify, now just delay one more step
 					seek_state <= 3;
 				   end
 
@@ -577,10 +587,16 @@ always @(posedge clkcpu) begin
 			// ------------------------ TYPE II -------------------------
 			if(cmd_type_2) begin
 				if(!floppy_present) begin
-					// no image selected -> send irq immediately
-					busy <= 1'b0;
-					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-					irq_set <= 1'b1; // emit irq when command done
+					// no image selected -> send irq after 6 ms
+					if (!notready_wait) begin
+						delay_cnt <= 16'd6*CLK_EN;
+						notready_wait <= 1'b1;
+					end else begin
+						RNF <= 1'b1;
+						busy <= 1'b0;
+						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+						irq_set <= 1'b1; // emit irq when command done
+					end
 				end else begin
 					// read sector
 					if(cmd[7:5] == 3'b100) begin
