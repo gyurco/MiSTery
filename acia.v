@@ -143,7 +143,8 @@ always @(posedge clk) begin
 				if(serial_rx_cnt[7:0] == 8'd1) begin
 					if(serial_in_filtered == 1'b1) begin
 						// copy data into rx register 
-						serial_rx_data <= serial_rx_shift_reg;  // pure data w/o start and stop bits
+						if (!serial_rx_data_available)
+							serial_rx_data <= serial_rx_shift_reg;  // pure data w/o start and stop bits
 						serial_rx_data_available <= 1'b1;
 						serial_rx_frame_error <= 1'b0;
 					end else
