@@ -102,7 +102,7 @@ always @(posedge clk) begin
 			serial_rx_data_available <= 1'b0;   // read on serial data clears rx status
 			serial_rx_overrun <= 1'b0;
 		end
-			
+
 		// serial acia master reset
 		if(serial_cr[1:0] == 2'b11) begin
 			serial_rx_cnt <= 8'd0;
@@ -203,8 +203,15 @@ always @(posedge clk) begin
 	end else if(clk_en && sel && ~rw) begin
 
 			// write to serial control register
-			if(~rs)
+			if(~rs) begin
 				serial_cr <= din;
+				if (din[1:0] == 2'b11) begin
+					serial_tx_cnt <= 8'd0;
+					serial_tx_empty <= 1'b1;
+					serial_tx_data_valid <= 1'b0;
+					serial_tx_shift_reg[0] <= 1'b1;
+				end
+			end
 
 			// write to serial data register
 			if(rs) begin
