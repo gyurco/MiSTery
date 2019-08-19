@@ -114,7 +114,7 @@ always @(posedge clk_32) begin
 	if (~resetD & reset) mcu_reset_n <= 0;
 end
 
-always @(posedge clk_2) ikbd_reset <= system_ctrl[0];
+always @(posedge clk_2) ikbd_reset <= system_ctrl[0] | ~cpu_reset_n_o;
 
 // MCU signals
 
@@ -147,6 +147,7 @@ wire        cpu_dtack_n;
 wire        ipl0_n, ipl1_n, ipl2_n;
 wire        fc0, fc1, fc2;
 wire        as_n, cpu_rw, uds_n, lds_n, vma_n, vpa_n, cpu_E;
+wire        cpu_reset_n_o;
 wire [15:0] cpu_din, cpu_dout;
 wire [23:1] cpu_a;
 
@@ -409,7 +410,7 @@ fx68k fx68k (
 	.FC1        ( fc1 ),
 	.FC2        ( fc2 ),
 	.BGn        ( blitter_bg_n ),
-	.oRESETn    (),
+	.oRESETn    ( cpu_reset_n_o ),
 	.oHALTEDn   (),
 	.DTACKn     ( cpu_dtack_n ),
 	.VPAn       ( vpa_n ),
