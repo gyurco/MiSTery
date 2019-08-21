@@ -903,7 +903,9 @@ wire        ram_en = (MEM512K & ram_a[23:19] == 5'b00000) ||
                      (MEM2M   & ram_a[23:21] == 3'b000)   ||
                      (MEM4M   & ram_a[23:22] == 2'b00)    ||
                      (MEM8M   & ram_a[23] == 1'b0)        ||
-                     (MEM14M  & (~ram_a[23] | ~ram_a[22] | (ram_a[23] & ram_a[22] & ~ram_a[21])));
+                     (MEM14M  & (~ram_a[23] | ~ram_a[22] | (ram_a[23] & ram_a[22] & ~ram_a[21]))) ||
+                     (viking_enable & ~steroids & ram_a[23:18] == 6'b110000) ||
+                     (viking_enable &  steroids & ram_a[23:19] == 5'b11101);
 
 // ----------------- RAM read -----------------
 wire sdram_oe = (cpu_cycle & dio_download)?1'b0:
