@@ -568,8 +568,8 @@ acia midi_acia (
 wire [7:0] snd_data_out;
 wire [7:0] ym_a_out, ym_b_out, ym_c_out;
 
-wire [9:0] ym_audio_out_l = psg_stereo ? ym_a_out + ym_b_out : ym_a_out + ym_b_out + ym_c_out;
-wire [9:0] ym_audio_out_r = psg_stereo ? ym_c_out + ym_b_out : ym_a_out + ym_b_out + ym_c_out;
+wire [9:0] ym_audio_out_l;
+wire [9:0] ym_audio_out_r;
 
 reg clk_2_en;
 always @(posedge clk_32) begin
@@ -594,13 +594,13 @@ ym2149 ym2149 (
 	.RESET       ( reset         ),
 	.DI          ( cpu_dout[15:8]),
 	.DO          ( snd_data_out  ),
-	.CHANNEL_A   ( ym_a_out      ),
-	.CHANNEL_B   ( ym_b_out      ),
-	.CHANNEL_C   ( ym_c_out      ),
+	.AUDIO_L     ( ym_audio_out_l),
+	.AUDIO_R     ( ym_audio_out_r),
 	.BDIR        ( sndir         ),
 	.BC          ( sndcs         ),
 	.MODE        ( 0             ),
 	.SEL         ( 0             ),
+	.STEREO      ( psg_stereo    ),
 	.IOA_in      ( port_a_in     ),
 	.IOA_out     ( port_a_out    ),
 	.IOB_in      ( port_b_in     ),

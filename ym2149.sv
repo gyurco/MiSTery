@@ -48,12 +48,12 @@ module ym2149
 	input        BC,        // Bus control
 	input  [7:0] DI,        // Data In
 	output [7:0] DO,        // Data Out
-	output [7:0] CHANNEL_A, // PSG Output channel A
-	output [7:0] CHANNEL_B, // PSG Output channel B
-	output [7:0] CHANNEL_C, // PSG Output channel C
+	output [9:0] AUDIO_L,   // Left output
+	output [9:0] AUDIO_R,   // Right output
 
 	input        SEL,
 	input        MODE,
+	input        STEREO,
 	
 	output [5:0] ACTIVE,
 
@@ -187,7 +187,7 @@ always @(posedge CLK) begin
 						tone_gen_cnt[i] <= tone_gen_cnt[i] + 1'd1;
 					end
 				end else begin
-					tone_gen_op[i] <= ymreg[7][i];
+					tone_gen_op[i] <= ~ymreg[7][i];
 					tone_gen_cnt[i] <= 0;
 				end
 			end
@@ -298,29 +298,25 @@ always @(posedge CLK) begin
 	end
 end
 
-reg [5:0] A,B,C;
+reg [4:0] A,B,C;
+reg [11:0] vol_table_addr_l;
+reg [11:0] vol_table_addr_r;
+
 always @(posedge CLK) begin
-	A <= {MODE, ~((ymreg[7][0] | tone_gen_op[1]) & (ymreg[7][3] | noise_gen_op[0])) ? 5'd0 : ymreg[8][4]  ? env_vol[4:0] : { ymreg[8][3:0],  ymreg[8][3]}};
-	B <= {MODE, ~((ymreg[7][1] | tone_gen_op[2]) & (ymreg[7][4] | noise_gen_op[1])) ? 5'd0 : ymreg[9][4]  ? env_vol[4:0] : { ymreg[9][3:0],  ymreg[9][3]}};
-	C <= {MODE, ~((ymreg[7][2] | tone_gen_op[3]) & (ymreg[7][5] | noise_gen_op[2])) ? 5'd0 : ymreg[10][4] ? env_vol[4:0] : {ymreg[10][3:0], ymreg[10][3]}};
+	A <= {~((ymreg[7][0] | tone_gen_op[1]) & (ymreg[7][3] | noise_gen_op[0])) ? 5'd0 : ymreg[8][4]  ? env_vol[4:0] : { ymreg[8][3:0],  ymreg[8][3]}};
+	B <= {~((ymreg[7][1] | tone_gen_op[2]) & (ymreg[7][4] | noise_gen_op[1])) ? 5'd0 : ymreg[9][4]  ? env_vol[4:0] : { ymreg[9][3:0],  ymreg[9][3]}};
+	C <= {~((ymreg[7][2] | tone_gen_op[3]) & (ymreg[7][5] | noise_gen_op[2])) ? 5'd0 : ymreg[10][4] ? env_vol[4:0] : {ymreg[10][3:0], ymreg[10][3]}};
+
+	vol_table_addr_l <= STEREO ? {A[4:1], B[4:1], A[4:1]} : {C[4:1], B[4:1], A[4:1]};
+	vol_table_addr_r <= STEREO ? {C[4:1], B[4:1], C[4:1]} : {C[4:1], B[4:1], A[4:1]};
 end
 
-wire [7:0] volTable[64] = '{
-	//YM2149
-	8'h00, 8'h01, 8'h01, 8'h02, 8'h02, 8'h03, 8'h03, 8'h04, 
-	8'h06, 8'h07, 8'h09, 8'h0a, 8'h0c, 8'h0e, 8'h11, 8'h13, 
-	8'h17, 8'h1b, 8'h20, 8'h25, 8'h2c, 8'h35, 8'h3e, 8'h47, 
-	8'h54, 8'h66, 8'h77, 8'h88, 8'ha1, 8'hc0, 8'he0, 8'hff,
-
-	//AY8910
-	8'h00, 8'h00, 8'h03, 8'h03, 8'h04, 8'h04, 8'h06, 8'h06, 
-	8'h0a, 8'h0a, 8'h0f, 8'h0f, 8'h15, 8'h15, 8'h22, 8'h22, 
-	8'h28, 8'h28, 8'h41, 8'h41, 8'h5b, 8'h5b, 8'h72, 8'h72, 
-	8'h90, 8'h90, 8'hb5, 8'hb5, 8'hd7, 8'hd7, 8'hff, 8'hff 
-};
-
-assign CHANNEL_A = volTable[A];
-assign CHANNEL_B = volTable[B];
-assign CHANNEL_C = volTable[C];
+vol_table vol_table (
+	.CLK(CLK),
+    .ADDR_A(vol_table_addr_l),
+    .DATA_A(AUDIO_L),
+    .ADDR_B(vol_table_addr_r),
+    .DATA_B(AUDIO_R)
+    );
 
 endmodule
