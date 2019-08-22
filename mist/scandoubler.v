@@ -44,6 +44,7 @@ module scandoubler
 
 parameter HCNT_WIDTH = 9;
 parameter COLOR_DEPTH = 6;
+parameter HBLANK_PIXELS = 0;
 
 // try to detect changes in input signal and lock input clock gate
 // it
@@ -181,7 +182,7 @@ always @(posedge clk_sys) begin
 		// begin of incoming hsync
 		if(hsD && !hs_in) line_toggle <= !line_toggle;
 
-		sd_buffer[{line_toggle, hcnt}] <= {r_in, g_in, b_in};
+		sd_buffer[{line_toggle, hcnt}] <= (hcnt < (hs_rise + HBLANK_PIXELS)) ? 0 : {r_in, g_in, b_in};
 	end
 end
 

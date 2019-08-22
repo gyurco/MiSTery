@@ -48,6 +48,7 @@ parameter OSD_X_OFFSET = 10'd0;
 parameter OSD_Y_OFFSET = 10'd0;
 parameter SD_HCNT_WIDTH = 9;
 parameter COLOR_DEPTH = 6; // 1-6
+parameter SD_HBLANK_PIXELS = 8'd0;
 
 wire [5:0] SD_R_O;
 wire [5:0] SD_G_O;
@@ -79,7 +80,7 @@ always @(*) begin
 	end
 end
 
-scandoubler #(SD_HCNT_WIDTH, COLOR_DEPTH) scandoubler
+scandoubler #(SD_HCNT_WIDTH, COLOR_DEPTH, SD_HBLANK_PIXELS) scandoubler
 (
 	.clk_sys    ( clk_sys    ),
 	.scanlines  ( scanlines  ),

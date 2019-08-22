@@ -357,7 +357,7 @@ always @(posedge clk_32) begin
 	if (!vsync_n) monomode <= mono;
 end
 
-mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .SD_HBLANK_PIXELS(40)) mist_video(
 	.clk_sys    ( video_clk ),
 	.SPI_SCK    ( SPI_SCK ),
 	.SPI_SS3    ( SPI_SS3 ),
