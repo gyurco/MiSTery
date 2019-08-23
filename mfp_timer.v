@@ -93,7 +93,7 @@ always @(posedge CLK) begin
 	reg       timer_tick;
 	reg       timer_tick_r;
 	reg [8:0] trigger_adj;
-	reg       timer_fire;
+	reg       reload;
 
 	if (RST === 1'b1) begin
 		T_O     <= 1'b0;
@@ -102,7 +102,7 @@ always @(posedge CLK) begin
 		down_counter <= 8'd0;
 		count <= 1'b0;
 		prescaler_counter <= 8'd0;
-		timer_fire <= 1'b0;
+		reload <= 1'b0;
 	end else begin
 
 		// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
@@ -112,13 +112,20 @@ always @(posedge CLK) begin
 
 		if (CLK_EN) timer_tick_r <= timer_tick;
 
+		if (started & reload) begin
+			down_counter <= data;
+			reload <= 1'b0;
+		end
+
 		// if a write request comes from the main unit
 		// then write the data to the appropriate register.
 		if(DAT_WE) begin
 			data <= DAT_I;
 			// the counter itself is only loaded here if it's stopped
-			if(!started)
+			if(!started) begin
+				reload <= 1'b0;
 				down_counter <= DAT_I;
+			end
 		end
 
 		if(CTRL_WE) begin
@@ -162,17 +169,13 @@ always @(posedge CLK) begin
 			down_counter <= down_counter - 8'd1;
 
 			// timeout pulse
-			if (down_counter === 8'd1) timer_fire <= 1'b1;
+			if (down_counter === 8'd1) begin
+				// pulse the timer out
+				T_O <= ~T_O;
+				T_O_PULSE <= 1'b1;
+				reload <= 1'b1;
+			end
 		end
-
-		if (started && timer_fire) begin
-			// pulse the timer out
-			timer_fire <= 1'b0;
-			T_O <= ~T_O;
-			T_O_PULSE <= 1'b1;
-			down_counter <= data;
-		end
-
 	end
 end
 
