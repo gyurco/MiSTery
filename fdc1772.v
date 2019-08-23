@@ -810,8 +810,9 @@ always @(posedge clkcpu) begin
 	reg        data_transfer_startD;
 	reg [10:0] data_transfer_cnt;
 
-	// reset fifo read pointer on reception of a new command
-	if(cmd_rx)
+	// reset fifo read pointer on reception of a new command or 
+	// when multi-sector transfer increments the sector number
+	if(cmd_rx || sector_inc_strobe)
 		fifo_cpuptr <= 10'd0;
 
 	drq_set <= 1'b0;
