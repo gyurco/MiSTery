@@ -935,7 +935,7 @@ always @(posedge clkcpu) begin
 		cmd_rx <= cmd_rx_i;
 
 		// command reception is ack'd by fdc going busy
-		if(busy) cmd_rx_i <= 1'b0;
+		if((!cmd_type_4 && busy) || (cmd_type_4 && !busy)) cmd_rx_i <= 1'b0;
 
 		// only react if stb just raised
 		if(cpu_we) begin
