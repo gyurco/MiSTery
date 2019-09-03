@@ -835,6 +835,8 @@ always @(posedge clkcpu) begin
 	if(fd_dclk_en) begin
 		if(data_transfer_cnt != 0) begin
 			if(data_transfer_cnt != 1) begin
+				data_lost <= 1'b0;
+				if (drq) data_lost <= 1'b1;
 				drq_set <= 1'b1;
 
 				// read_address
@@ -872,7 +874,7 @@ wire [7:0] status = { motor_on,
 		      cmd_type_1?motor_spin_up_done:1'b0,  // data mark
 		      !floppy_present | RNF,               // record not found
 		      1'b0,                                // crc error
-		      cmd_type_1?fd_track0:1'b0,
+		      cmd_type_1?fd_track0:data_lost,
 		      cmd_type_1?~fd_index:drq,
 		      busy } /* synthesis keep */;
 
@@ -883,6 +885,7 @@ reg [7:0] data_out;
 
 reg step_dir;
 reg motor_on /* verilator public */ = 1'b0;
+reg data_lost;
 
 // ---------------------------- command register -----------------------   
 reg [7:0] cmd /* verilator public */;
