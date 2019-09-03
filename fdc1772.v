@@ -427,7 +427,7 @@ wire [15:0] step_rate_clk =
            (16'd3*CLK_EN-1'd1);                      //  3ms
 
 reg [15:0] step_rate_cnt;
-reg [15:0] delay_cnt;
+reg [23:0] delay_cnt;
 
 // flag indicating that a "step" is in progress
 wire step_busy = (step_rate_cnt != 0);
@@ -444,6 +444,7 @@ always @(posedge clkcpu) begin
 	reg data_transfer_can_start;
 	reg [1:0] seek_state;
 	reg notready_wait;
+	reg sector_not_found;
 
 	data_transfer_start <= 1'b0;
 	sector_inc_strobe <= 1'b0;
@@ -462,6 +463,7 @@ always @(posedge clkcpu) begin
 		data_transfer_can_start <= 0;
 		seek_state <= 0;
 		notready_wait <= 1'b0;
+		sector_not_found <= 1'b0;
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
@@ -480,13 +482,13 @@ always @(posedge clkcpu) begin
 
 		// delay timer
 		if(delay_cnt != 0) 
-			delay_cnt <= delay_cnt - 16'd1;
+			delay_cnt <= delay_cnt - 1'd1;
 
 		// just received a new command
 		if(cmd_rx) begin
 			busy <= 1'b1;
-			RNF <= 1'b0;
 			notready_wait <= 1'b0;
+			sector_not_found <= 1'b0;
 
 			if(cmd_type_1 || cmd_type_2 || cmd_type_3) begin
 				motor_on <= 1'b1;
@@ -569,7 +571,10 @@ always @(posedge clkcpu) begin
 
 				// verify
 				2: begin
-					if (cmd[2]) delay_cnt <= 16'd3*CLK_EN; // TODO: implement verify, now just delay one more step
+					if (cmd[2]) begin
+						delay_cnt <= 16'd3*CLK_EN; // TODO: implement verify, now just delay one more step
+						RNF <= 1'b0;
+					end
 					seek_state <= 3;
 				   end
 
@@ -596,15 +601,22 @@ always @(posedge clkcpu) begin
 						motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 						irq_set <= 1'b1; // emit irq when command done
 					end
-				end else begin
+				end else if (sector_not_found) begin
+					busy <= 1'b0;
+					motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
+					irq_set <= 1'b1; // emit irq when command done
+					RNF <= 1'b1;
+				end else if (cmd[2] && !notready_wait) begin
+					// e flag: 15 ms settling delay
+					delay_cnt <= 16'd15*CLK_EN;
+					notready_wait <= 1'b1;
 					// read sector
+				end else begin
 					if(cmd[7:5] == 3'b100) begin
 						if ((sector - SECTOR_BASE) >= fd_spt) begin
-							// TODO: should wait 5 rotations before setting RNF
-							busy <= 1'b0;
-							motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-							irq_set <= 1'b1; // emit irq when command done
-							RNF <= 1'b1;
+							// wait 5 rotations (1 sec) before setting RNF
+							sector_not_found <= 1'b1;
+							delay_cnt <= 24'd1000 * CLK_EN;
 						end else begin
 							if (fifo_cpuptr == 0) sd_card_read <= 1;
 							// we are busy until the right sector header passes under 
@@ -622,6 +634,7 @@ always @(posedge clkcpu) begin
 									busy <= 1'b0;
 									motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 									irq_set <= 1'b1; // emit irq when command done
+									RNF <= 1'b0;
 								end
 							end
 						end
@@ -630,11 +643,9 @@ always @(posedge clkcpu) begin
 					// write sector
 					if(cmd[7:5] == 3'b101) begin
 						if ((sector - SECTOR_BASE) >= fd_spt) begin
-							// TODO: should wait 5 rotations before setting RNF
-							busy <= 1'b0;
-							motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
-							irq_set <= 1'b1; // emit irq when command done
-							RNF <= 1'b1;
+							// wait 5 rotations (1 sec) before setting RNF
+							sector_not_found <= 1'b1;
+							delay_cnt <= 24'd1000 * CLK_EN;
 						end else begin
 							if (fifo_cpuptr == 0) data_transfer_start <= 1'b1;
 							if (data_transfer_done) sd_card_write <= 1;
@@ -644,6 +655,7 @@ always @(posedge clkcpu) begin
 									busy <= 1'b0;
 									motor_timeout_index <= MOTOR_IDLE_COUNTER - 1'd1;
 									irq_set <= 1'b1; // emit irq when command done
+									RNF <= 1'b0;
 								end
 							end
 						end
