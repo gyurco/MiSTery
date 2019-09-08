@@ -446,7 +446,6 @@ always @(posedge clkcpu) begin
 	reg notready_wait;
 	reg sector_not_found;
 
-	data_transfer_start <= 1'b0;
 	sector_inc_strobe <= 1'b0;
 	track_inc_strobe <= 1'b0;
 	track_dec_strobe <= 1'b0;
@@ -460,6 +459,7 @@ always @(posedge clkcpu) begin
 		step_out <= 1'b0;
 		sd_card_read <= 0;
 		sd_card_write <= 0;
+		data_transfer_start <= 1'b0;
 		data_transfer_can_start <= 0;
 		seek_state <= 0;
 		notready_wait <= 1'b0;
@@ -467,6 +467,7 @@ always @(posedge clkcpu) begin
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
+		data_transfer_start <= 1'b0;
 
 		// disable step signal after 1 msec
 		if(step_pulse_cnt != 0) 
@@ -818,6 +819,7 @@ end
 // -------------------- CPU data read/write -----------------------
 
 always @(posedge clkcpu) begin
+	reg        data_transfer_startD;
 	reg [10:0] data_transfer_cnt;
 
 	// reset fifo read pointer on reception of a new command or 
@@ -829,8 +831,9 @@ always @(posedge clkcpu) begin
 
 	drq_set <= 1'b0;
 	if (clk8m_en) data_transfer_done <= 0;
+	data_transfer_startD <= data_transfer_start;
 	// received request to read data
-	if(data_transfer_start) begin
+	if(~data_transfer_startD & data_transfer_start) begin
 
 		// read_address command has 6 data bytes
 		if(cmd[7:4] == 4'b1100)
