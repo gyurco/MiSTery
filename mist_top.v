@@ -178,7 +178,7 @@ wire [15:0] ram_din;
 gstmcu gstmcu (
 	.clk32      ( clk_32 ),
 	.resb       ( mcu_reset_n ),
-	.porb       ( mcu_reset_n ),
+	.porb       ( ~init ),
 	.FC0        ( fc0 ),
 	.FC1        ( fc1 ),
 	.FC2        ( fc2 ),
