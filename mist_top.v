@@ -344,9 +344,9 @@ viking viking (
 );
 
 wire       video_clk = viking_active ? clk_128 : clk_32;
-wire [3:0] stvid_r   = viking_active?viking_r:r;
-wire [3:0] stvid_g   = viking_active?viking_g:g;
-wire [3:0] stvid_b   = viking_active?viking_b:b;
+wire [3:0] stvid_r   = viking_active?viking_r:(blank_n | monomode) ? r : 4'h0;
+wire [3:0] stvid_g   = viking_active?viking_g:(blank_n | monomode) ? g : 4'h0;
+wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
 wire       stvid_hs  = viking_active?viking_hs:hsync_n;
 wire       stvid_vs  = viking_active?viking_vs:vsync_n;
 
@@ -357,7 +357,7 @@ always @(posedge clk_32) begin
 	if (!vsync_n) monomode <= mono;
 end
 
-mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .SD_HBLANK_PIXELS(40)) mist_video(
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
 	.clk_sys    ( video_clk ),
 	.SPI_SCK    ( SPI_SCK ),
 	.SPI_SS3    ( SPI_SS3 ),
