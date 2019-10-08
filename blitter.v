@@ -45,14 +45,24 @@ module blitter (
 		output     [15:0] bm_data_out,
 		input      [15:0] bm_data_in,
 
-		input             br_in,   // now doing real bus arbitration, is it still needed?
-		output reg        br_out,
-		input             bg,
-		output reg        bgack,
+		input             BR_N_I,  // from GSTMCU
+		output            BR_N_O,  // to CPU
+		input             BGI_N,   // from CPU
+		output            BGO_N,   // to GSTMCU
+		input             BGKI_N,  // from GSTMCU
+		output            BGACK_N, // to CPU
+
 		output            irq,
 
 		input             turbo    // 16Mhz blitter
 );
+
+assign BGACK_N = ~bus_owned & BGKI_N;
+assign BGO_N = BGI_N | bus_owned | br_out;
+assign BR_N_O = ~br_out;
+wire   br_in = ~BGKI_N;
+reg    br_out;
+wire   bg = ~BGI_N;
 
 assign irq = busy;
 
@@ -219,7 +229,8 @@ always @(posedge clk) begin
 	// -------------------------- blitter state machine ---------------------------------
 	// ----------------------------------------------------------------------------------
 
-	bgack <= bus_owned;
+//	bgack <= bus_owned;
+	if (clk_en && bus_owned) br_out <= 0;
 
 	// entire state machine advances in bus_cycle 0
 	// (the cycle before the one being used by the cpu/blitter for memory access)

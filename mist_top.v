@@ -56,6 +56,9 @@ wire [1:0] usb_redirection = system_ctrl[27:26];
 
 wire psg_stereo = system_ctrl[22];
 
+// STe always has a blitter
+wire blitter_en = (system_ctrl[19] || ste);
+
 // RAM size selects
 wire MEM512K = (system_ctrl[3:1] == 3'd0);
 wire MEM1M   = (system_ctrl[3:1] == 3'd1);
@@ -132,7 +135,7 @@ wire [15:0] mcu_dout;
 wire        ras_n = ras0_n & ras1_n;
 
 // dma
-wire        rdy_o, rdy_i, mcu_bg_n = blitter_bg_n & ~blitter_bgack, mcu_br_n, mcu_bgack_n;
+wire        rdy_o, rdy_i, mcu_bg_n, mcu_br_n, mcu_bgack_n;
 
 // compatibility for existing blitter
 wire  [1:0] bus_cycle;
@@ -201,9 +204,9 @@ gstmcu gstmcu (
 	.RDY_N_I    ( rdy_o ),
 	.RDY_N_O    ( rdy_i ),
 	.BG_N       ( mcu_bg_n ),
-	.BR_N_I     ( ~blitter_br ),
+	.BR_N_I     ( blitter_br_n ),
 	.BR_N_O     ( mcu_br_n ),
-	.BGACK_N_I  ( ~blitter_bgack ),
+	.BGACK_N_I  ( 1'b1 ),
 	.BGACK_N_O  ( mcu_bgack_n ),
 	.BERR_N     ( berr_n ),
 	.IPL0_N     ( ipl0_n ),
@@ -415,8 +418,8 @@ fx68k fx68k (
 	.DTACKn     ( cpu_dtack_n ),
 	.VPAn       ( vpa_n ),
 	.BERRn		( berr_n ),
-	.BRn        ( ~blitter_br & mcu_br_n ),
-	.BGACKn     ( ~blitter_bgack & mcu_bgack_n ),
+	.BRn        ( blitter_br_n & mcu_br_n ),
+	.BGACKn     ( blitter_bgack_n ),
 	.IPL0n      ( ipl0_n ),
 	.IPL1n      ( ipl1_n ),
 	.IPL2n      ( ipl2_n ),
@@ -686,12 +689,12 @@ wire [23:1] blitter_master_addr;
 wire blitter_master_write;
 wire blitter_master_read;
 wire blitter_irq;
-wire blitter_br;
-wire blitter_bgack;
+wire blitter_br_n;
+wire blitter_bgack_n;
 wire blitter_bg_n;
 wire [15:0] blitter_master_data_out;
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
-wire blitter_sel = (system_ctrl[19] || ste) && iodevice && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
+wire blitter_sel = blitter_en && iodevice && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
 wire [15:0] blitter_data_out;
 
 blitter blitter (
@@ -714,11 +717,14 @@ blitter blitter (
 	.bm_read     ( blitter_master_read     ),
 	.bm_data_in  ( ram_data_out            ),
 
-	.br_in       ( ~(mcu_br_n & mcu_bgack_n) ),
-	.br_out      ( blitter_br    ),
-	.bg          ( ~blitter_bg_n ),
+	.BR_N_I      ( mcu_br_n        ), // from GSTMCU
+	.BR_N_O      ( blitter_br_n    ), // to CPU
+	.BGI_N       ( blitter_bg_n    ), // from CPU
+	.BGO_N       ( mcu_bg_n        ), // to GSTMCU
+	.BGKI_N      ( mcu_bgack_n     ), // from GSTMCU
+	.BGACK_N     ( blitter_bgack_n ), // to CPU
+
 	.irq         ( blitter_irq   ),
-	.bgack       ( blitter_bgack ),
 
 	.turbo       ( 0             )
 );
@@ -864,7 +870,7 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 /* ------------------------------------------------------------------------------ */
 
 // Current blitter implemantation doesn't use the MMU
-wire blitter_has_bus = blitter_bgack;
+wire blitter_has_bus = ~blitter_bgack_n & mcu_bgack_n;
 
 wire cpu_precycle = (bus_cycle == 0);
 wire cpu_cycle    = (bus_cycle == 1);
