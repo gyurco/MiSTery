@@ -445,6 +445,7 @@ always @(posedge clkcpu) begin
 	reg [1:0] seek_state;
 	reg notready_wait;
 	reg sector_not_found;
+	reg irq_at_index;
 
 	sector_inc_strobe <= 1'b0;
 	track_inc_strobe <= 1'b0;
@@ -464,6 +465,7 @@ always @(posedge clkcpu) begin
 		seek_state <= 0;
 		notready_wait <= 1'b0;
 		sector_not_found <= 1'b0;
+		irq_at_index <= 1'b0;
 	end else if (clk8m_en) begin
 		sd_card_read <= 0;
 		sd_card_write <= 0;
@@ -500,8 +502,8 @@ always @(posedge clkcpu) begin
 			// handle "forced interrupt"
 			if(cmd_type_4) begin
 				busy <= 1'b0;
-				//if(cmd[3]) irq_set <= 1'b1;
-				if(cmd[3:0]) irq_set <= 1'b1; // TODO: handle different cases
+				if(cmd[3]) irq_set <= 1'b1;
+				if(cmd[3:2] == 2'b01) irq_at_index <= 1'b1;
 			end
 		 end
 
@@ -705,6 +707,9 @@ always @(posedge clkcpu) begin
 		// stop motor if there was no command for 10 index pulses
 		indexD <= fd_index;
 		if(indexD && !fd_index) begin
+			irq_at_index <= 1'b0;
+			if (irq_at_index) irq_set <= 1'b1;
+
 			// led motor timeout run once fdc is not busy anymore
 			if(!busy) begin
 				if(motor_timeout_index != 0)
@@ -952,7 +957,7 @@ always @(posedge clkcpu) begin
 		cmd_rx <= cmd_rx_i;
 
 		// command reception is ack'd by fdc going busy
-		if((!cmd_type_4 && busy) || (cmd_type_4 && !busy)) cmd_rx_i <= 1'b0;
+		if((!cmd_type_4 && busy) || (clk8m_en && cmd_type_4 && !busy)) cmd_rx_i <= 1'b0;
 
 		// only react if stb just raised
 		if(cpu_we) begin
