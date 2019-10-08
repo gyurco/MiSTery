@@ -54,10 +54,15 @@ wire ethernec_present = system_ctrl[25];
 // 0=nothing 1=rs232 2=printer 3=midi
 wire [1:0] usb_redirection = system_ctrl[27:26];
 
-wire psg_stereo = system_ctrl[22];
+wire       psg_stereo = system_ctrl[22];
 
 // STe always has a blitter
-wire blitter_en = (system_ctrl[19] || ste);
+wire       blitter_en = (system_ctrl[19] || ste);
+wire       viking_en = system_ctrl[28];
+wire [1:0] scanlines = system_ctrl[21:20];
+wire [8:0] acsi_enable = system_ctrl[17:10];
+wire [1:0] fdc_wp = system_ctrl[7:6];
+wire       mono_monitor = system_ctrl[8];
 
 // RAM size selects
 wire MEM512K = (system_ctrl[3:1] == 3'd0);
@@ -298,7 +303,7 @@ gstshifter gstshifter (
 // viking/sm194 is enabled and max 8MB memory may be enabled. In steroids mode
 // video memory is moved to $e80000 and all stram up to 14MB may be used
 wire viking_mem_ok = MEM512K || MEM1M || MEM2M || MEM4M || MEM8M;
-wire viking_enable = (system_ctrl[28] && viking_mem_ok) || steroids;
+wire viking_enable = (viking_en && viking_mem_ok) || steroids;
 
 // check for cpu access to 0xcxxxxx with viking enabled to switch video
 // output once the driver loads. 256 accesses to the viking memory range
@@ -379,7 +384,7 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.rotate     ( 2'b00 ),
 	.scandoubler_disable( scandoubler_disable | monomode | viking_active ),
 	.no_csync   ( monomode | viking_active ),
-	.scanlines  ( system_ctrl[21:20] ),
+	.scanlines  ( scanlines ),
 	.ypbpr      ( ypbpr )
 );
 
@@ -446,7 +451,7 @@ end
 wire xsint_delayed = xsint_delay[7];
 
 // mfp io7 is mono_detect which in ste is xor'd with the dma sound irq
-wire mfp_io7 = system_ctrl[8] ^ (ste?xsint:1'b0);
+wire mfp_io7 = mono_monitor ^ (ste?xsint:1'b0);
 
 // input 0 is busy from printer which is pulled up when the printer cannot accept further data
 // if no printer redirection is being used this is wired to the extra joystick ports provided
@@ -801,7 +806,7 @@ dma dma (
 
 	// additional signals for ACSI interface
 	.acsi_irq     ( acsi_irq           ),
-	.acsi_enable  ( system_ctrl[17:10] ),
+	.acsi_enable  ( acsi_enable ),
 
 	// FDC interface
 	.fdc_drq      ( fdc_drq  ),
@@ -852,7 +857,7 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 
 	// place any signals that need to be passed up to the top after here.
 	.img_mounted    ( img_mounted      ), // signaling that new image has been mounted
-	.img_wp         ( system_ctrl[7:6] ), // write protect. latched at img_mounted
+	.img_wp         ( fdc_wp           ), // write protect
 	.img_size       ( img_size         ), // size of image in bytes
 	.sd_lba         ( sd_lba           ),
 	.sd_rd          ( sd_rd            ),
