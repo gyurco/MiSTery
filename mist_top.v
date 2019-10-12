@@ -109,6 +109,7 @@ pll_mfp1 pll_mfp1 (
 
 // registered reset signals
 reg         reset;
+reg         peripheral_reset;
 reg         ikbd_reset;
 reg         mcu_reset_n;
 
@@ -118,6 +119,7 @@ always @(posedge clk_32) begin
 	reset <= system_ctrl[0];
 
 	mcu_reset_n <= 1;
+	peripheral_reset <= system_ctrl[0] | ~cpu_reset_n_o;
 	resetD <= reset;
 	if (~resetD & reset) mcu_reset_n <= 0;
 end
@@ -472,7 +474,7 @@ mfp mfp (
 	// cpu register interface
 	.clk      ( clk_32        ),
 	.clk_en   ( mhz4_en       ),
-	.reset    ( reset         ),
+	.reset    ( peripheral_reset ),
 	.din      ( cpu_dout[7:0] ),
 	.sel      ( ~mfpcs_n      ),
 	.addr     ( cpu_a[5:1]    ),
@@ -599,7 +601,7 @@ wire [1:0] floppy_sel = port_a_out[2:1];
 ym2149 ym2149 (
 	.CLK         ( clk_32        ),
 	.CE          ( clk_2_en      ),
-	.RESET       ( reset         ),
+	.RESET       ( peripheral_reset ),
 	.DI          ( cpu_dout[15:8]),
 	.DO          ( snd_data_out  ),
 	.AUDIO_L     ( ym_audio_out_l),
