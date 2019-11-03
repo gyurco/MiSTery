@@ -755,10 +755,13 @@ wire        dio_download;
 
 wire [31:0] system_ctrl;
 
+wire        spi_din = SPI_SS4 ? SPI_DI : SPI_DO;
+
 data_io data_io (
 	.sck             ( SPI_SCK             ),
 	.ss			     ( SPI_SS2             ),
-	.sdi   		     ( SPI_DI              ),
+	.ss_sd           ( SPI_SS4             ),
+	.sdi             ( spi_din             ),
 	.sdo             ( dio_sdo             ),
 	.clk             ( clk_32              ),
 	.ctrl_out        ( system_ctrl         ),
@@ -845,7 +848,7 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 	// external set signals
 	.floppy_drive   ( {2'b11, floppy_sel_exclusive} ),
 	.floppy_side    ( floppy_side      ),
-	.floppy_reset   ( ~reset           ),
+	.floppy_reset   ( ~peripheral_reset),
 
 	// interrupts
 	.irq            ( fdc_irq          ),

@@ -29,6 +29,7 @@ module data_io #(parameter ADDR_WIDTH=24, START_ADDR = 0) (
 	// io controller spi interface
 	input              sck,
 	input              ss,
+	input              ss_sd,
 	input              sdi,
 	output reg         sdo,
 
@@ -110,6 +111,29 @@ always@(posedge sck or posedge ss) begin
 	end
 end
 
+reg       spi_receiver_strobe_sd_r = 0;
+reg       spi_transfer_end_sd_r = 1;
+reg [7:0] spi_byte_in_sd;
+reg [6:0] sbuf_sd;
+reg [2:0] bit_cnt_sd;
+
+// direct SD
+always@(posedge sck or posedge ss_sd) begin
+	if(ss_sd == 1) begin
+		bit_cnt_sd <= 0;
+		spi_transfer_end_sd_r <= 1;
+	end else begin
+		bit_cnt_sd <= bit_cnt_sd + 1'd1;
+		spi_transfer_end_sd_r <= 0;
+		if(&bit_cnt_sd) begin
+			// finished reading a byte, prepare to transfer to clk_sys
+			spi_byte_in_sd <= { sbuf_sd, sdi};
+			spi_receiver_strobe_sd_r <= ~spi_receiver_strobe_sd_r;
+		end else
+			sbuf_sd[6:0] <= { sbuf_sd[5:0], sdi };
+	end
+end
+
 // SPI transmitter FPGA -> IO
 always@(negedge sck or posedge ss) begin
 
@@ -156,6 +180,11 @@ always @(posedge clk) begin
 	reg  [9:0] abyte_cnt;
 	reg [31:8] latch;
 	reg        lo;
+
+	reg       spi_receiver_strobe_sd;
+	reg       spi_transfer_end_sd;
+	reg       spi_receiver_strobe_sdD;
+	reg       spi_transfer_end_sdD;
 
 	//synchronize between SPI and sys clock domains
 	spi_receiver_strobeD <= spi_receiver_strobe_r;
@@ -234,6 +263,27 @@ always @(posedge clk) begin
 			endcase;
 		end
 	end
+
+	// direct-sd connection
+	// synchronize between SPI and sys clock domains
+	spi_receiver_strobe_sdD <= spi_receiver_strobe_sd_r;
+	spi_receiver_strobe_sd  <= spi_receiver_strobe_sdD;
+	spi_transfer_end_sdD    <= spi_transfer_end_sd_r;
+	spi_transfer_end_sd     <= spi_transfer_end_sdD;
+
+	// strobe is set whenever a valid byte has been received
+	if (~spi_transfer_end_sdD & spi_transfer_end_sd) begin
+		lo <= 0;
+	end else if (spi_receiver_strobe_sdD ^ spi_receiver_strobe_sd) begin
+
+		lo <= ~lo;
+		if (~lo) latch[15: 8] <= spi_byte_in_sd;
+		else begin
+			data_in_reg <= { latch[15:8], spi_byte_in_sd };
+			data_in_strobe_mist <= ~data_in_strobe_mist;
+		end
+	end
+
 end
 
 endmodule
