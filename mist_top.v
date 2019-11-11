@@ -148,15 +148,14 @@ wire        rdy_o, rdy_i, mcu_bg_n, mcu_br_n, mcu_bgack_n;
 wire  [1:0] bus_cycle;
 
 // for other peripherals
-wire        iodevice = ~as_n & fc2 & (fc0 ^ fc1) & cpu_a[23:16] == 8'hff;
+wire        iodevice = ~as_n & fc2 & (fc0 ^ fc1) & mbus_a[23:16] == 8'hff;
 
 // CPU signals
 wire        mhz8, mhz8_en1, mhz8_en2;
 wire        berr_n;
-wire        cpu_dtack_n;
 wire        ipl0_n, ipl1_n, ipl2_n;
-wire        fc0, fc1, fc2;
-wire        as_n, cpu_rw, uds_n, lds_n, vma_n, vpa_n, cpu_E;
+wire        cpu_fc0, cpu_fc1, cpu_fc2;
+wire        cpu_as_n, cpu_rw, cpu_uds_n, cpu_lds_n, vma_n, vpa_n, cpu_E;
 wire        cpu_reset_n_o;
 wire [15:0] cpu_din, cpu_dout;
 wire [23:1] cpu_a;
@@ -168,15 +167,14 @@ assign      cpu_din =
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
               !rom_n   ? rom_data_out :
-              n6850    ? { cpu_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
+              n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
               mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
               mcu_dout;
 
-wire [15:0] mbus_dout = ~rdy_i ? dma_data_out : cpu_dout; // dout from the current bus master
-
 // Shifter signals
 wire        cmpcs_n, latch, de, blank_n, rdat_n, wdat_n, dcyc_n, sreq, sload_n, mono;
+wire [15:0] shifter_dout;
 wire [ 7:0] dma_snd_l, dma_snd_r;
 wire [ 3:0] r, g, b;
 
@@ -184,6 +182,22 @@ wire [ 3:0] r, g, b;
 wire [23:1] ram_a;
 wire        ram_uds, ram_lds, ram_we_n;
 wire [15:0] ram_din;
+
+// combined bus signals
+wire        fc0 = cpu_fc0;
+wire        fc1 = cpu_fc1;
+wire        fc2 = cpu_fc2;
+wire        as_n = cpu_as_n;
+wire        rw = cpu_rw;
+wire        uds_n = cpu_uds_n;
+wire        lds_n = cpu_lds_n;
+wire [23:1] mbus_a = cpu_a;
+wire [15:0] mbus_dout = ~rdy_i ? dma_data_out : cpu_dout; // dout from the current bus master
+wire        dtack_n = mcu_dtack_n_adj & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------ GSTMCU + Shifter ------------------------------ */
+/* ------------------------------------------------------------------------------ */
 
 gstmcu gstmcu (
 	.clk32      ( clk_32 ),
@@ -193,14 +207,14 @@ gstmcu gstmcu (
 	.FC1        ( fc1 ),
 	.FC2        ( fc2 ),
 	.AS_N       ( as_n ),
-	.RW         ( cpu_rw ),
+	.RW         ( rw ),
 	.UDS_N      ( uds_n ),
 	.LDS_N      ( lds_n ),
 	.VMA_N      ( vma_n ),
 	.MFPINT_N   ( mfpint_n ),
-	.A          ( cpu_a ),  // from CPU
+	.A          ( mbus_a ), // from CPU bus
 	.ADDR       ( ram_a ),  // to RAM
-	.DIN        ( cpu_dout ),
+	.DIN        ( mbus_dout ),
 	.DOUT       ( mcu_dout ),
 	.CLK_O      ( clk16 ),
 	.MHZ8       ( mhz8 ),
@@ -219,7 +233,8 @@ gstmcu gstmcu (
 	.IPL0_N     ( ipl0_n ),
 	.IPL1_N     ( ipl1_n ),
 	.IPL2_N     ( ipl2_n ),
-	.DTACK_N    ( mcu_dtack_n ),
+	.DTACK_N_I  ( dtack_n ),
+	.DTACK_N_O  ( mcu_dtack_n ),
 	.IACK_N     ( mfpiack_n),
 	.ROM0_N     ( rom0_n ),
 	.ROM1_N     ( rom1_n ),
@@ -265,8 +280,6 @@ gstmcu gstmcu (
 	.bus_cycle     ( bus_cycle )
 );
 
-wire [15:0] shifter_dout;
-
 gstshifter gstshifter (
 	.clk32      ( clk_32 ),
 	.ste        ( ste ),
@@ -274,13 +287,13 @@ gstshifter gstshifter (
 
     // CPU/RAM interface
 	.CS         ( ~cmpcs_n ),
-	.A          ( cpu_a[6:1] ),
+	.A          ( mbus_a[6:1] ),
 	.DIN        ( mbus_dout ),
 	.DOUT       ( shifter_dout ),
 	.LATCH      ( latch ),
 	.RDAT_N     ( rdat_n ),   // latched MDIN -> DOUT
 	.WDAT_N     ( wdat_n ),   // DIN  -> MDOUT
-	.RW         ( cpu_rw ),
+	.RW         ( rw ),
 	.MDIN       ( ram_data_out ),
 	.MDOUT      ( ram_din  ),
 
@@ -321,7 +334,7 @@ always @(posedge clk_32) begin
 	end else begin
 		// cpu writes to $c0xxxx or $e80000
 		if(mhz8_en1 && !as_n && viking_enable &&
-		  (cpu_a[23:18] == (steroids?6'b111010:6'b110000)) && (viking_in_use != 8'hff))
+		  (mbus_a[23:18] == (steroids?6'b111010:6'b110000)) && (viking_in_use != 8'hff))
 			viking_in_use <= viking_in_use + 1'd1;
 
 		viking_active <= (viking_in_use == 8'hff);
@@ -394,8 +407,6 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 /* ------------------------------------ CPU ------------------------------------- */
 /* ------------------------------------------------------------------------------ */
 
-assign      cpu_dtack_n = mcu_dtack_n_adj & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
-
 reg         use_16mhz;
 always @(posedge clk_32) if (mhz8_en2) use_16mhz <= (enable_16mhz | steroids);
 wire        fx68_phi1 = use_16mhz ?  clk16_en : mhz8_en1;
@@ -411,20 +422,20 @@ fx68k fx68k (
 	.enPhi2     ( fx68_phi2 ),
 
 	.eRWn       ( cpu_rw ),
-	.ASn        ( as_n ),
-	.LDSn       ( lds_n ),
-	.UDSn       ( uds_n ),
+	.ASn        ( cpu_as_n ),
+	.LDSn       ( cpu_lds_n ),
+	.UDSn       ( cpu_uds_n ),
 	.E          ( cpu_E ),
 	.VMAn       ( vma_n ),
-	.FC0        ( fc0 ),
-	.FC1        ( fc1 ),
-	.FC2        ( fc2 ),
+	.FC0        ( cpu_fc0 ),
+	.FC1        ( cpu_fc1 ),
+	.FC2        ( cpu_fc2 ),
 	.BGn        ( blitter_bg_n ),
 	.oRESETn    ( cpu_reset_n_o ),
 	.oHALTEDn   (),
-	.DTACKn     ( cpu_dtack_n ),
+	.DTACKn     ( dtack_n ),
 	.VPAn       ( vpa_n ),
-	.BERRn		( berr_n ),
+	.BERRn      ( berr_n ),
 	.BRn        ( blitter_br_n & mcu_br_n ),
 	.BGACKn     ( blitter_bgack_n ),
 	.IPL0n      ( ipl0_n ),
@@ -475,11 +486,11 @@ mfp mfp (
 	.clk      ( clk_32        ),
 	.clk_en   ( mhz4_en       ),
 	.reset    ( peripheral_reset ),
-	.din      ( cpu_dout[7:0] ),
+	.din      ( mbus_dout[7:0]),
 	.sel      ( ~mfpcs_n      ),
-	.addr     ( cpu_a[5:1]    ),
+	.addr     ( mbus_a[5:1]   ),
 	.ds       ( lds_n         ),
-	.rw       ( cpu_rw        ),
+	.rw       ( rw            ),
 	.dout     ( mfp_data_out  ),
 	.irq      ( mfp_int       ),
 	.iack     ( mfp_iack      ),
@@ -532,10 +543,10 @@ acia kbd_acia (
 	.clk      ( clk_32             ),
 	.E        ( cpu_E              ),
 	.reset    ( reset              ),
-	.din      ( cpu_dout[15:8]     ),
-	.sel      ( n6850 & ~cpu_a[2]  ),
-	.rs       ( cpu_a[1]           ),
-	.rw       ( cpu_rw             ),
+	.din      ( mbus_dout[15:8]    ),
+	.sel      ( n6850 & ~mbus_a[2] ),
+	.rs       ( mbus_a[1]          ),
+	.rw       ( rw                 ),
 	.dout     ( kbd_acia_data_out  ),
 	.irq      ( kbd_acia_irq       ),
 
@@ -555,10 +566,10 @@ acia midi_acia (
 	.clk      ( clk_32             ),
 	.E        ( cpu_E              ),
 	.reset    ( reset              ),
-	.din      ( cpu_dout[15:8]     ),
-	.sel      ( n6850 & cpu_a[2]   ),
-	.rs       ( cpu_a[1]           ),
-	.rw       ( cpu_rw             ),
+	.din      ( mbus_dout[15:8]    ),
+	.sel      ( n6850 & mbus_a[2]  ),
+	.rs       ( mbus_a[1]          ),
+	.rw       ( rw                 ),
 	.dout     ( midi_acia_data_out ),
 	.irq      ( midi_acia_irq      ),
 
@@ -602,7 +613,7 @@ ym2149 ym2149 (
 	.CLK         ( clk_32        ),
 	.CE          ( clk_2_en      ),
 	.RESET       ( peripheral_reset ),
-	.DI          ( cpu_dout[15:8]),
+	.DI          ( mbus_dout[15:8]),
 	.DO          ( snd_data_out  ),
 	.AUDIO_L     ( ym_audio_out_l),
 	.AUDIO_R     ( ym_audio_out_r),
@@ -667,7 +678,7 @@ sigma_delta_dac sigma_delta_dac (
 
 // mega ste cache controller 8 bit interface at $ff8e20 - $ff8e21
 // STEroids mode does not have this config, it always runs full throttle
-wire       mste_ctrl_sel = !steroids && mste && iodevice && !lds_n && ({cpu_a[15:1], 1'd0} == 16'h8e20);
+wire       mste_ctrl_sel = !steroids && mste && iodevice && !lds_n && ({mbus_a[15:1], 1'd0} == 16'h8e20);
 wire [7:0] mste_ctrl_data_out;
 wire       enable_16mhz, enable_cache;
 
@@ -675,9 +686,9 @@ mste_ctrl mste_ctrl (
 	// cpu register interface
 	.clk      ( clk_32             ),
 	.reset    ( reset              ),
-	.din      ( cpu_dout[7:0]      ),
+	.din      ( mbus_dout[7:0]     ),
 	.sel      ( mste_ctrl_sel      ),
-	.rw       ( cpu_rw             ),
+	.rw       ( rw                 ),
 	.dout     ( mste_ctrl_data_out ),
 
 	.enable_cache ( enable_cache   ),
@@ -686,7 +697,7 @@ mste_ctrl mste_ctrl (
 
 // vme controller 8 bit interface at $ffff8e00 - $ffff8e0f
 // (requierd to enable Mega STE cpu speed/cache control)
-wire vme_sel = !steroids && mste && iodevice && ({cpu_a[15:4], 4'd0} == 16'h8e00);
+wire vme_sel = !steroids && mste && iodevice && ({mbus_a[15:4], 4'd0} == 16'h8e00);
 
 /* ------------------------------------------------------------------------------ */
 /* ---------------------------------- Blitter ----------------------------------- */
@@ -701,7 +712,7 @@ wire blitter_bgack_n;
 wire blitter_bg_n;
 wire [15:0] blitter_master_data_out;
 // blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
-wire blitter_sel = blitter_en && iodevice && ~(uds_n && lds_n) && ({cpu_a[15:6], 6'd0} == 16'h8a00);
+wire blitter_sel = blitter_en && iodevice && ~(uds_n && lds_n) && ({mbus_a[15:6], 6'd0} == 16'h8a00);
 wire [15:0] blitter_data_out;
 
 blitter blitter (
@@ -709,12 +720,12 @@ blitter blitter (
 	.clk         ( clk_32           ),
 	.clk_en      ( mhz8_en2         ),
 	.reset       ( reset            ),
-	.din         ( cpu_dout         ),
+	.din         ( mbus_dout        ),
 	.sel         ( blitter_sel      ),
-	.addr        ( cpu_a[5:1]       ),
+	.addr        ( mbus_a[5:1]      ),
 	.uds         ( uds_n            ),
 	.lds         ( lds_n            ),
-	.rw          ( cpu_rw           ),
+	.rw          ( rw               ),
 	.dout        ( blitter_data_out ),
 
 	.bus_cycle   ( bus_cycle               ),
@@ -759,7 +770,7 @@ wire        spi_din = SPI_SS4 ? SPI_DI : SPI_DO;
 
 data_io data_io (
 	.sck             ( SPI_SCK             ),
-	.ss			     ( SPI_SS2             ),
+	.ss              ( SPI_SS2             ),
 	.ss_sd           ( SPI_SS4             ),
 	.sdi             ( spi_din             ),
 	.sdo             ( dio_sdo             ),
@@ -792,10 +803,10 @@ dma dma (
 	.reset        ( reset         ),
 
 	// cpu interface
-	.cpu_din      ( cpu_dout      ),
+	.cpu_din      ( mbus_dout     ),
 	.cpu_sel      ( ~fcs_n        ),
-	.cpu_a1       ( cpu_a[1]      ),
-	.cpu_rw       ( cpu_rw        ),
+	.cpu_a1       ( mbus_a[1]     ),
+	.cpu_rw       ( rw            ),
 	.cpu_dout     ( dma_data_out  ),
 
 	// IO controller interface for ACSI
@@ -937,8 +948,8 @@ wire [15:0] ram_data_in = dio_download?dio_data_in_reg:(blitter_has_bus?blitter_
 wire sdram_uds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_uds;
 wire sdram_lds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_lds;
 
-wire [23:1] rom_a = (!rom2_n & ~tos192k) ? { 4'hE, 2'b00, cpu_a[17:1] } :
-                    (!rom2_n &  tos192k) ? { 4'hF, 2'b11, cpu_a[17:1] } : cpu_a;
+wire [23:1] rom_a = (!rom2_n & ~tos192k) ? { 4'hE, 2'b00, mbus_a[17:1] } :
+                    (!rom2_n &  tos192k) ? { 4'hF, 2'b11, mbus_a[17:1] } : mbus_a;
 
 wire [15:0] ram_data_out;
 wire [63:0] ram_data_out64;
