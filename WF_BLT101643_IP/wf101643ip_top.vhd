@@ -62,7 +62,9 @@ use ieee.std_logic_unsigned.all;
 entity WF101643IP_TOP is
 	port (
 		-- System controls:
-		CLK		: in bit;
+		CLK		: in std_logic;
+		CLK_EN_p: in bit;
+		CLK_EN_n: in bit;
 		RESETn	: in bit;
 		ASn		: inout std_logic;
 		LDSn	: inout std_logic;
@@ -89,7 +91,9 @@ end entity WF101643IP_TOP;
 architecture STRUCTURE of WF101643IP_TOP is
 component WF101643IP_TOP_SOC
 	port (
-		CLK			: in bit;
+		CLK			: in std_logic;
+		CLK_EN_p	: in bit;
+		CLK_EN_n	: in bit;
 		RESETn		: in bit;
 		AS_INn		: in bit;
 		AS_OUTn		: out bit;
@@ -172,6 +176,8 @@ begin
 
     I_BLITTER: WF101643IP_TOP_SOC
         port map(CLK                => CLK,
+                 CLK_EN_p           => CLK_EN_p,
+                 CLK_EN_n           => CLK_EN_n,
                  RESETn             => RESETn,
                  AS_INn             => AS_INn,
                  AS_OUTn            => AS_OUTn,

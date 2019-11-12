@@ -65,7 +65,9 @@ use ieee.std_logic_unsigned.all;
 entity WF101643IP_TOP_SOC is
 	port (
 		-- System controls:
-		CLK			: in bit;
+		CLK			: in std_logic;
+		CLK_EN_p	: in bit;
+		CLK_EN_n	: in bit;
 		RESETn		: in bit;
 		AS_INn		: in bit;
 		AS_OUTn		: out bit;
@@ -103,7 +105,9 @@ end entity WF101643IP_TOP_SOC;
 
 architecture STRUCTURE of WF101643IP_TOP_SOC is
 component WF101643IP_CORE
-port (  CLK				: in bit;
+port (  CLK				: in std_logic;
+		CLK_EN_p		: in bit;
+		CLK_EN_n		: in bit;
 		RESETn			: in bit;
 		ADR_IN			: in std_logic_vector(23 downto 1);
 		ADR_OUT			: out bit_vector(23 downto 1);
@@ -140,7 +144,9 @@ port (  CLK				: in bit;
       );
 end component;
 component WF101643IP_CTRL
-port (  CLK				: in bit;
+port (  CLK				: in std_logic;
+		CLK_EN_p		: in bit;
+		CLK_EN_n		: in bit;
 		RESETn			: in bit;
 		BERRn			: in bit;
 		DTACKn			: in bit;
@@ -236,31 +242,33 @@ begin
 	INTn 		<= BUSY_I;
     DTACK_In 	<= '0' when ADR_IN_I & '0' >= x"FF8A00" and ADR_IN_I & '0' <= x"FF8A3C" and AS_INn = '0' and SU = true else '1';
 
-	P_DTACK_LOCK: process
+	P_DTACK_LOCK: process(CLK, CLK_EN_p)
 	-- This process releases a data acknowledge detect, one rising clock
 	-- edge after the DTACK_In occured. This is necessary to ensure write
 	-- data to registers for there is one rising clock edge required.
 	begin
-		wait until CLK = '1' and CLK' event;
-		if DTACK_In = '0' then
-			DTACK_LOCK <= false;
-		else
-			DTACK_LOCK <= true;
+		if rising_edge(CLK) and CLK_EN_p = '1' then
+			if DTACK_In = '0' then
+				DTACK_LOCK <= false;
+			else
+				DTACK_LOCK <= true;
+			end if;
 		end if;
 	end process P_DTACK_LOCK;
 
-	DTACK_OUT: process
+	DTACK_OUT: process(CLK, CLK_EN_n)
 	-- The DTACKn port pin is released on the falling clock edge after the data
 	-- acknowledge detect (DTACK_LOCK) is asserted. The DTACKn is deasserted
 	-- immediately when there is no further register access DTACK_In = '1';
 	begin
-		wait until CLK = '0' and CLK' event;
-		if RESETn = '0' then
-			DTACK_OUT_In <= '1';
-		elsif DTACK_In = '1' then
-			DTACK_OUT_In <= '1';
-		elsif DTACK_LOCK = false then
-			DTACK_OUT_In <= '0';
+		if rising_edge(CLK) and CLK_EN_n = '0' then
+			if RESETn = '0' then
+				DTACK_OUT_In <= '1';
+			elsif DTACK_In = '1' then
+				DTACK_OUT_In <= '1';
+			elsif DTACK_LOCK = false then
+				DTACK_OUT_In <= '0';
+			end if;
 		end if;
 	end process DTACK_OUT;
 	DTACK_OUTn <= '0' when DTACK_OUT_In = '0' else '1';
@@ -268,6 +276,8 @@ begin
 	I_CORE: WF101643IP_CORE
 		port map(
 			CLK				=> CLK,
+			CLK_EN_p		=> CLK_EN_p,
+			CLK_EN_n		=> CLK_EN_n,
 			RESETn			=> RESETn,
 			ADR_IN			=> ADR_IN_I,
 			ADR_OUT			=> ADR_OUT_I,
@@ -306,6 +316,8 @@ begin
 	I_CTRL: WF101643IP_CTRL
 		port map(
 			CLK				=> CLK,
+			CLK_EN_p		=> CLK_EN_p,
+			CLK_EN_n		=> CLK_EN_n,
 			RESETn			=> RESETn,
 			BERRn			=> BERRn,
 			DTACKn			=> DTACK_INn,

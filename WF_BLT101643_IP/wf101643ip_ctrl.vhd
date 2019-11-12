@@ -60,7 +60,9 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;
 
 entity WF101643IP_CTRL is
-port (  CLK			: in bit;
+port (  CLK			: in std_logic;
+		CLK_EN_p	: in bit;
+		CLK_EN_n	: in bit;
 		RESETn		: in bit;
 
 		-- Bus control:
@@ -121,6 +123,7 @@ signal NEXT_BLT_STATE 	: BLITTER_STATES;
 signal BGACK_In			: bit;
 signal BUS_FREE			: boolean;
 signal SLICE_CNT		: std_logic_vector(2 downto 0);
+signal CLK8MHZ			: std_logic;
 signal T_SLICE			: TIME_SLICES;
 signal UDS_WR_EN		: bit;
 signal LDS_WR_EN		: bit;
@@ -273,7 +276,7 @@ begin
 					true when BLT_STATE = T2_WR and T_SLICE = S7 else
 					true when BLT_STATE = T3_WR and T_SLICE = S7 else false;
 	
-	P_CYCLE_CNT: process(RESETn, CLK)
+	P_CYCLE_CNT: process(RESETn, CLK, CLK_EN_p)
 	-- This process provides counting the read or read modify write cycles. This is required
 	-- for the HOG = '0' operation. After 64 clock cycles, the BLITTER stops operation and releases
 	-- the bus. It is restarted again by setting the BUSY flag or after HOG_START.
@@ -286,7 +289,7 @@ begin
 			CYCLE_CNT := (others => '0');
 			HOG_STOP <= '0';
 			HOG_START <= '0';
-		elsif CLK = '1' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_p = '1' then
 			if BLT_STATE = BUSREQUEST or HOG = '1' then
 				-- Initialize, if BLITTER enters arbitration 
 				-- or HOG is off.
@@ -295,10 +298,12 @@ begin
 				CYCLE_CNT := CYCLE_CNT + '1';
 			end if;
 			-- Original Timing: if CYCLE_CNT = x"80" then -- Release the bus for 64 CLK cycles.
-			if CYCLE_CNT = x"C0" then -- Release the bus for 64 CLK cycles.
+--			if CYCLE_CNT = x"C0" then -- Release the bus for 64 CLK cycles.
+			if CYCLE_CNT = x"80" then -- Release the bus for 64 CLK cycles.
 				HOG_START <= '1';
 			-- Original Timing: elsif CYCLE_CNT >= x"40" then -- Hogging 64 CLK cycles.
-			elsif CYCLE_CNT >= x"80" then -- Hogging 128 CLK cycles.
+--			elsif CYCLE_CNT >= x"80" then -- Hogging 128 CLK cycles.
+			elsif CYCLE_CNT >= x"40" then -- Hogging 64 CLK cycles.
 				HOG_STOP <= '1';
 			else
 				HOG_STOP <= '0';
@@ -307,12 +312,12 @@ begin
 		end if;
 	end process P_CYCLE_CNT;
 
-	BLT_STATE_MEM: process(RESETn, CLK)
+	BLT_STATE_MEM: process(RESETn, CLK, CLK_EN_p)
 	-- Main state machine register.
 	begin
 		if RESETn = '0' then
 			BLT_STATE <= IDLE;
-		elsif CLK = '1' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_p = '1' then
 			if BERRn = '0' then
 				BLT_STATE <= IDLE; -- Break!
 			else
@@ -527,18 +532,19 @@ begin
 		end case;
 	end process BLT_STATE_LOGIC;
 
-	BUS_REQUEST: process
+	BUS_REQUEST: process(CLK, CLK_EN_p)
 	begin
-		wait until CLK = '1' and CLK' event;
+		if rising_edge(CLK) and CLK_EN_p = '1' then
 		-- BUSYn is used to distinguish between internal or external bus requests.
-		if BUSY = '1' and BGIn = '0' and BGKIn = '1' and BGACK_INn = '1' and AS_INn = '1' and DTACKn = '1' then
-			BUS_FREE <= true;
-		else
-			BUS_FREE <= false;
+			if BUSY = '1' and BGIn = '0' and BGKIn = '1' and BGACK_INn = '1' and AS_INn = '1' and DTACKn = '1' then
+				BUS_FREE <= true;
+			else
+				BUS_FREE <= false;
+			end if;
 		end if;
 	end process BUS_REQUEST;
 
-	P_WAITSTATES: process
+	P_WAITSTATES: process(CLK, CLK_EN_n)
 	-- During read or write, the bus access is delayed by wait states (slow read) if
 	-- there is no DTACKn asserted until the end of S4. This is done by stopping the slice
 	-- counter. After the halt, in principle a S5 would be possible. This is not correct
@@ -546,18 +552,19 @@ begin
 	-- stop control for the slice counter. For more information see the 68000 processor data 
 	-- sheet (bus cycles). The process is required for the cycle accurate switching of T_SLICE.
 	begin
-		wait until CLK = '0' and CLK' event;
-		case SLICE_CNT is
-			when "010" => WAITSTATES <= DTACKn;
-			when others => WAITSTATES <= '0';
-		end case;
+		if rising_edge(CLK) and CLK_EN_n = '1' then
+			case SLICE_CNT is
+				when "010" => WAITSTATES <= DTACKn;
+				when others => WAITSTATES <= '0';
+			end case;
+		end if;
 	end process P_WAITSTATES;
 
-	SLICES: process(RESETn, CLK)
+	SLICES: process(RESETn, CLK, CLK_EN_p)
 	begin
 		if RESETn = '0' then
 			SLICE_CNT <= "111";
-		elsif CLK = '1' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_p = '1' then
 			case BLT_STATE is
 				when T1_RD_DEST | T1_WR | T2_RD_DEST | T2_RD_SRC_1 | T2_RD_SRC_2 | T2_WR | T3_RD_SRC_1 |
 			 	 											 			T3_RD_SRC_2 | T3_RD_DEST | T3_WR =>
@@ -573,15 +580,28 @@ begin
 		end if;
 	end process SLICES;
 
-	T_SLICE <=  S0 when SLICE_CNT = "000" and CLK = '1' else
-			    S1 when SLICE_CNT = "000" and CLK = '0' else
-			    S2 when SLICE_CNT = "001" and CLK = '1' else
-			    S3 when SLICE_CNT = "001" and CLK = '0' else
-			    S4 when SLICE_CNT = "010" and CLK = '1' else
-				S4 when SLICE_CNT = "010" and WAITSTATES = '1' and CLK = '0' else
-			    S5 when SLICE_CNT = "010" and WAITSTATES = '0' and CLK = '0' else
-			    S6 when SLICE_CNT = "011" and CLK = '1' else
-			    S7 when SLICE_CNT = "011" and CLK = '0' else IDLE;
+	CLKGEN: process(RESETn, CLK)
+	begin
+		if RESETn = '0' then
+			CLK8MHZ <= '0';
+		elsif rising_edge(CLK) then
+			if CLK_EN_p = '1' then
+				CLK8MHZ <= '1';
+			elsif CLK_EN_n = '1' then
+				CLK8MHZ <= '0';
+			end if;
+		end if;
+	end process;
+
+	T_SLICE <=  S0 when SLICE_CNT = "000" and CLK8MHZ = '1' else
+			    S1 when SLICE_CNT = "000" and CLK8MHZ = '0' else
+			    S2 when SLICE_CNT = "001" and CLK8MHZ = '1' else
+			    S3 when SLICE_CNT = "001" and CLK8MHZ = '0' else
+			    S4 when SLICE_CNT = "010" and CLK8MHZ = '1' else
+				S4 when SLICE_CNT = "010" and WAITSTATES = '1' and CLK8MHZ = '0' else
+			    S5 when SLICE_CNT = "010" and WAITSTATES = '0' and CLK8MHZ = '0' else
+			    S6 when SLICE_CNT = "011" and CLK8MHZ = '1' else
+			    S7 when SLICE_CNT = "011" and CLK8MHZ = '0' else IDLE;
 
 	-- UDSn and LDSn are always asserted together for the read and write access
 	-- to the source and destination is always word wide. Read and write controls

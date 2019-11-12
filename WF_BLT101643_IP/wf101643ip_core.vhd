@@ -60,7 +60,9 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;
 
 entity WF101643IP_CORE is
-port (  CLK			: in bit;
+port (  CLK			: in std_logic;
+		CLK_EN_p	: in bit;
+		CLK_EN_n	: in bit;
 		RESETn		: in bit;
 		ADR_IN		: in std_logic_vector(23 downto 1); -- ADDRESS inputs.
 		ADR_OUT		: out bit_vector(23 downto 1);
@@ -159,7 +161,7 @@ begin
 	WRITELOW  <= true when LDSn = '0' and ASn = '0' and RWn = '0' else false;
 	WRITEHI   <= true when UDSn = '0' and ASn = '0' and RWn = '0' else false;
 
-	MODIFY_REGISTERS: process(RESETn, CLK)
+	MODIFY_REGISTERS: process(RESETn, CLK, CLK_EN_p)
 	-- In this process all BLITTER registers are loaded by the data bus or are modified
 	-- like incremeting or decrementing the counter registers.
 	begin
@@ -185,7 +187,7 @@ begin
 			FXSR <= '0';
 			NFSR <= '0';
 			SKEW <= x"0";
-		elsif CLK = '1' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_p = '1' then
 			-- Loading the registers from the data bus - write access:
 			if 	WRITEWORD = true and SUPERUSER = true then
 				case ADR_I is
@@ -380,11 +382,11 @@ begin
 
 	-- Source data processing:
 	-- This process works on the negative clock edge!
-	P_SRC_BUFF: process(RESETn, CLK, SKEW, SRC_BUFF)
+	P_SRC_BUFF: process(RESETn, CLK, CLK_EN_n, SKEW, SRC_BUFF)
 	begin
 		if RESETn = '0' then
 			SRC_BUFF <= (others => '0');
-		elsif CLK = '0' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_n = '1' then
 			if FETCHSRC = '1' and SRC_X_INCR(15) = '0' then -- Positive SRC_X_INCR value.
 				SRC_BUFF <= SRC_BUFF(15 downto 0) & To_BitVector(DATA_IN);
 			elsif FETCHSRC = '1' and SRC_X_INCR(15) = '1' then -- Negative SRC_X_INCR value.
@@ -436,13 +438,13 @@ begin
 		end case;
 	end process P_HOP;
 	
-	P_DEST_BUFF: process(RESETn, CLK)
+	P_DEST_BUFF: process(RESETn, CLK, CLK_EN_n)
 	-- Store the old destination data in the data processing unit:
 	-- This process works on the negative clock edge!
 	begin
 		if RESETn = '0' then
 			DEST_BUFF <= (others => '0');
-		elsif CLK = '0' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_n = '1' then
 			if FETCHDEST = '1' then
 				DEST_BUFF <= To_BitVector(DATA_IN);
 			end if;
@@ -491,13 +493,13 @@ begin
 				ENDMASK3 when X_COUNT = x"0001" else -- Last data word of a line.
 				ENDMASK2; -- All other positions use the ENDMASK2.
 
-	P_ENDMASK:process(RESETn, CLK)
+	P_ENDMASK:process(RESETn, CLK, CLK_EN_n)
 	-- To achieve a correct bus timing, this process must work
 	-- on the negative clock edge!
 	begin
 		if RESETn = '0' then
 			NEW_DEST <= (others => '0');
-		elsif CLK = '0' and CLK' event then
+		elsif rising_edge(CLK) and CLK_EN_n = '1' then
 			for i in 0 to 15 loop
 				case DATAMASK(i) is
 					when '1' =>	NEW_DEST(i) <= DEST_SRC(i); -- Write modified data.
