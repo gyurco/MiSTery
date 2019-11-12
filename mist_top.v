@@ -163,13 +163,13 @@ wire [23:1] cpu_a;
 wire        rom_n = rom0_n & rom1_n & rom2_n & rom3_n & rom4_n & rom5_n & rom6_n & romp_n;
 assign      cpu_din = 
               ~fcs_n ? dma_data_out :
-              blitter_sel ? blitter_data_out :
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
               !rom_n   ? rom_data_out :
               n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
               mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
+              blitter_sel ? blitter_data_out :
               mcu_dout;
 
 // Shifter signals
@@ -184,16 +184,22 @@ wire        ram_uds, ram_lds, ram_we_n;
 wire [15:0] ram_din;
 
 // combined bus signals
-wire        fc0 = cpu_fc0;
-wire        fc1 = cpu_fc1;
-wire        fc2 = cpu_fc2;
-wire        as_n = cpu_as_n;
-wire        rw = cpu_rw;
-wire        uds_n = cpu_uds_n;
-wire        lds_n = cpu_lds_n;
-wire [23:1] mbus_a = cpu_a;
-wire [15:0] mbus_dout = ~rdy_i ? dma_data_out : cpu_dout; // dout from the current bus master
-wire        dtack_n = mcu_dtack_n_adj & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & ~blitter_sel;
+wire        fc0 = blitter_has_bus ? blitter_fc0 : cpu_fc0;
+wire        fc1 = blitter_has_bus ? blitter_fc1 : cpu_fc1;
+wire        fc2 = blitter_has_bus ? blitter_fc2 : cpu_fc2;
+wire        as_n = blitter_has_bus ? blitter_as_n : cpu_as_n;
+wire        rw = blitter_has_bus ? blitter_rw_n : cpu_rw;
+wire        uds_n = blitter_has_bus ? blitter_uds_n : cpu_uds_n;
+wire        lds_n = blitter_has_bus ? blitter_lds_n : cpu_lds_n;
+wire [23:1] mbus_a = blitter_addr_en ? blitter_addr : cpu_a;
+// dout from the current bus master - TODO: merge with cpu_din after adding output enables to GSTMCU
+wire [15:0] mbus_dout = !rdat_n ? shifter_dout :
+                        !rom_n   ? rom_data_out :
+						blitter_sel ? blitter_data_out :
+						~rdy_i ? dma_data_out :
+                        cpu_dout;
+
+wire        dtack_n = mcu_dtack_n_adj & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & blitter_dtack_n;
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------ GSTMCU + Shifter ------------------------------ */
@@ -214,7 +220,8 @@ gstmcu gstmcu (
 	.MFPINT_N   ( mfpint_n ),
 	.A          ( mbus_a ), // from CPU bus
 	.ADDR       ( ram_a ),  // to RAM
-	.DIN        ( mbus_dout ),
+	// DIN - only interested in sources which can be bus masters - to avoid long combinatorial paths
+	.DIN        ( ~rdy_i ? dma_data_out : blitter_sel ? blitter_data_out : cpu_dout ),
 	.DOUT       ( mcu_dout ),
 	.CLK_O      ( clk16 ),
 	.MHZ8       ( mhz8 ),
@@ -473,7 +480,7 @@ wire parallel_fifo_full;
 wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy2[4];
 
 // inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
-wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !(acsi_irq | fdc_irq), !acia_irq, !blitter_irq, 2'b00, mfp_io0};
+wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !(acsi_irq | fdc_irq), !acia_irq, blitter_irq_n, 2'b00, mfp_io0};
 wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_fifo_full};
 wire  [7:0] mfp_data_out;
 wire        mfp_dtack;
@@ -702,49 +709,60 @@ wire vme_sel = !steroids && mste && iodevice && ({mbus_a[15:4], 4'd0} == 16'h8e0
 /* ------------------------------------------------------------------------------ */
 /* ---------------------------------- Blitter ----------------------------------- */
 /* ------------------------------------------------------------------------------ */
-
-wire [23:1] blitter_master_addr;
-wire blitter_master_write;
-wire blitter_master_read;
-wire blitter_irq;
-wire blitter_br_n;
-wire blitter_bgack_n;
-wire blitter_bg_n;
-wire [15:0] blitter_master_data_out;
-// blitter 16 bit interface at $ff8a00 - $ff8a3f, STE always has a blitter
-wire blitter_sel = blitter_en && iodevice && ~(uds_n && lds_n) && ({mbus_a[15:6], 6'd0} == 16'h8a00);
+wire        blitter_irq_n;
+wire        blitter_br_n;
+wire        blitter_bgack_n;
+wire        blitter_bg_n;
+wire        blitter_sel;
 wire [15:0] blitter_data_out;
 
-blitter blitter (
-	// cpu interface
-	.clk         ( clk_32           ),
-	.clk_en      ( mhz8_en2         ),
-	.reset       ( reset            ),
-	.din         ( mbus_dout        ),
-	.sel         ( blitter_sel      ),
-	.addr        ( mbus_a[5:1]      ),
-	.uds         ( uds_n            ),
-	.lds         ( lds_n            ),
-	.rw          ( rw               ),
-	.dout        ( blitter_data_out ),
+wire        blitter_as_n;
+wire        blitter_lds_n;
+wire        blitter_uds_n;
+wire        blitter_rw_n;
+wire        blitter_fc0, blitter_fc1, blitter_fc2;
+wire        blitter_dtack_n;
+wire [23:1] blitter_addr;
+wire        blitter_addr_en;
+wire        blitter_has_bus;
 
-	.bus_cycle   ( bus_cycle               ),
-	.bm_addr     ( blitter_master_addr     ),
-	.bm_write    ( blitter_master_write    ),
-	.bm_data_out ( blitter_master_data_out ),
-	.bm_read     ( blitter_master_read     ),
-	.bm_data_in  ( ram_data_out            ),
+WF101643IP_TOP_SOC blitter (
+	.CLK(clk_32),
+	.CLK_EN_p(mhz8_en1),
+	.CLK_EN_n(mhz8_en2),
+//	.CLK(mhz8),
+	.RESETn(~peripheral_reset),
+	.AS_INn(blitter_en ? as_n : 1'b1),
+	.AS_OUTn(blitter_as_n),
+	.LDS_INn(lds_n),
+	.LDS_OUTn(blitter_lds_n),
+	.UDS_INn(uds_n),
+	.UDS_OUTn(blitter_uds_n),
+	.RWn_IN(rw),
+	.RWn_OUT(blitter_rw_n),
+	.DTACK_INn(dtack_n),
+	.DTACK_OUTn(blitter_dtack_n),
+	.BERRn(berr_n),
+	.FC_IN({cpu_fc2, cpu_fc1, cpu_fc0}),
+	.FC_OUT({blitter_fc2, blitter_fc1, blitter_fc0}),
+	.BUSCTRL_EN(blitter_has_bus),
+	.INTn(blitter_irq_n),
 
-	.BR_N_I      ( mcu_br_n        ), // from GSTMCU
-	.BR_N_O      ( blitter_br_n    ), // to CPU
-	.BGI_N       ( blitter_bg_n    ), // from CPU
-	.BGO_N       ( mcu_bg_n        ), // to GSTMCU
-	.BGKI_N      ( mcu_bgack_n     ), // from GSTMCU
-	.BGACK_N     ( blitter_bgack_n ), // to CPU
+	// The bus:
+	.ADR_IN(mbus_a),
+	.ADR_OUT(blitter_addr),
+	.ADR_EN(blitter_addr_en),
+	.DATA_IN(mbus_dout),
+	.DATA_OUT(blitter_data_out),
+	.DATA_EN(blitter_sel),
 
-	.irq         ( blitter_irq   ),
-
-	.turbo       ( 0             )
+	// Bus arbitration:
+	.BGIn(blitter_bg_n),
+	.BGKIn(mcu_bgack_n),
+	.BRn(blitter_br_n),
+	.BGACK_INn(1'b1),
+	.BGACK_OUTn(blitter_bgack_n),
+	.BGOn(mcu_bg_n)
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -890,9 +908,6 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 /* --------------------------- SDRAM bus multiplexer ---------------------------- */
 /* ------------------------------------------------------------------------------ */
 
-// Current blitter implemantation doesn't use the MMU
-wire blitter_has_bus = ~blitter_bgack_n & mcu_bgack_n;
-
 wire cpu_precycle = (bus_cycle == 0);
 wire cpu_cycle    = (bus_cycle == 1);
 wire viking_cycle = (bus_cycle == 2); // this is the shifter cycle, too
@@ -922,7 +937,6 @@ end
 
 // ----------------- RAM address --------------
 wire [23:1] sdram_address = (cpu_cycle & dio_download)?dio_data_addr:
-                            (cpu_cycle & blitter_has_bus)?blitter_master_addr:
                             (viking_cycle & viking_active & viking_read)?viking_vaddr:ram_a;
 
 wire        ram_en = (MEM512K & ram_a[23:19] == 5'b00000) ||
@@ -936,17 +950,18 @@ wire        ram_en = (MEM512K & ram_a[23:19] == 5'b00000) ||
 
 // ----------------- RAM read -----------------
 wire sdram_oe = (cpu_cycle & dio_download)?1'b0:
-                (cpu_cycle & blitter_master_read)?1'b1:
                 (viking_cycle & viking_active & viking_read)?1'b1:(ram_oe & ram_en);
 
 // ----------------- RAM write -----------------
-wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_write)?1'b1:(ram_we & ram_en);
+wire sdram_we = (cpu_cycle & dio_download)?data_wr:
+                (ram_we & ram_en);
 
-wire [15:0] ram_data_in = dio_download?dio_data_in_reg:(blitter_has_bus?blitter_master_data_out:ram_din);
+wire [15:0] ram_data_in = dio_download?dio_data_in_reg:
+                          ram_din;
 
 // data strobe
-wire sdram_uds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_uds;
-wire sdram_lds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_lds;
+wire sdram_uds = (cpu_cycle & dio_download)?1'b1:ram_uds;
+wire sdram_lds = (cpu_cycle & dio_download)?1'b1:ram_lds;
 
 wire [23:1] rom_a = (!rom2_n & ~tos192k) ? { 4'hE, 2'b00, mbus_a[17:1] } :
                     (!rom2_n &  tos192k) ? { 4'hF, 2'b11, mbus_a[17:1] } : mbus_a;
