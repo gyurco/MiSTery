@@ -373,7 +373,15 @@ viking viking (
 	.b         ( viking_b        )
 );
 
-wire       video_clk = viking_active ? clk_128 : clk_32;
+wire       video_clk;
+
+vidclkcntrl vidclkcntrl (
+	.clkselect ( viking_active   ),
+	.inclk0x   ( clk_32          ),
+	.inclk1x   ( clk_128         ),
+	.outclk    ( video_clk       )
+);
+
 wire [3:0] stvid_r   = viking_active?viking_r:(blank_n | monomode) ? r : 4'h0;
 wire [3:0] stvid_g   = viking_active?viking_g:(blank_n | monomode) ? g : 4'h0;
 wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
