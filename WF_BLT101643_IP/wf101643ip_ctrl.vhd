@@ -69,7 +69,7 @@ port (  CLK			: in std_logic;
 		BERRn		: in bit; -- Bus error.
 		DTACKn		: in bit;
 		AS_INn		: in bit;
-		AS_OUTn		: out bit;
+		AS_OUTn		: buffer bit;
 		UDSn		: out bit;
 		LDSn		: out bit;
 		RWn			: out bit;
@@ -116,7 +116,7 @@ end WF101643IP_CTRL;
 
 architecture BEHAVIOR of WF101643IP_CTRL is
 type BLITTER_STATES is (IDLE, BUSREQUEST, SELECT_CMD, T1_RD_DEST, T1_WR, T1_CHECK, T2_RD_DEST, T2_RD_SRC_1,
-						T2_RD_SRC_2, T2_WR, T2_CHECK, T3_RD_SRC_1, T3_RD_SRC_2, T3_RD_DEST, T3_WR, T3_CHECK);
+                        T2_RD_SRC_2, T2_WR, T2_CHECK, T3_RD_SRC_1, T3_RD_SRC_2, T3_RD_DEST, T3_WR, T3_CHECK);
 type TIME_SLICES is (IDLE, S0, S1, S2, S3, S4, S5, S6, S7);
 signal BLT_STATE 		: BLITTER_STATES;
 signal NEXT_BLT_STATE 	: BLITTER_STATES;
@@ -138,12 +138,16 @@ signal HOG_STOP			: bit;
 signal PRE_FETCH		: bit;
 signal POST_FLUSH		: bit;
 signal SKIP_CALC		: bit;
+signal CYCLE_CNT		: std_logic_vector(6 downto 0);
+signal XASI				: bit;
+signal XASI_LAST		: bit;
 
 begin
-	-- Declare the BLITTER video data as user data. This is achieved by a value of "001" for FC during
+	-- Declare the BLITTER video data as supervisor data. This is achieved by a value of "101" for FC during
 	-- active bus cycles. This functionality is necessary not to produce interrupt requests in the GLUE
 	-- chip (FC = "111") during bus accesses.
-	FC_OUT <= "001" when T_SLICE /= IDLE else "000";
+	-- Also allows to write shifter palette registers.
+	FC_OUT <= "101" when T_SLICE /= IDLE else "000";
 	BUSCTRL_EN <= '1' when BLT_STATE /= IDLE and BLT_STATE /= BUSREQUEST else '0';
 
 	-- Bus arbitration:
@@ -275,39 +279,38 @@ begin
 	X_COUNT_DEC	 <= true when BLT_STATE = T1_WR and T_SLICE = S7 else
 					true when BLT_STATE = T2_WR and T_SLICE = S7 else
 					true when BLT_STATE = T3_WR and T_SLICE = S7 else false;
-	
-	P_CYCLE_CNT: process(RESETn, CLK, CLK_EN_p)
+
+	XASI <= AS_INn and AS_OUTn;
+
+	P_CYCLE_CNT: process(RESETn, CLK)
 	-- This process provides counting the read or read modify write cycles. This is required
 	-- for the HOG = '0' operation. After 64 clock cycles, the BLITTER stops operation and releases
 	-- the bus. It is restarted again by setting the BUSY flag or after HOG_START.
-	-- Against the original timing, the BLITTER is implemented here with another timing. This
-	-- speeds slightly up the bit block transfer operations.
 	-- For further details see the Atari related bit block transfer processor documentation.
-	variable CYCLE_CNT	: std_logic_vector(7 downto 0);
 	begin
 		if RESETn = '0' then
-			CYCLE_CNT := (others => '0');
+			CYCLE_CNT <= (others => '0');
 			HOG_STOP <= '0';
 			HOG_START <= '0';
-		elsif rising_edge(CLK) and CLK_EN_p = '1' then
-			if BLT_STATE = BUSREQUEST or HOG = '1' then
-				-- Initialize, if BLITTER enters arbitration 
-				-- or HOG is off.
-				CYCLE_CNT := (others => '0');
-			elsif CYCLE_CNT < x"80" then
-				CYCLE_CNT := CYCLE_CNT + '1';
+		elsif rising_edge(CLK) then
+			XASI_LAST <= XASI;
+			-- HOG counter counts bus accesses
+			if XASI_LAST = '0' and XASI = '1' then
+				CYCLE_CNT <= CYCLE_CNT + 1;
 			end if;
-			-- Original Timing: if CYCLE_CNT = x"80" then -- Release the bus for 64 CLK cycles.
---			if CYCLE_CNT = x"C0" then -- Release the bus for 64 CLK cycles.
-			if CYCLE_CNT = x"80" then -- Release the bus for 64 CLK cycles.
-				HOG_START <= '1';
-			-- Original Timing: elsif CYCLE_CNT >= x"40" then -- Hogging 64 CLK cycles.
---			elsif CYCLE_CNT >= x"80" then -- Hogging 128 CLK cycles.
-			elsif CYCLE_CNT >= x"40" then -- Hogging 64 CLK cycles.
-				HOG_STOP <= '1';
-			else
+			if CYCLE_CNT = x"00" then
+				HOG_START <= not HOG;
 				HOG_STOP <= '0';
+			elsif CYCLE_CNT = x"40" then
+				HOG_STOP <= not HOG;
 				HOG_START <= '0';
+			end if;
+
+			-- BUSY flag resets the HOG counter
+			if BUSY = '0' or BLT_RESTART = '1' then
+				CYCLE_CNT <= (others => '0');
+				HOG_START <= '0';
+				HOG_STOP <= '0';
 			end if;
 		end if;
 	end process P_CYCLE_CNT;
@@ -433,9 +436,9 @@ begin
 				if HOG_STOP = '1' or BLT_BSY = '0' or BGKIn = '0' then
 					NEXT_BLT_STATE <= IDLE; -- BLITTER finished.
 				elsif FORCE_DEST = '1' then
-					 NEXT_BLT_STATE <= T1_RD_DEST; -- Data required.
+					NEXT_BLT_STATE <= T1_RD_DEST; -- Data required.
 				else
-					 NEXT_BLT_STATE <= T1_WR; -- No data required.
+					NEXT_BLT_STATE <= T1_WR; -- No data required.
 				end if;
 			---------------------------------- TYPE II COMMANDS -----------------------------------------
 			when T2_RD_DEST =>
@@ -480,15 +483,15 @@ begin
 					NEXT_BLT_STATE <= IDLE; -- BLITTER finished.
 				else
 					case OP is
-						when x"3" | x"C" =>	-- Go on processing source data.
+						when x"3" | x"C" =>     -- Go on processing source data.
 							if FORCE_DEST = '1' then
-								 NEXT_BLT_STATE <= T2_RD_DEST; -- Destination data required.
+								NEXT_BLT_STATE <= T2_RD_DEST; -- Destination data required.
 							elsif POST_FLUSH = '0' then
 								NEXT_BLT_STATE <= T2_RD_SRC_1;
 							else -- Post-flush source data:
 								NEXT_BLT_STATE <= T2_WR; -- Do not read further source data.
 							end if;
-						when others =>	NEXT_BLT_STATE <= T2_RD_DEST; -- Go on processing destination / halftone.
+						when others =>  NEXT_BLT_STATE <= T2_RD_DEST; -- Go on processing destination / halftone.
 					end case;
 				end if;
 			---------------------------------- TYPE III COMMANDS -----------------------------------------
@@ -566,14 +569,24 @@ begin
 			SLICE_CNT <= "111";
 		elsif rising_edge(CLK) and CLK_EN_p = '1' then
 			case BLT_STATE is
-				when T1_RD_DEST | T1_WR | T2_RD_DEST | T2_RD_SRC_1 | T2_RD_SRC_2 | T2_WR | T3_RD_SRC_1 |
-			 	 											 			T3_RD_SRC_2 | T3_RD_DEST | T3_WR =>
+				when T1_RD_DEST | T1_WR |
+				     T2_RD_DEST | T2_RD_SRC_1 | T2_RD_SRC_2 | T2_WR |
+				     T3_RD_SRC_1 | T3_RD_SRC_2 | T3_RD_DEST | T3_WR =>
 					if SLICE_CNT = "011" then
 						-- The counter modeled in this way does not need any clock cycles for
 						-- re-initialization. A direct read write operation is possible.
-						SLICE_CNT <= "111";
+						SLICE_CNT <= "000";
 					elsif WAITSTATES = '0' then
 						SLICE_CNT <= SLICE_CNT + '1';
+					end if;
+				when T1_CHECK | T2_CHECK | T3_CHECK =>
+					if NEXT_BLT_STATE = IDLE then
+						SLICE_CNT <= "111";
+					elsif POST_FLUSH = '1' then
+						SLICE_CNT <= "000";
+					else
+						-- skip the wasted cycles spent in XX_CHECK state
+						SLICE_CNT <= "001";
 					end if;
 				when others => SLICE_CNT <= "111"; -- IDLE.
 			end case;
