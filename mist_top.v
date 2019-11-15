@@ -907,8 +907,8 @@ wire viking_cycle = (bus_cycle == 2); // this is the shifter cycle, too
 
 reg ras_n_d;
 reg data_wr;
-wire ram_oe = ras_n_d & ~ras_n & ram_we_n & |ram_a;
-wire ram_we = ras_n_d & ~ras_n & ~ram_we_n;
+wire ram_req = ras_n_d & ~ras_n & |ram_a;
+wire ram_we = ~ram_we_n;
 
 // TOS/cartridge upload via data_io
 reg tos192k = 1'b0;
@@ -943,14 +943,19 @@ wire        ram_en = (MEM512K & ram_a[23:19] == 5'b00000) ||
                      (viking_enable &  steroids & ram_a[23:19] == 5'b11101);
 
 // ----------------- RAM read -----------------
-wire sdram_oe = (cpu_cycle & dio_download)?1'b0:
-                (cpu_cycle & blitter_master_read)?1'b1:
-                (viking_cycle & viking_active & viking_read)?1'b1:(ram_oe & ram_en);
+wire sdram_req = (cpu_cycle & dio_download)?data_wr:
+                 (cpu_cycle & (blitter_master_read | blitter_master_write))?1'b1:
+                 (viking_cycle & viking_active & viking_read)?1'b1:
+                 (ram_req & ram_en);
 
 // ----------------- RAM write -----------------
-wire sdram_we = (cpu_cycle & dio_download)?data_wr:(cpu_cycle & blitter_master_write)?1'b1:(ram_we & ram_en);
+wire sdram_we = (cpu_cycle & dio_download)?1'b1:
+                (cpu_cycle & blitter_master_write)?1'b1:
+                ram_we;
 
-wire [15:0] ram_data_in = dio_download?dio_data_in_reg:(blitter_has_bus?blitter_master_data_out:ram_din);
+wire [15:0] ram_data_in = dio_download?dio_data_in_reg:
+                          blitter_has_bus?blitter_master_data_out:
+                          ram_din;
 
 // data strobe
 wire sdram_uds = (cpu_cycle & (blitter_has_bus | dio_download))?1'b1:ram_uds;
@@ -985,8 +990,8 @@ sdram sdram (
 	.din            ( ram_data_in              ),
 	.addr           ( { 1'b0, sdram_address }  ),
 	.ds             ( { sdram_uds, sdram_lds } ),
+	.req            ( sdram_req                ),
 	.we             ( sdram_we                 ),
-	.oe             ( sdram_oe                 ),
 	.dout           ( ram_data_out             ),
 	.dout64         ( ram_data_out64           ),
 
