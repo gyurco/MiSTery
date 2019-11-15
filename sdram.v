@@ -46,7 +46,7 @@ module sdram (
 	output reg [15:0] dout,
 	input      [23:0] addr,       // 24 bit word address
 	input      [1:0]  ds,         // upper/lower data strobe
-	input             oe,         // cpu/chipset requests read
+	input             req,        // cpu/chipset requests read/write
 	input             we,         // cpu/chipset requests write
 
 	input             rom_oe,
@@ -128,8 +128,7 @@ reg [1:0] burst_addr;
 reg [15:0] data_latch;
 reg [23:0] addr_latch;
 reg [15:0] din_latch;
-reg        oe_latch;
-reg        we_latch;
+reg        req_latch;
 reg        rom_port;
 
 always @(posedge clk_96) begin
@@ -155,10 +154,9 @@ always @(posedge clk_96) begin
 	end else begin
 		// normal operation
 		if(t == STATE_FIRST) begin
-			if (oe || we) begin
+			if (req) begin
 				addr_latch <= addr;
-				we_latch <= we;
-				oe_latch <= oe;
+				req_latch <= 1;
 				din_latch <= din;
 				rom_port <= 0;
 
@@ -172,8 +170,7 @@ always @(posedge clk_96) begin
 
 			end else if (rom_oe && (addr_latch != rom_addr)) begin
 				addr_latch <= rom_addr;
-				we_latch <= 0;
-				oe_latch <= 1;
+				req_latch <= 1;
 				rom_port <= 1;
 
 				// RAS phase
@@ -182,28 +179,27 @@ always @(posedge clk_96) begin
 				sd_ba <= rom_addr[21:20];
 				burst_addr <= rom_addr[1:0];
 			end else begin
-				oe_latch <= 0;
-				we_latch <= 0;
+				req_latch <= 0;
 				sd_cmd <= CMD_AUTO_REFRESH;
 			end
 		end
 
 		// -------------------  cpu/chipset read/write ----------------------
-		if(we_latch || oe_latch) begin
+		if(req_latch) begin
 
 			// CAS phase 
 			if(t == STATE_CMD_CONT) begin
-				sd_cmd <= we_latch?CMD_WRITE:CMD_READ;
-				if (we_latch) sd_data <= din_latch;
+				sd_cmd <= we?CMD_WRITE:CMD_READ;
+				if (we) sd_data <= din_latch;
 				// always return both bytes in a read. The cpu may not
 				// need it, but the caches need to be able to store everything
-				sd_dqm <= we_latch ? ~ds : 2'b00;
+				sd_dqm <= we ? ~ds : 2'b00;
 
 				sd_addr <= { 4'b0010, addr_latch[22], addr_latch[7:0] };  // auto precharge
 			end
 
 			// read phase
-			if(oe_latch) begin
+			if(!we || rom_port) begin
 				if((t >= STATE_READ) && (t < STATE_READ+4'd4)) begin
 					if (burst_addr == addr_latch[1:0]) if (rom_port) rom_dout <= sd_data; else dout <= sd_data;
 					// de-multiplex the data directly into the 64 bit buffer
