@@ -307,7 +307,7 @@ begin
 			end if;
 
 			-- BUSY flag resets the HOG counter
-			if BUSY = '0' or BLT_RESTART = '1' then
+			if BUSY = '0' then
 				CYCLE_CNT <= (others => '0');
 				HOG_START <= '0';
 				HOG_STOP <= '0';

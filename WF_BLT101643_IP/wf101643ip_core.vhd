@@ -89,7 +89,7 @@ port (  CLK			: in std_logic;
 
 		-- BLITTER progress controls:
 		X_COUNT_DEC		: in boolean;
-		BLT_RESTART		: out bit;
+		BLT_RESTART		: buffer bit;
 		XCNT_RELOAD		: out bit_vector(15 downto 0);
 		XCNT_VALUE		: out bit_vector(15 downto 0);
 		FORCE_DEST		: out bit;
@@ -116,6 +116,7 @@ signal WRITELOW			: boolean; -- Indicates correct low byte write conditions.
 signal READWORD			: boolean; -- Indicates correct word read conditions.
 signal READHI			: boolean; -- Indicates correct high byte read conditions.
 signal READLOW			: boolean; -- Indicates correct low byte read conditions.
+signal BUSY_INT			: bit;
 
 -- Data processing signals:
 type HALFTONE_TYPE is array(0 to 15) of bit_vector(15 downto 0);
@@ -154,6 +155,9 @@ begin
 	XCNT_VALUE <= To_BitVector(X_COUNT);
 	XCNT_RELOAD <= To_BitVector(X_RELOAD);
 
+	-- BLT_RESTART pulls BUSY down
+	BUSY <= BUSY_INT and not BLT_RESTART;
+
 	-- Write registers:
 	-- WRITEWORD is a control signal indicating correct conditions for the write access to the
 	-- BLITTER registers.
@@ -180,7 +184,7 @@ begin
 			Y_COUNT <= (others => '0');
 			HOP <= (others => '0');
 			OP <= (others => '0');
-			BUSY <= '0';
+			BUSY_INT <= '0';
 			HOG <= '0';
 			SMUDGE <= '0';
 			LINENUMBER <= x"0";
@@ -255,14 +259,14 @@ begin
 			-- Start-Stop condition:
 			if ADR_I = x"FF8A3C" and WRITEHI = true and SUPERUSER = true then -- x"FF8A3C".
 				if DATA_IN(15) = '1' and Y_COUNT > x"0000" then
-					BUSY <= '1'; -- Set via bus access. But only if there is work to do!
+					BUSY_INT <= '1'; -- Set via bus access. But only if there is work to do!
 				end if;
 			elsif Y_COUNT = x"0000" then
 				-- Reset the BUSY flag after writing the last word of the last line.
-				BUSY <= '0';
+				BUSY_INT <= '0';
 			elsif BERRn = '0' then
 				-- Reset, if there occurs a bus error.
-				BUSY <= '0';
+				BUSY_INT <= '0';
 			end if;
 
 			-- Modification of the counter registers (higher priority than loading from the data bus):
