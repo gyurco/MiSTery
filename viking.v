@@ -125,7 +125,7 @@ always@(posedge pclk) begin
 	else if(me && bus_cycle_L == 6'h00)   // directly after read 
 		addr <= addr + 23'd4;              // advance 4 words (64 bits)
 		
-	if(me && (bus_cycle_L == 6'h2e))
+	if(me && (bus_cycle_L == 6'h2f))
 		input_latch <= data;
 		
 	if(bus_cycle_L == 6'h0e)

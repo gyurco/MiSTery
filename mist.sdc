@@ -46,6 +46,7 @@ create_clock -name {SPI_SCK}  -period 41.666 -waveform { 20.8 41.666 } [get_port
 #**************************************************************
 
 derive_pll_clocks
+
 #**************************************************************
 # Set Clock Latency
 #**************************************************************
@@ -61,17 +62,15 @@ derive_clock_uncertainty;
 # Set Input Delay
 #**************************************************************
 
-set_input_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -max 6.4 [get_ports SDRAM_DQ[*]]
-set_input_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -min 3.2 [get_ports SDRAM_DQ[*]]
+set_input_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -reference_pin [get_ports SDRAM_CLK] -max 6.4 [get_ports SDRAM_DQ[*]]
+set_input_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -reference_pin [get_ports SDRAM_CLK] -min 3.2 [get_ports SDRAM_DQ[*]]
 
 #**************************************************************
 # Set Output Delay
 #**************************************************************
 
-set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -max 1.5 [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
-set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -min -0.8 [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
-set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -max 1.5 [get_ports SDRAM_CLK]
-set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -min -0.8 [get_ports SDRAM_CLK]
+set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -reference_pin [get_ports SDRAM_CLK] -max 1.5 [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
+set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -reference_pin [get_ports SDRAM_CLK] -min -0.8 [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
 
 set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -max 0 [get_ports {VGA_*}]
 set_output_delay -clock [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -min -5 [get_ports {VGA_*}]
@@ -87,6 +86,7 @@ set_clock_groups -asynchronous -group [get_clocks {pll_mfp1|altpll_component|aut
 # Set False Path
 #**************************************************************
 
+set_false_path -to [get_ports {SDRAM_CLK}]
 set_false_path -to [get_ports {UART_TX}]
 set_false_path -to [get_ports {AUDIO_L}]
 set_false_path -to [get_ports {AUDIO_R}]
@@ -97,8 +97,15 @@ set_false_path -to [get_ports {LED}]
 #**************************************************************
 
 # SDRAM 96 MHz to system 32 MHz
-set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 3
-set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 2
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -start -setup 2
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -start -hold 1
+
+# System 32 MHz to SDRAM 96 MHz
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -end -setup 2
+set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -end -hold 1
+
+set_multicycle_path -from {sdram:sdram|dout[*]} -to {sdram:sdram|*} -setup 2
+set_multicycle_path -from {sdram:sdram|dout[*]} -to {sdram:sdram|*} -hold 1
 
 # FX68K
 set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 2

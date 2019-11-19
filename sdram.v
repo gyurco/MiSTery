@@ -54,10 +54,10 @@ module sdram (
 	output reg [15:0] rom_dout
 );
 
-localparam RASCAS_DELAY   = 3'd3;   // tRCD=20ns -> 3 cycles@128MHz
+localparam RASCAS_DELAY   = 3'd2;   // tRCD=20ns -> 2 cycles@96MHz
 localparam BURST_LENGTH   = 3'b010; // 000=1, 001=2, 010=4, 011=8
 localparam ACCESS_TYPE    = 1'b0;   // 0=sequential, 1=interleaved
-localparam CAS_LATENCY    = 3'd3;   // 2/3 allowed
+localparam CAS_LATENCY    = 3'd2;   // 2/3 allowed
 localparam OP_MODE        = 2'b00;  // only 00 (standard operation) allowed
 localparam NO_WRITE_BURST = 1'b1;   // 0= write burst enabled, 1=only single access write
 
@@ -72,9 +72,8 @@ localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, B
 // It wraps from T15 to T0 on the rising edge of clk_8
 
 localparam STATE_FIRST     = 4'd0;   // first state in cycle
-localparam STATE_CMD_START = 4'd1;   // state in which a new command can be started
 localparam STATE_CMD_CONT  = STATE_FIRST  + RASCAS_DELAY; // command can be continued
-localparam STATE_READ      = STATE_CMD_CONT + CAS_LATENCY + 1'd1;
+localparam STATE_READ      = STATE_CMD_CONT + CAS_LATENCY + 2'd2;
 localparam STATE_LAST      = 4'd11;  // last state in cycle
 
 reg [3:0] t;
@@ -115,12 +114,13 @@ localparam CMD_AUTO_REFRESH    = 4'b0001;
 localparam CMD_LOAD_MODE       = 4'b0000;
 
 reg [3:0] sd_cmd;   // current command sent to sd ram
-
 // drive control signals according to current command
 assign sd_cs  = sd_cmd[3];
 assign sd_ras = sd_cmd[2];
 assign sd_cas = sd_cmd[1];
 assign sd_we  = sd_cmd[0];
+
+reg [15:0] sd_din;
 
 // 4 byte read burst goes through four addresses
 reg [1:0] burst_addr;
@@ -133,12 +133,13 @@ reg        rom_port;
 
 always @(posedge clk_96) begin
 	// permanently latch ram data to reduce delays
+	sd_din <= sd_data;
 	sd_data <= 16'bZZZZZZZZZZZZZZZZ;
 	sd_cmd <= CMD_INHIBIT;  // default: idle
 
 	if(reset != 0) begin
 		// initialization takes place at the end of the reset phase
-		if(t == STATE_CMD_START) begin
+		if(t == STATE_FIRST) begin
 
 			if(reset == 13) begin
 				sd_cmd <= CMD_PRECHARGE;
@@ -201,13 +202,13 @@ always @(posedge clk_96) begin
 			// read phase
 			if(!we || rom_port) begin
 				if((t >= STATE_READ) && (t < STATE_READ+4'd4)) begin
-					if (burst_addr == addr_latch[1:0]) if (rom_port) rom_dout <= sd_data; else dout <= sd_data;
+					if (burst_addr == addr_latch[1:0]) if (rom_port) rom_dout <= sd_din; else dout <= sd_din;
 					// de-multiplex the data directly into the 64 bit buffer
 					case (burst_addr)
-						2'd0: dout64[15: 0] <= sd_data;
-						2'd1: dout64[31:16] <= sd_data;
-						2'd2: dout64[47:32] <= sd_data;
-						2'd3: dout64[63:48] <= sd_data;
+						2'd0: dout64[15: 0] <= sd_din;
+						2'd1: dout64[31:16] <= sd_din;
+						2'd2: dout64[47:32] <= sd_din;
+						2'd3: dout64[63:48] <= sd_din;
 					endcase
 
 					burst_addr <= burst_addr + 2'd1;
