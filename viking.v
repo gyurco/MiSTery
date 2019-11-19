@@ -85,10 +85,9 @@ always @(posedge pclk) begin
 	if (~clk_8_enD & clk_8_en) t <= 4'hD; else t <= t + 1'd1;
 end
 
-// create internal bus_cycle signal which is stable on the positive clock
-// edge and extends the previous state by half a 128 Mhz clock cycle
+// create internal bus_cycle signal
 reg [5:0] bus_cycle_L;
-always @(negedge pclk)
+always @(posedge pclk)
 	bus_cycle_L <= { bus_cycle, t };
 
 
@@ -99,7 +98,7 @@ always@(posedge pclk) begin
 	if(h_cnt==HBP1+H+HFP+HS+HBP2-1) begin
 		// make sure a line starts with the "video" bus cyle (0)
 		// cpu has cycles 1 and 2
-		if(bus_cycle_L == { 2'd3, 4'd15 })
+		if(bus_cycle_L == 6'h3e)
 			h_cnt<=0;
 	end else
 		h_cnt <= h_cnt + 1'd1;
@@ -126,10 +125,10 @@ always@(posedge pclk) begin
 	else if(me && bus_cycle_L == 6'h00)   // directly after read 
 		addr <= addr + 23'd4;              // advance 4 words (64 bits)
 		
-	if(me && (bus_cycle_L == 6'h2f))
+	if(me && (bus_cycle_L == 6'h2e))
 		input_latch <= data;
 		
-	if(bus_cycle_L == 6'h0f)
+	if(bus_cycle_L == 6'h0e)
 		// reorder words 1:2:3:4 -> 4:3:2:1
 		shift_register <= 
 			{  input_latch[15:0], input_latch[31:16], 
