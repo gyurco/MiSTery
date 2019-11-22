@@ -438,8 +438,8 @@ always @(posedge clk) begin
 		// remove active bit from ipr and set it in isr
 		if(iack_sel) begin
 			ipr_reset[highest_irq_pending] <= 1'b1;
-			isr_set <= vr[3]?highest_irq_pending_mask:16'h0000;
-			isr_reset <= !vr[3]?highest_irq_pending_mask:16'h0000;
+			isr_set <= vr[3]?highest_irq_pending_mask:16'h0000;    // non auto-end
+			isr_reset <= !vr[3]?highest_irq_pending_mask:16'h0000; // auto-end
 			irq_vec <= { vr[7:4], highest_irq_pending };
 			iack_ack <= 1'b1;
 		end
@@ -468,7 +468,11 @@ always @(posedge clk) begin
 			if(addr == 5'h08) isr_reset[7:0]  <= isr_reset[7:0]  | ~din;  // -"-
 			if(addr == 5'h09) imr[15:8] <= din;
 			if(addr == 5'h0a) imr[7:0]  <= din;
-			if(addr == 5'h0b) vr <= din;
+			if(addr == 5'h0b) begin
+				vr <= din;
+				// clear all in-service bits when switching to auto-end mode
+				if (!din[3]) isr_reset <= 16'hffff;
+			end
 
 			// ------- uart ------------
 			if(addr == 5'h13) uart_sync_chr <= din[1:0];
