@@ -487,8 +487,8 @@ wire mfp_io7 = mono_monitor ^ (ste?xsint:1'b0);
 wire parallel_fifo_full;
 wire mfp_io0 = (usb_redirection == 2'd2)?parallel_fifo_full:~joy2[4];
 
-// inputs 1,2 and 6 are inputs from serial which have pullups before and inverter
-wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !(acsi_irq | fdc_irq), !acia_irq, blitter_irq_n, 2'b00, mfp_io0};
+// inputs 1,2 and 6 are outputs from an MC1489 serial receiver
+wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b1, !(acsi_irq | fdc_irq), !acia_irq, blitter_irq_n, 2'b11, mfp_io0};
 wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_fifo_full};
 wire  [7:0] mfp_data_out;
 wire        mfp_dtack;
