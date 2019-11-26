@@ -33,13 +33,11 @@ module mfp_srff16 (
 
 integer i;
 always @(posedge clk) begin
-	reg [15:0] resetD;
 	reg [15:0] setD;
 
-	resetD <= reset;
 	setD <= set;
 	for(i=0; i<16; i=i+1) begin
-		if (~resetD[i] & reset[i]) out[i] <= 0;
+		if (reset[i]) out[i] <= 0;
 		else if (~setD[i] & set[i] & mask[i]) out[i] <= 1;
 	end
 end

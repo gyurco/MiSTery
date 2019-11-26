@@ -424,8 +424,9 @@ mfp_srff16 isr_latch (
 );
 
 always @(posedge clk) begin
-	ipr_reset <= 16'h0000; 
-	isr_reset <= 16'h0000; 
+	ipr_reset <= 0;
+	isr_reset <= 0;
+	isr_set <= 0;
 
 	if(reset) begin
 		ipr_reset <= 16'hffff;
