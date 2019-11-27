@@ -112,10 +112,10 @@ always @(posedge CLK) begin
 
 		if (CLK_EN) timer_tick_r <= timer_tick;
 
-		if (started & reload) begin
-			down_counter <= data;
-			reload <= 1'b0;
-		end
+		reload <= 1'b0;
+		// if the timer is just stopped when oveflown, the MFP won't reload it from data
+		// the next period will 256 timer cycles (from Hatari)
+		if (started & reload) down_counter <= data;
 
 		// if a write request comes from the main unit
 		// then write the data to the appropriate register.
