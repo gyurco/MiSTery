@@ -138,7 +138,12 @@ always @(posedge CLK) begin
 
 		if (prescaler_active) begin
 			if (xclk_en) begin
-				if(prescaler_counter >= prescaler) begin
+				// From datasheet:
+				// If the prescaler value is changed while the timer is enabled, the first time out pulse will occur
+				// at an indeterminate time no less than one or more than 200 timer clock cycles. Subsequent
+				// time out pulses will then occur at the correct interval.
+				// From this it can be guessed the prescaler resets at 200 unconditionally.
+				if(prescaler_counter == prescaler || prescaler_counter == 8'd199) begin
 					prescaler_counter <= 8'd0;
 					timer_tick <= ~timer_tick;
 				end else
