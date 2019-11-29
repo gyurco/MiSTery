@@ -140,6 +140,7 @@ wire        rtccs_n, rtcrd_n, rtcwr_n;
 wire        sint;
 wire [15:0] mcu_dout;
 wire        ras_n = ras0_n & ras1_n;
+wire        button_n, joywe_n, joyrl_n, joywl, joyrh_n;
 
 // dma
 wire        rdy_o, rdy_i, mcu_bg_n, mcu_br_n, mcu_bgack_n;
@@ -170,6 +171,8 @@ assign      cpu_din =
               n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
               mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
+              !button_n ? { 12'hfff, ste_buttons } :
+              !(joyrh_n & joyrl_n) ? { joyrh_n ? 8'hff : ste_joy_in[15:8], joyrl_n ? 8'hff : ste_joy_in[7:0] } :
               mcu_dout;
 
 // Shifter signals
@@ -195,8 +198,8 @@ wire [23:1] mbus_a = blitter_has_bus ? blitter_addr : cpu_a;
 // dout from the current bus master - TODO: merge with cpu_din after adding output enables to GSTMCU
 wire [15:0] mbus_dout = !rdat_n ? shifter_dout :
                         !rom_n   ? rom_data_out :
-						blitter_sel ? blitter_data_out :
-						~rdy_i ? dma_data_out :
+                        blitter_sel ? blitter_data_out :
+                        ~rdy_i ? dma_data_out :
                         cpu_dout;
 
 wire        dtack_n = mcu_dtack_n_adj & ~mfp_dtack & ~mste_ctrl_sel & ~vme_sel & blitter_dtack_n;
@@ -279,6 +282,12 @@ gstmcu gstmcu (
 	.SLOAD_N    ( sload_n),
 	.SINT       ( sint ),
 
+	.BUTTON_N   ( button_n ),
+	.JOYWE_N    ( joywe_n  ),
+	.JOYRL_N    ( joyrl_n  ),
+	.JOYWL      ( joywl    ),
+	.JOYRH_N    ( joyrh_n  ),
+
 	.st            ( ~ste ),
 	.extra_ram     ( MEM8M | MEM14M ),
 	.tos192k       ( tos192k ),
@@ -292,7 +301,7 @@ gstshifter gstshifter (
 	.ste        ( ste ),
 	.resb       ( mcu_reset_n ),
 
-    // CPU/RAM interface
+	// CPU/RAM interface
 	.CS         ( ~cmpcs_n ),
 	.A          ( mbus_a[6:1] ),
 	.DIN        ( mbus_dout ),
@@ -313,7 +322,7 @@ gstshifter gstshifter (
 	.G          ( g ),
 	.B          ( b ),
 
-    // DMA SOUND
+	// DMA SOUND
 	.SLOAD_N    ( sload_n ),
 	.SREQ       ( sreq ),
 	.audio_left ( dma_snd_l ),
@@ -785,6 +794,34 @@ assign blitter_bgack_n = mblit_oBGACKn & mcu_bgack_n;		// This really happens in
 assign { blitter_fc2, blitter_fc1, blitter_fc0} = 3'b101;
 
 /* ------------------------------------------------------------------------------ */
+/* ---------------------------- STe controller ports ---------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+wire [15:0] ste_joy_in;
+wire  [3:0] ste_buttons;
+reg   [7:0] ste_joy_out;
+
+wire  [7:0] ste_joy_out_pins = joywe_n ? 8'hff : ste_joy_out;
+
+always @(posedge clk_32) begin
+	if (joywl) ste_joy_out <= mbus_dout[7:0];
+end
+
+ste_joypad ste_joypad0 (
+	.joy      ( joy1 ),
+	.din      ( ste_joy_out_pins[3:0] ),
+	.dout     ( { ste_joy_in[11:8], ste_joy_in[3:0] } ),
+	.buttons  ( ste_buttons[1:0] )
+);
+
+ste_joypad ste_joypad1 (
+	.joy      ( joy0 ),
+	.din      ( ste_joy_out_pins[7:4] ),
+	.dout     ( { ste_joy_in[15:12], ste_joy_in[7:4] } ),
+	.buttons  ( ste_buttons[3:2] )
+);
+
+/* ------------------------------------------------------------------------------ */
 /* ----------------------------- MiST data IO + DMA ----------------------------- */
 /* ------------------------------------------------------------------------------ */
 
@@ -1053,7 +1090,7 @@ wire parallel_strobe_out;
 wire parallel_data_out_available;
 
 // extra joystick interface
-wire [5:0] joy0, joy1, joy2, joy3;
+wire [15:0] joy0, joy1, joy2, joy3;
 
 // connection between io controller and ethernet controller
 //   mac address transfer io controller -> ethernec
