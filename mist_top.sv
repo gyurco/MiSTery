@@ -584,6 +584,7 @@ acia kbd_acia (
 
 wire [7:0] midi_acia_data_out;
 wire       midi_acia_irq;
+wire       midi_out_strobe;
 
 acia midi_acia (
 	// cpu interface
@@ -601,9 +602,28 @@ acia midi_acia (
 	.tx       ( UART_TX            ),
 
 	// redirected midi interface
-	.serial_data_out_available     (midi_data_from_acia_available),
-	.serial_strobe_out             (midi_strobe_from_acia),
-	.serial_data_out               (midi_data_from_acia)
+	.dout_strobe ( midi_out_strobe )
+);
+
+// --- serial output fifo ---
+// filled by the CPU when writing to the acia data register
+// emptied by the io controller when reading via SPI
+// This happens in parallel to the real serial generation, so 
+// physical and USB serial can be used at the same time
+io_fifo serial_out_fifo (
+	.reset        ( reset ),
+
+	.in_clk       ( clk_32 ),
+	.in           ( mbus_dout[15:8] ),
+	.in_strobe    ( 1'b0 ),
+	.in_enable    ( midi_out_strobe ),  // acia data write
+
+	.out_clk      ( clk_32 ),
+	.out          ( midi_data_from_acia ),
+	.out_strobe   ( midi_strobe_from_acia ),
+	.out_enable   ( 1'b0 ),
+
+	.data_available ( midi_data_from_acia_available )
 );
 
 /* ------------------------------------------------------------------------------ */

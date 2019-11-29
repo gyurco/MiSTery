@@ -13,36 +13,15 @@ module acia (
 	output tx,
 	input rx,
 
-	// parallel data out to io controller
-   output serial_data_out_available,
-   input serial_strobe_out,
-   output [7:0] serial_data_out
+	// parallel data out strobe to io controller
+	output dout_strobe
 );
 
 reg E_d;
 always @(posedge clk) E_d <= E;
 wire clk_en = E_d & ~E;
 
-// --- serial output fifo ---
-// filled by the CPU when writing to the acia data register
-// emptied by the io controller when reading via SPI
-// This happens in parallel to the real serial generation, so 
-// physical and USB serial can be used at the same time
-io_fifo serial_out_fifo (
-	.reset 				(reset),		
-
-	.in_clk   			(clk),
-	.in 					(din),
-	.in_strobe 			(1'b0),
-	.in_enable			(clk_en && sel && ~rw && rs),  // acia data write
-
-	.out_clk          (clk),
-	.out 					(serial_data_out),
-	.out_strobe 		(serial_strobe_out),
-	.out_enable 		(1'b0),
-
-	.data_available 	(serial_data_out_available)
-);
+assign dout_strobe = clk_en && sel && ~rw && rs;
 
 // the control register
 reg [7:0] serial_cr;
@@ -55,9 +34,9 @@ always @(sel, rw, rs, serial_status, serial_rx_data) begin
 	dout = 8'h00;
 
 	if(sel && rw) begin
-      if(~rs) dout = serial_status;
-      if( rs) dout = serial_rx_data;
-   end
+		if(~rs) dout = serial_status;
+		if( rs) dout = serial_rx_data;
+	end
 end
 
 // ------------------------------ serial UART ---------------------------------
@@ -95,7 +74,7 @@ always @(posedge clk) begin
 		serial_in_filtered <= 1'b1;
 		serial_rx_overrun <= 1'b0;
 		serial_rx_frame_error <= 1'b0;
-   end else begin
+	end else begin
 	
 		// read on serial data register
 		if(clk_en && sel && rw && rs) begin
@@ -142,8 +121,11 @@ always @(posedge clk) begin
 				// receiving last (stop) bit
 				if(serial_rx_cnt[7:0] == 8'd1) begin
 					if(serial_in_filtered == 1'b1) begin
-						// copy data into rx register 
-						if (!serial_rx_data_available)
+						if (serial_rx_data_available)
+							// previous data still not read? report overrun
+							serial_rx_overrun <= 1'b1;
+						else
+							// copy data into rx register 
 							serial_rx_data <= serial_rx_shift_reg;  // pure data w/o start and stop bits
 						serial_rx_data_available <= 1'b1;
 						serial_rx_frame_error <= 1'b0;
@@ -151,10 +133,6 @@ always @(posedge clk) begin
 						// report frame error via status register
 						serial_rx_frame_error <= 1'b1;
 
-					// data hasn't been read yet? -> overrun
-					if(serial_rx_data_available)
-						serial_rx_overrun <= 1'b1;
-					
 				end
 			end
 		end
@@ -202,31 +180,31 @@ always @(posedge clk) begin
 		serial_tx_shift_reg[0] <= 1'b1;
 	end else if(clk_en && sel && ~rw) begin
 
-			// write to serial control register
-			if(~rs) begin
-				serial_cr <= din;
-				if (din[1:0] == 2'b11) begin
-					serial_tx_cnt <= 8'd0;
-					serial_tx_empty <= 1'b1;
-					serial_tx_data_valid <= 1'b0;
-					serial_tx_shift_reg[0] <= 1'b1;
-				end
+		// write to serial control register
+		if(~rs) begin
+			serial_cr <= din;
+			if (din[1:0] == 2'b11) begin
+				serial_tx_cnt <= 8'd0;
+				serial_tx_empty <= 1'b1;
+				serial_tx_data_valid <= 1'b0;
+				serial_tx_shift_reg[0] <= 1'b1;
 			end
+		end
 
-			// write to serial data register
-			if(rs) begin
-				if(serial_tx_cnt == 8'd0) begin
-					// transmitter idle? start immediately ...
-					serial_tx_shift_reg <= { 1'b1, din, 1'b0, 1'b1 };  // 8N1, lsb first
-					serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
-					serial_tx_empty <= 1'b0;
-				end else begin
-					// ... otherwise store in data buffer
-					serial_tx_data <= din;
-					serial_tx_data_valid <= 1'b1;
-				end
+		// write to serial data register
+		if(rs) begin
+			if(serial_tx_cnt == 8'd0) begin
+				// transmitter idle? start immediately ...
+				serial_tx_shift_reg <= { 1'b1, din, 1'b0, 1'b1 };  // 8N1, lsb first
+				serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
+				serial_tx_empty <= 1'b0;
+			end else begin
+				// ... otherwise store in data buffer
+				serial_tx_data <= din;
+				serial_tx_data_valid <= 1'b1;
 			end
-   end
+		end
+	end
 end
-   
+
 endmodule
