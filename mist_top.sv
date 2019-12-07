@@ -540,6 +540,7 @@ mfp mfp (
 /* ------------------------------------------------------------------------------ */
 
 wire ikbd_tx, ikbd_rx;
+wire joy_port_ste;
 
 ikbd ikbd (
 	.clk(clk_2),
@@ -551,8 +552,9 @@ ikbd ikbd (
 	.ps2_mouse_data(ps2_mouse_data),
 	.tx(ikbd_tx),
 	.rx(ikbd_rx),
-	.joystick0({joy0[4], joy0[0], joy0[1], joy0[2], joy0[3]}),
-	.joystick1({joy1[4], joy1[0], joy1[1], joy1[2], joy1[3]})
+	.joystick0(joy_port_ste ? 5'd0 : {joy0[4], joy0[0], joy0[1], joy0[2], joy0[3]}),
+	.joystick1(joy_port_ste ? 5'd0 : {joy1[4], joy1[0], joy1[1], joy1[2], joy1[3]}),
+	.joy_port_toggle(joy_port_ste)
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -828,14 +830,14 @@ always @(posedge clk_32) begin
 end
 
 ste_joypad ste_joypad0 (
-	.joy      ( joy1 ),
+	.joy      ( joy_port_ste ? joy1 : 16'd0 ),
 	.din      ( ste_joy_out_pins[3:0] ),
 	.dout     ( { ste_joy_in[11:8], ste_joy_in[3:0] } ),
 	.buttons  ( ste_buttons[1:0] )
 );
 
 ste_joypad ste_joypad1 (
-	.joy      ( joy0 ),
+	.joy      ( joy_port_ste ? joy0 : 16'd0 ),
 	.din      ( ste_joy_out_pins[7:4] ),
 	.dout     ( { ste_joy_in[15:12], ste_joy_in[7:4] } ),
 	.buttons  ( ste_buttons[3:2] )
