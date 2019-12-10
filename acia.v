@@ -19,7 +19,7 @@ module acia (
 
 reg E_d;
 always @(posedge clk) E_d <= E;
-wire clk_en = E_d & ~E;
+wire clk_en = ~E_d & E;
 
 assign dout_strobe = clk_en && sel && ~rw && rs;
 
