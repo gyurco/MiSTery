@@ -185,6 +185,7 @@ always @(posedge clk) begin
 	reg       spi_transfer_end_sd;
 	reg       spi_receiver_strobe_sdD;
 	reg       spi_transfer_end_sdD;
+	reg [8:0] word_cnt;
 
 	//synchronize between SPI and sys clock domains
 	spi_receiver_strobeD <= spi_receiver_strobe_r;
@@ -274,13 +275,21 @@ always @(posedge clk) begin
 	// strobe is set whenever a valid byte has been received
 	if (~spi_transfer_end_sdD & spi_transfer_end_sd) begin
 		lo <= 0;
+		word_cnt <= 0;
 	end else if (spi_receiver_strobe_sdD ^ spi_receiver_strobe_sd) begin
 
 		lo <= ~lo;
 		if (~lo) latch[15: 8] <= spi_byte_in_sd;
 		else begin
-			data_in_reg <= { latch[15:8], spi_byte_in_sd };
-			data_in_strobe_mist <= ~data_in_strobe_mist;
+			word_cnt <= word_cnt + 1'd1;
+			if (word_cnt == 9'd256)
+				// skip CRC
+				word_cnt <= 0;
+			else begin
+				// signal a new word to the DMA controller
+				data_in_reg <= { latch[15:8], spi_byte_in_sd };
+				data_in_strobe_mist <= ~data_in_strobe_mist;
+			end
 		end
 	end
 
