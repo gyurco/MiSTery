@@ -422,7 +422,7 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video
 	.ce_divider ( 1'b1 ),
 	.rotate     ( 2'b00 ),
 	.scandoubler_disable( scandoubler_disable | monomode | viking_active ),
-	.no_csync   ( monomode | viking_active ),
+	.no_csync   ( monomode | viking_active | no_csync ),
 	.scanlines  ( scanlines ),
 	.ypbpr      ( ypbpr )
 );
@@ -1133,6 +1133,7 @@ wire ps2_mouse_data;
 wire [2:0] switches;
 wire scandoubler_disable;
 wire ypbpr;
+wire no_csync;
 
 // sd-card emulation for 2 images
 wire [31:0] sd_lba;
@@ -1222,6 +1223,7 @@ user_io user_io(
 	// io controller requests to disable vga scandoubler
 	.scandoubler_disable         (scandoubler_disable),
 	.ypbpr                       (ypbpr),
+	.no_csync                    (no_csync),
 	.SWITCHES                    (switches ),
 	.CORE_TYPE                   (8'ha7)    // mist2 core id
 );

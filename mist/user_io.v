@@ -65,6 +65,7 @@ module user_io(
 		output [1:0]     SWITCHES,
 		output           scandoubler_disable,
 		output           ypbpr,
+		output           no_csync,
 
 		// connection to sd card emulation
 		input     [31:0] sd_lba,
@@ -92,7 +93,7 @@ reg [3:0] 			byte_cnt;
 reg [6:0]         sbuf;
 reg [7:0]         cmd;
 reg [3:0] 	      bit_cnt;       // 0..15
-reg [5:0] 	      but_sw;
+reg [7:0] 	      but_sw;
 
 // counter runs 0..7,8..15,8..15,8..15
 wire [2:0] tx_bit = ~(bit_cnt[2:0]);
@@ -101,6 +102,7 @@ assign BUTTONS = but_sw[1:0];
 assign SWITCHES = but_sw[3:2];
 assign scandoubler_disable = but_sw[4];
 assign ypbpr = but_sw[5];
+assign no_csync = but_sw[6];
 
 // ---------------- PS2 ---------------------
 // 8 byte fifos to store ps2 bytes
@@ -478,7 +480,7 @@ always @(posedge clk_sys) begin
 		end else begin
 			case(acmd)
 				// buttons and switches
-				8'h01: but_sw <= spi_byte_in[5:0];
+				8'h01: but_sw <= spi_byte_in;
 				8'h60: if (abyte_cnt < 5) joy0[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 				8'h61: if (abyte_cnt < 5) joy1[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 				8'h62: if (abyte_cnt < 5) joy2[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
