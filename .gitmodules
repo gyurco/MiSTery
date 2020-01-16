@@ -7,3 +7,6 @@
 [submodule "ikbd"]
 	path = ikbd
 	url = https://github.com/gyurco/ikbd
+[submodule "fdc1772"]
+	path = fdc1772
+	url = https://github.com/gyurco/fdc1772-verilator.git
