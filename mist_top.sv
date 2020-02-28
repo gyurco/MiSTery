@@ -72,41 +72,6 @@ wire MEM4M   = (system_ctrl[3:1] == 3'd3);
 wire MEM8M   = (system_ctrl[3:1] == 3'd4);
 wire MEM14M  = (system_ctrl[3:1] == 3'd5);
 
-// clock generation
-wire pll_locked;
-wire clk_2;
-wire clk_32;
-wire clk_96;
-wire clk_128;
-
-// 32.084 MHz base clock
-wire mainclock;
-clock32 clock32 (
-	.inclk0     (CLOCK_27[0]),
-	.c0         (mainclock  )
-);
-
-clock clock (
-  .inclk0       (mainclock  ), // input clock (32.084MHz)
-  .c0           (clk_96     ), // output clock c0 (96MHz)
-  .c1           (clk_32     ), // output clock c1 (32MHz)
-  .c2           (clk_128    ), // output clock c2 (128MHz)
-  .c3           (clk_2      ), // output clock c3 (2MHz)
-  .locked       (pll_locked )  // pll locked output
-);
-wire init = ~pll_locked;
-
-assign SDRAM_CLK = clk_96;
-
-// MFP clock
-// required: 2.4576 MHz
-wire clk_mfp;
-pll_mfp1 pll_mfp1 (
-  .inclk0       (CLOCK_27[0]), // input clock (27MHz)
-  .c0           (clk_mfp    )  // output clock c0 (2.4576MHz)
-);
-
-
 // registered reset signals
 reg         reset;
 reg         peripheral_reset;
@@ -145,7 +110,7 @@ wire        button_n, joywe_n, joyrl_n, joywl, joyrh_n;
 // dma
 wire        rdy_o, rdy_i, mcu_bg_n, mcu_br_n, mcu_bgack_n;
 
-// compatibility for existing blitter
+// compatibility for viking
 wire  [1:0] bus_cycle;
 
 // for other peripherals
@@ -382,50 +347,12 @@ viking viking (
 	.b         ( viking_b        )
 );
 
-wire       video_clk;
-
-vidclkcntrl vidclkcntrl (
-	.clkselect ( viking_active   ),
-	.inclk0x   ( clk_32          ),
-	.inclk1x   ( clk_128         ),
-	.outclk    ( video_clk       )
-);
-
-wire [3:0] stvid_r   = viking_active?viking_r:(blank_n | monomode) ? r : 4'h0;
-wire [3:0] stvid_g   = viking_active?viking_g:(blank_n | monomode) ? g : 4'h0;
-wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
-wire       stvid_hs  = viking_active?viking_hs:hsync_n;
-wire       stvid_vs  = viking_active?viking_vs:vsync_n;
-
 // assume mono mode only if it's set during VSYNC
 // demos like to switch it on/off during active display to get rid of borders
 reg        monomode = 1'b0;
 always @(posedge clk_32) begin
 	if (!vsync_n) monomode <= mono;
 end
-
-mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
-	.clk_sys    ( video_clk ),
-	.SPI_SCK    ( SPI_SCK ),
-	.SPI_SS3    ( SPI_SS3 ),
-	.SPI_DI     ( SPI_DI ),
-	.R          ( stvid_r ),
-	.G          ( stvid_g ),
-	.B          ( stvid_b ),
-	.HSync      ( stvid_hs ),
-	.VSync      ( stvid_vs ),
-	.VGA_R      ( VGA_R ),
-	.VGA_G      ( VGA_G ),
-	.VGA_B      ( VGA_B ),
-	.VGA_VS     ( VGA_VS ),
-	.VGA_HS     ( VGA_HS ),
-	.ce_divider ( 1'b1 ),
-	.rotate     ( 2'b00 ),
-	.scandoubler_disable( scandoubler_disable | monomode | viking_active ),
-	.no_csync   ( monomode | viking_active | no_csync ),
-	.scanlines  ( scanlines ),
-	.ypbpr      ( ypbpr )
-);
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------------ CPU ------------------------------------- */
@@ -607,27 +534,6 @@ acia midi_acia (
 	.dout_strobe ( midi_out_strobe )
 );
 
-// --- serial output fifo ---
-// filled by the CPU when writing to the acia data register
-// emptied by the io controller when reading via SPI
-// This happens in parallel to the real serial generation, so 
-// physical and USB serial can be used at the same time
-io_fifo serial_out_fifo (
-	.reset        ( reset ),
-
-	.in_clk       ( clk_32 ),
-	.in           ( mbus_dout[15:8] ),
-	.in_strobe    ( 1'b0 ),
-	.in_enable    ( midi_out_strobe ),  // acia data write
-
-	.out_clk      ( clk_32 ),
-	.out          ( midi_data_from_acia ),
-	.out_strobe   ( midi_strobe_from_acia ),
-	.out_enable   ( 1'b0 ),
-
-	.data_available ( midi_data_from_acia_available )
-);
-
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------------ PSG ------------------------------------- */
 /* ------------------------------------------------------------------------------ */
@@ -674,23 +580,6 @@ ym2149 ym2149 (
 	.IOB_out     ( port_b_out    )
 );
 
-// ------ fifo to store printer data coming from psg ---------
-io_fifo #(.DEPTH(4)) parallel_out_fifo (
-	.reset          ( reset ),
-
-	.in_clk         ( clk_32 ),
-	.in             ( port_b_out ),
-	.in_strobe      ( port_a_out[5] ),
-	.in_enable      ( 1'b0 ),
-
-	.out_clk        ( clk_32 ),
-	.out            ( parallel_data_out ),
-	.out_strobe     ( parallel_strobe_out ),
-	.out_enable     ( 1'b0 ),
-
-	.full           ( parallel_fifo_full ),
-	.data_available ( parallel_data_out_available )
-);
 // audio output processing
 
 // YM and STE audio channels are expanded to 14 bits and added resulting in 15 bits
@@ -709,14 +598,6 @@ wire [14:0] audio_mix_l =
 wire [14:0] audio_mix_r =
         { ym_audio_out_r_signed[9], ym_audio_out_r_signed, ym_audio_out_r_signed[9:6]} +
         { ste_audio_out_r_signed[7], ste_audio_out_r_signed, ste_audio_out_r_signed[7:2] };
-
-sigma_delta_dac sigma_delta_dac (
-	.clk      ( clk_32      ),      // bus clock
-	.ldatasum ( audio_mix_l ),      // left channel data
-	.rdatasum ( audio_mix_r ),      // right channel data
-	.left     ( AUDIO_L     ),      // left bitstream output
-	.right    ( AUDIO_R     )       // right bitsteam output
-);
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------ Mega STe control ------------------------------ */
@@ -844,48 +725,8 @@ ste_joypad ste_joypad1 (
 );
 
 /* ------------------------------------------------------------------------------ */
-/* ----------------------------- MiST data IO + DMA ----------------------------- */
+/* ------------------------------------- DMA ------------------------------------ */
 /* ------------------------------------------------------------------------------ */
-
-wire        dio_data_in_strobe_uio;
-wire        dio_data_in_strobe_mist;
-wire [15:0] dio_data_in_reg;
-wire        dio_data_out_strobe;
-wire [15:0] dio_data_out_reg;
-wire        dio_dma_ack;
-wire  [7:0] dio_dma_status;
-wire        dio_dma_nak;
-wire  [7:0] dio_status_in;
-wire  [3:0] dio_status_index;
-wire [23:1] dio_data_addr;
-wire        dio_download;
-
-wire [31:0] system_ctrl;
-
-wire        spi_din = SPI_SS4 ? SPI_DI : SPI_DO;
-
-data_io data_io (
-	.sck             ( SPI_SCK             ),
-	.ss              ( SPI_SS2             ),
-	.ss_sd           ( SPI_SS4             ),
-	.sdi             ( spi_din             ),
-	.sdo             ( dio_sdo             ),
-	.clk             ( clk_32              ),
-	.ctrl_out        ( system_ctrl         ),
-	.video_adj       ( ),
-	.data_in_strobe_uio ( dio_data_in_strobe_uio ),
-	.data_in_strobe_mist( dio_data_in_strobe_mist),
-	.data_in_reg     ( dio_data_in_reg     ),
-	.data_addr       ( dio_data_addr       ),
-	.data_download   ( dio_download        ),
-	.data_out_strobe ( dio_data_out_strobe ),
-	.data_out_reg    ( dio_data_out_reg    ),
-	.dma_ack         ( dio_dma_ack         ),
-	.dma_status      ( dio_dma_status      ),
-	.dma_nak         ( dio_dma_nak         ),
-	.status_in       ( dio_status_in       ),
-	.status_index    ( dio_status_index    )
-);
 
 wire dma_write, dma_read;
 wire [15:0] dma_data_out;
@@ -1078,6 +919,190 @@ sdram sdram (
 	.rom_oe         ( ~rom_n                   ),
 	.rom_addr       ( rom_a                    ),
 	.rom_dout       ( rom_data_out             )
+);
+
+/* ===============================================================================*/
+/* =================== Board specific code below this point ===================== */
+/* ===============================================================================*/
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------ Clock generation ------------------------------ */
+/* ------------------------------------------------------------------------------ */
+
+wire pll_locked;
+wire clk_2;
+wire clk_32;
+wire clk_96;
+wire clk_128;
+
+// 32.084 MHz base clock
+wire mainclock;
+clock32 clock32 (
+	.inclk0     (CLOCK_27[0]),
+	.c0         (mainclock  )
+);
+
+clock clock (
+  .inclk0       (mainclock  ), // input clock (32.084MHz)
+  .c0           (clk_96     ), // output clock c0 (96MHz)
+  .c1           (clk_32     ), // output clock c1 (32MHz)
+  .c2           (clk_128    ), // output clock c2 (128MHz)
+  .c3           (clk_2      ), // output clock c3 (2MHz)
+  .locked       (pll_locked )  // pll locked output
+);
+wire init = ~pll_locked;
+
+assign SDRAM_CLK = clk_96;
+
+// MFP clock
+// required: 2.4576 MHz
+wire clk_mfp;
+pll_mfp1 pll_mfp1 (
+  .inclk0       (CLOCK_27[0]), // input clock (27MHz)
+  .c0           (clk_mfp    )  // output clock c0 (2.4576MHz)
+);
+
+/* ------------------------------------------------------------------------------ */
+/* -------------------------------- Video output -------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+wire       video_clk;
+
+vidclkcntrl vidclkcntrl (
+	.clkselect ( viking_active   ),
+	.inclk0x   ( clk_32          ),
+	.inclk1x   ( clk_128         ),
+	.outclk    ( video_clk       )
+);
+
+wire [3:0] stvid_r   = viking_active?viking_r:(blank_n | monomode) ? r : 4'h0;
+wire [3:0] stvid_g   = viking_active?viking_g:(blank_n | monomode) ? g : 4'h0;
+wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
+wire       stvid_hs  = viking_active?viking_hs:hsync_n;
+wire       stvid_vs  = viking_active?viking_vs:vsync_n;
+
+
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
+	.clk_sys    ( video_clk ),
+	.SPI_SCK    ( SPI_SCK ),
+	.SPI_SS3    ( SPI_SS3 ),
+	.SPI_DI     ( SPI_DI ),
+	.R          ( stvid_r ),
+	.G          ( stvid_g ),
+	.B          ( stvid_b ),
+	.HSync      ( stvid_hs ),
+	.VSync      ( stvid_vs ),
+	.VGA_R      ( VGA_R ),
+	.VGA_G      ( VGA_G ),
+	.VGA_B      ( VGA_B ),
+	.VGA_VS     ( VGA_VS ),
+	.VGA_HS     ( VGA_HS ),
+	.ce_divider ( 1'b1 ),
+	.rotate     ( 2'b00 ),
+	.scandoubler_disable( scandoubler_disable | monomode | viking_active ),
+	.no_csync   ( monomode | viking_active | no_csync ),
+	.scanlines  ( scanlines ),
+	.ypbpr      ( ypbpr )
+);
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------- Sigma-delta DAC ------------------------------ */
+/* ------------------------------------------------------------------------------ */
+
+sigma_delta_dac sigma_delta_dac (
+	.clk      ( clk_32      ),      // bus clock
+	.ldatasum ( audio_mix_l ),      // left channel data
+	.rdatasum ( audio_mix_r ),      // right channel data
+	.left     ( AUDIO_L     ),      // left bitstream output
+	.right    ( AUDIO_R     )       // right bitsteam output
+);
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------- MIDO output FIFO ----------------------------- */
+/* ------------------------------------------------------------------------------ */
+// filled by the CPU when writing to the acia data register
+// emptied by the io controller when reading via SPI
+// This happens in parallel to the real serial generation, so 
+// physical and USB serial can be used at the same time
+io_fifo serial_out_fifo (
+	.reset        ( reset ),
+
+	.in_clk       ( clk_32 ),
+	.in           ( mbus_dout[15:8] ),
+	.in_strobe    ( 1'b0 ),
+	.in_enable    ( midi_out_strobe ),  // acia data write
+
+	.out_clk      ( clk_32 ),
+	.out          ( midi_data_from_acia ),
+	.out_strobe   ( midi_strobe_from_acia ),
+	.out_enable   ( 1'b0 ),
+
+	.data_available ( midi_data_from_acia_available )
+);
+
+/* ------------------------------------------------------------------------------ */
+/* -------------------------- Parallel port output FIFO ------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+io_fifo #(.DEPTH(4)) parallel_out_fifo (
+	.reset          ( reset ),
+
+	.in_clk         ( clk_32 ),
+	.in             ( port_b_out ),
+	.in_strobe      ( port_a_out[5] ),
+	.in_enable      ( 1'b0 ),
+
+	.out_clk        ( clk_32 ),
+	.out            ( parallel_data_out ),
+	.out_strobe     ( parallel_strobe_out ),
+	.out_enable     ( 1'b0 ),
+
+	.full           ( parallel_fifo_full ),
+	.data_available ( parallel_data_out_available )
+);
+
+/* ------------------------------------------------------------------------------ */
+/* -------------------------------- MiST data IO -------------------------------- */
+/* ------------------------------------------------------------------------------ */
+
+wire        dio_data_in_strobe_uio;
+wire        dio_data_in_strobe_mist;
+wire [15:0] dio_data_in_reg;
+wire        dio_data_out_strobe;
+wire [15:0] dio_data_out_reg;
+wire        dio_dma_ack;
+wire  [7:0] dio_dma_status;
+wire        dio_dma_nak;
+wire  [7:0] dio_status_in;
+wire  [3:0] dio_status_index;
+wire [23:1] dio_data_addr;
+wire        dio_download;
+
+wire [31:0] system_ctrl;
+
+wire        spi_din = SPI_SS4 ? SPI_DI : SPI_DO;
+
+data_io data_io (
+	.sck             ( SPI_SCK             ),
+	.ss              ( SPI_SS2             ),
+	.ss_sd           ( SPI_SS4             ),
+	.sdi             ( spi_din             ),
+	.sdo             ( dio_sdo             ),
+	.clk             ( clk_32              ),
+	.ctrl_out        ( system_ctrl         ),
+	.video_adj       ( ),
+	.data_in_strobe_uio ( dio_data_in_strobe_uio ),
+	.data_in_strobe_mist( dio_data_in_strobe_mist),
+	.data_in_reg     ( dio_data_in_reg     ),
+	.data_addr       ( dio_data_addr       ),
+	.data_download   ( dio_download        ),
+	.data_out_strobe ( dio_data_out_strobe ),
+	.data_out_reg    ( dio_data_out_reg    ),
+	.dma_ack         ( dio_dma_ack         ),
+	.dma_status      ( dio_dma_status      ),
+	.dma_nak         ( dio_dma_nak         ),
+	.status_in       ( dio_status_in       ),
+	.status_index    ( dio_status_index    )
 );
 
 /* ------------------------------------------------------------------------------ */
