@@ -981,8 +981,7 @@ wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
 wire       stvid_hs  = viking_active?viking_hs:hsync_n;
 wire       stvid_vs  = viking_active?viking_vs:vsync_n;
 
-
-mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10)) mist_video(
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFFSET(10'd10)) mist_video(
 	.clk_sys    ( video_clk ),
 	.SPI_SCK    ( SPI_SCK ),
 	.SPI_SS3    ( SPI_SS3 ),
