@@ -256,6 +256,7 @@ gstmcu gstmcu (
 	.st            ( ~ste ),
 	.extra_ram     ( MEM8M | MEM14M ),
 	.tos192k       ( tos192k ),
+	.turbo         ( turbo_bus ),
 	.viking_at_c0  ( viking_enable && !steroids ),
 	.viking_at_e8  ( viking_enable &&  steroids ),
 	.bus_cycle     ( bus_cycle )
@@ -332,7 +333,7 @@ viking viking (
 	.pclk      ( clk_128         ), // 128MHz
 	.himem     ( steroids        ),
 	.clk_8_en  ( mhz8_en1        ), // 8 MHz bus clock
-	.bus_cycle ( bus_cycle       ), // bus-cycle to sync video memory access with cpu
+	.bus_cycle ( { viking_precycle, viking_cycle } ), // bus-cycle to sync video memory access with cpu
 
 	// memory interface
 	.addr      ( viking_vaddr    ), // video word address
@@ -359,11 +360,19 @@ end
 /* ------------------------------------------------------------------------------ */
 
 reg         use_16mhz;
-always @(posedge clk_32) if (mhz8_en2) use_16mhz <= (enable_16mhz | steroids);
+reg         turbo_bus;
+
+always @(posedge clk_32)
+	if (mhz8_en2 & as_n) begin
+		use_16mhz <= (enable_16mhz | steroids);
+		turbo_bus <= (enable_cache | steroids);
+	end
+
 wire        fx68_phi1 = use_16mhz ?  clk16_en : mhz8_en1;
 wire        fx68_phi2 = use_16mhz ? ~clk16_en : mhz8_en2;
 
-wire        mcu_dtack_n_adj = (use_16mhz & ~rom_n) ? (mcu_dtack_n | bus_cycle == 2'd2) : mcu_dtack_n;
+wire        shifter_cycle = (turbo_bus && (bus_cycle == 0 || bus_cycle == 3)) || (!turbo_bus && bus_cycle == 2);
+wire        mcu_dtack_n_adj = (use_16mhz & ~rom_n) ? (mcu_dtack_n | shifter_cycle) : mcu_dtack_n;
 
 fx68k fx68k (
 	.clk        ( clk_32 ),
@@ -650,10 +659,9 @@ assign Clks.clk = clk_32;
 assign Clks.aRESETn = !peripheral_reset;
 assign Clks.sReset = init | peripheral_reset;
 assign Clks.pwrUp = init;
-// Blitter always gets a 8MHz clock (even when 16 MHz selected on MegaSTe)
-// But give it 16MHz when on STeroids
-assign Clks.enPhi1 = steroids ?  clk16_en : mhz8_en1;
-assign Clks.enPhi2 = steroids ? ~clk16_en : mhz8_en2;
+
+assign Clks.enPhi1 = use_16mhz ?  clk16_en : mhz8_en1;
+assign Clks.enPhi2 = use_16mhz ? ~clk16_en : mhz8_en2;
 assign Clks.anyPhi = Clks.enPhi2 | Clks.enPhi1;
 
 assign { Clks.extReset, Clks.phi1, Clks.phi2} = 3'b000;
@@ -828,12 +836,13 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 /* ------------------------------------------------------------------------------ */
 
 wire cpu_precycle = (bus_cycle == 0);
-wire cpu_cycle    = (bus_cycle == 1);
-wire viking_cycle = (bus_cycle == 2); // this is the shifter cycle, too
+wire cpu_cycle    = (bus_cycle == 1) || (bus_cycle == 2 && turbo_bus);
+wire viking_cycle = (bus_cycle == 2 && !turbo_bus) || (bus_cycle == 3 && turbo_bus); // this is the shifter cycle, too
+wire viking_precycle = (bus_cycle == 3 && !turbo_bus) || (bus_cycle == 1 && turbo_bus);
 
 reg ras_n_d;
 reg data_wr;
-wire ram_req = ras_n_d & ~ras_n & |ram_a;
+wire ram_req = ras_n_d & ~ras_n & |ram_a; // RAS_N going low and not refresh
 wire ram_we = ~ram_we_n;
 
 // TOS/cartridge upload via data_io

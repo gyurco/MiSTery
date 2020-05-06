@@ -32,8 +32,8 @@ module mste_ctrl (
 	output enable_16mhz
 );
 
-assign enable_16mhz = mste_config[0];
-assign enable_cache = mste_config[1];
+assign enable_16mhz = mste_config[1];
+assign enable_cache = mste_config[0];
 
 reg [7:0] mste_config;
 
