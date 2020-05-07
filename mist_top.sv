@@ -363,7 +363,7 @@ reg         use_16mhz;
 reg         turbo_bus;
 
 always @(posedge clk_32)
-	if (mhz8_en2 & as_n) begin
+	if (mhz8_en1 & as_n) begin
 		use_16mhz <= (enable_16mhz | steroids);
 		turbo_bus <= (enable_cache | steroids);
 	end
