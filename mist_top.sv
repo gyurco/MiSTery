@@ -827,8 +827,7 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 	.sd_buff_addr   ( sd_buff_addr     ),
 	.sd_dout        ( sd_dout          ),
 	.sd_din         ( sd_din           ),
-	.sd_dout_strobe ( sd_dout_strobe   ),
-	.sd_din_strobe  ( sd_din_strobe    )
+	.sd_dout_strobe ( sd_dout_strobe   )
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -1179,7 +1178,6 @@ wire        sd_sdhc = 1'b1;
 wire  [7:0] sd_dout;
 wire        sd_dout_strobe;
 wire  [7:0] sd_din;
-wire        sd_din_strobe;
 wire  [8:0] sd_buff_addr;
 wire  [1:0] img_mounted;
 wire [31:0] img_size;
@@ -1248,7 +1246,6 @@ user_io user_io(
 	.sd_dout                     (sd_dout       ),
 	.sd_dout_strobe              (sd_dout_strobe),
 	.sd_din                      (sd_din        ),
-	.sd_din_strobe               (sd_din_strobe ),
 	.sd_buff_addr                (sd_buff_addr  ),
 	.img_mounted                 (img_mounted   ),
 	.img_size                    (img_size      ),
