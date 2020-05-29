@@ -108,7 +108,7 @@ always @(posedge clk_sys) begin
 	cnt <= cnt + 1;
 	hs <= HSync;
 
-	pixcnt <= pixcnt + 1;
+	pixcnt <= pixcnt + 1'd1;
 	if(pixcnt == pixsz) pixcnt <= 0;
 	auto_ce_pix <= !pixcnt;
 
@@ -163,10 +163,10 @@ always @(posedge clk_sys) begin
 end
 
 // area in which OSD is being displayed
-reg  [9:0] h_osd_start;
-reg  [9:0] h_osd_end;
-reg  [9:0] v_osd_start;
-reg  [9:0] v_osd_end;
+reg  [10:0] h_osd_start;
+reg  [10:0] h_osd_end;
+reg  [10:0] v_osd_start;
+reg  [10:0] v_osd_end;
 
 always @(posedge clk_sys) begin
 	h_osd_start <= ((dsp_width - OSD_WIDTH)>> 1) + OSD_X_OFFSET;
@@ -175,11 +175,11 @@ always @(posedge clk_sys) begin
 	v_osd_end   <= v_osd_start + (OSD_HEIGHT<<doublescan);
 end
 
-wire [9:0] osd_hcnt    = h_cnt - h_osd_start;
-wire [9:0] osd_vcnt    = v_cnt - v_osd_start;
-wire [9:0] osd_hcnt_next  = osd_hcnt + 2'd1;  // one pixel offset for osd pixel
-wire [9:0] osd_hcnt_next2 = osd_hcnt + 2'd2;  // two pixel offset for osd byte address register
-reg        osd_de;
+wire [10:0] osd_hcnt    = h_cnt - h_osd_start;
+wire [10:0] osd_vcnt    = v_cnt - v_osd_start;
+wire [10:0] osd_hcnt_next  = osd_hcnt + 2'd1;  // one pixel offset for osd pixel
+wire [10:0] osd_hcnt_next2 = osd_hcnt + 2'd2;  // two pixel offset for osd byte address register
+reg         osd_de;
 
 reg [10:0] osd_buffer_addr;
 wire [7:0] osd_byte = osd_buffer[osd_buffer_addr];
