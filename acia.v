@@ -170,6 +170,7 @@ always @(posedge clk) begin
 			serial_tx_shift_reg <= { 1'b1, serial_tx_data, 1'b0, 1'b1 };  // 8N1, lsb first
 			serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
 			serial_tx_data_valid <= 1'b0;
+			serial_tx_empty <= 1'b0;
 		end
 	end
 
