@@ -570,23 +570,21 @@ wire [7:0] port_b_out;
 wire       floppy_side = port_a_out[0];
 wire [1:0] floppy_sel = port_a_out[2:1];
 
-ym2149 ym2149 (
+YM2149 #(.MIXER_VOLTABLE(1'b1)) ym2149 (
 	.CLK         ( clk_32        ),
-	.CE          ( clk_2_en      ),
-	.RESET       ( peripheral_reset ),
-	.DI          ( mbus_dout[15:8]),
-	.DO          ( snd_data_out  ),
-	.AUDIO_L     ( ym_audio_out_l),
-	.AUDIO_R     ( ym_audio_out_r),
-	.BDIR        ( sndir         ),
-	.BC          ( sndcs         ),
-	.MODE        ( 0             ),
-	.SEL         ( 0             ),
-	.STEREO      ( psg_stereo    ),
-	.IOA_in      ( port_a_in     ),
-	.IOA_out     ( port_a_out    ),
-	.IOB_in      ( port_b_in     ),
-	.IOB_out     ( port_b_out    )
+	.ENA         ( clk_2_en      ),
+	.RESET_L     ( ~peripheral_reset ),
+	.I_DA        ( mbus_dout[15:8]),
+	.O_DA        ( snd_data_out  ),
+	.O_AUDIO_L   ( ym_audio_out_l),
+	.O_AUDIO_R   ( ym_audio_out_r),
+	.I_BDIR      ( sndir         ),
+	.I_BC1       ( sndcs         ),
+	.I_STEREO    ( psg_stereo    ),
+	.I_IOA       ( port_a_in     ),
+	.O_IOA       ( port_a_out    ),
+	.I_IOB       ( port_b_in     ),
+	.O_IOB       ( port_b_out    )
 );
 
 // audio output processing

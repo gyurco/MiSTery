@@ -119,7 +119,7 @@ set_location_assignment PIN_43 -to SDRAM_CLK
 set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE SPEED
 set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name ENABLE_SIGNALTAP OFF
-set_global_assignment -name USE_SIGNALTAP_FILE out/stejoy.stp
+set_global_assignment -name USE_SIGNALTAP_FILE out/fdc.stp
 set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF
 set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT NORMAL
@@ -318,7 +318,7 @@ set_global_assignment -name VERILOG_FILE acia.v
 set_global_assignment -name VERILOG_FILE dma.v
 set_global_assignment -name VERILOG_FILE sdram.v
 set_global_assignment -name VERILOG_FILE io_fifo.v
-set_global_assignment -name SYSTEMVERILOG_FILE ym2149.sv
+set_global_assignment -name VHDL_FILE YM2149.vhd
 set_global_assignment -name VHDL_FILE vol_table_array.vhd
 set_global_assignment -name VERILOG_FILE fdc1772/floppy.v
 set_global_assignment -name VERILOG_FILE fdc1772/fdc1772.v
@@ -365,4 +365,5 @@ set_global_assignment -name SIGNALTAP_FILE out/fdc.stp
 set_global_assignment -name SIGNALTAP_FILE out/dmasnd.stp
 set_global_assignment -name SIGNALTAP_FILE out/ikbd.stp
 set_global_assignment -name SIGNALTAP_FILE out/stejoy.stp
+set_global_assignment -name SIGNALTAP_FILE out/wp.stp
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
