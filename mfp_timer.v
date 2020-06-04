@@ -23,7 +23,6 @@
 
 module mfp_timer(
 	input        CLK,
-	input        CLK_EN,
 	input        RST, 
 	input        DS,
 
