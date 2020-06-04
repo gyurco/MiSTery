@@ -89,10 +89,18 @@ always @(posedge CLK) begin
 	if (~DS_last & DS) cur_counter <= down_counter;
 end
 
+reg [7:0] trigger_shift;
+wire      trigger_pulse = trigger_shift == 8'b00001111;
+
+always @(posedge CLK) begin
+	// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
+	// but a 4 stage shift register doesn't have enough delay for most of the bottom border opening code
+	if (xclk_en) trigger_shift <= { trigger_shift[6:0], T_I };
+end
+
 always @(posedge CLK) begin
 	reg       timer_tick;
 	reg       timer_tick_r;
-	reg [8:0] trigger_adj;
 	reg       reload;
 
 	if (RST === 1'b1) begin
@@ -105,12 +113,7 @@ always @(posedge CLK) begin
 		reload <= 1'b0;
 	end else begin
 
-		// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
-		// In the "Atari ST internals", it's 1/4 of the MFP clock frequency
-		// Use the later, it has less jitter to the CPU clock
-		if (CLK_EN) trigger_adj <= { trigger_adj[7:0], T_I };
-
-		if (CLK_EN) timer_tick_r <= timer_tick;
+		if (xclk_en) timer_tick_r <= timer_tick;
 
 		reload <= 1'b0;
 		// if the timer is just stopped when oveflown, the MFP won't reload it from data
@@ -157,17 +160,17 @@ always @(posedge CLK) begin
 
 		// handle event mode
 		if (event_mode === 1'b1)
-			if (CLK_EN && (~trigger_adj[8] & trigger_adj[7]))
+			if (xclk_en && trigger_pulse)
 				count <= 1'b1;
 
 		// handle delay mode
 		if (delay_mode === 1'b1)
-			if (CLK_EN && (timer_tick_r ^ timer_tick))
+			if (xclk_en && (timer_tick_r ^ timer_tick))
 				count <= 1'b1;
 
 		// handle pulse mode
 		if (pulse_mode === 1'b1)
-			if (CLK_EN && (timer_tick_r ^ timer_tick) && trigger_adj[7])
+			if (xclk_en && (timer_tick_r ^ timer_tick) && trigger_pulse)
 				count <= 1'b1;
 
 		if (count) begin
