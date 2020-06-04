@@ -1,7 +1,7 @@
 // acsi.v
 //
-// Atari ST ACSI implementation for the MIST baord
-// http://code.google.com/p/mist-board/
+// Atari ST ACSI implementation for the MIST board
+// https://github.com/mist-devel/mist-board
 //
 // Copyright (c) 2015 Till Harbaum <till@harbaum.org>
 //

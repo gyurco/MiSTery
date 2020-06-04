@@ -2,7 +2,7 @@
 // viking.v
 // 
 // Atari ST(E) Viking/SM194
-// http://code.google.com/p/mist-board/
+// https://github.com/mist-devel/mist-board
 // 
 // Copyright (c) 2013-2015 Till Harbaum <till@harbaum.org> 
 // 

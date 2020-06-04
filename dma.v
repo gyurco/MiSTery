@@ -1,11 +1,7 @@
 // dma.v
 //
-// Atari ST dma engine for the MIST baord
-// http://code.google.com/p/mist-board/
-//
-// This file implements a SPI client which can read/write data
-// from/to the MiST IO-Controller as implementing the
-// Atari ST DMA controller.
+// Atari ST DMA controller for the MIST board
+// https://github.com/mist-devel/mist-board
 //
 // Copyright (c) 2014 Till Harbaum <till@harbaum.org>
 // Copyright (c) 2019 Gyorgy Szombathelyi

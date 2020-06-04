@@ -1,7 +1,7 @@
 // ethernec.v
 //
 // Atari ST NE2000/ethernec implementation for the MiST board
-// http://code.google.com/p/mist-board/
+// https://github.com/mist-devel/mist-board
 //
 // Copyright (c) 2014 Till Harbaum <till@harbaum.org>
 //

@@ -2,7 +2,7 @@
 // mste_ctrl.v
 //
 // Atari Mega STE cache/cpu controller implementation for the MiST board
-// http://code.google.com/p/mist-board/
+// https://github.com/mist-devel/mist-board
 //
 // Copyright (c) 2013 Till Harbaum <till@harbaum.org>
 //

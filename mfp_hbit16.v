@@ -3,9 +3,10 @@
 //
 // determines the index of the highest bit set in a 16 bit array
 //
-// http://code.google.com/p/mist-board/
+// https://github.com/mist-devel/mist-board
 //
 // Copyright (c) 2014 Till Harbaum <till@harbaum.org>
+// Copyright (c) 2019-2020 Gyorgy Szombathelyi
 //
 // This source file is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published
