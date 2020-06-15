@@ -90,7 +90,7 @@ always @(posedge CLK) begin
 end
 
 reg [7:0] trigger_shift;
-wire      trigger_pulse = trigger_shift == 8'b00001111;
+wire      trigger_pulse = trigger_shift[5:2] == 4'b0011; // maintain enough delay, and still allow 1/4 of clock freq
 
 always @(posedge CLK) begin
 	// In the datasheet, it's mentioned that T_I must be no more than 1/4 of the Timer Clock frequency
