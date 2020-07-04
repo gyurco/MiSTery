@@ -586,11 +586,12 @@ begin
           vol_r <= vol_r + dac_amp;
         when "00" => -- Channel A
           if I_STEREO = '0' then
-            vol_mixer_l <= vol_l + dac_amp;
-          else
-            vol_mixer_l <= vol_l;
+            vol_r <= vol_r + dac_amp;
           end if;
-          vol_mixer_r <= vol_r + dac_amp;
+          vol_l <= vol_l + dac_amp;
+        when "11" =>
+          vol_mixer_l <= vol_l;
+          vol_mixer_r <= vol_r;
         when others => null;
         end case;
       end if;
