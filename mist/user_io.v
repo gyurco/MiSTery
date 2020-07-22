@@ -468,7 +468,7 @@ always @(posedge clk_sys) begin
 	spi_transfer_endD	<= spi_transfer_end_r;
 	spi_transfer_end	<= spi_transfer_endD;
 
-	if (~spi_transfer_endD & spi_transfer_end) begin
+	if (spi_transfer_end) begin
 		abyte_cnt <= 8'd0;
 	end else if (spi_receiver_strobeD ^ spi_receiver_strobe) begin
 
@@ -558,7 +558,7 @@ always @(posedge clk_sys) begin
 
 	img_mounted <= 0;
 
-	if (~spi_transfer_endD & spi_transfer_end) begin
+	if (spi_transfer_end) begin
 		abyte_cnt <= 8'd0;
 		sd_ack <= 1'b0;
 		sd_ack_conf <= 1'b0;
