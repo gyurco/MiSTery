@@ -104,14 +104,11 @@ set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -end -setup 2
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[1]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -end -hold 1
 
-set_multicycle_path -from {sdram:sdram|dout[*]} -to {sdram:sdram|*} -setup 2
-set_multicycle_path -from {sdram:sdram|dout[*]} -to {sdram:sdram|*} -hold 1
-
 # FX68K
-set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 2
-set_multicycle_path -start -hold -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|microAddr[*]] 1
-set_multicycle_path -start -setup -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|nanoAddr[*]] 2
-set_multicycle_path -start -hold -from [get_keepers fx68k:fx68k|Ir[*]] -to [get_keepers fx68k:fx68k|nanoAddr[*]] 1
+set_multicycle_path -start -setup -from [get_keepers atarist_sdram:atarist|fx68k:fx68k|Ir[*]] -to [get_keepers atarist_sdram:atarist|fx68k:fx68k|microAddr[*]] 2
+set_multicycle_path -start -hold -from [get_keepers atarist_sdram:atarist|fx68k:fx68k|Ir[*]] -to [get_keepers atarist_sdram:atarist|fx68k:fx68k|microAddr[*]] 1
+set_multicycle_path -start -setup -from [get_keepers atarist_sdram:atarist|fx68k:fx68k|Ir[*]] -to [get_keepers atarist_sdram:atarist|fx68k:fx68k|nanoAddr[*]] 2
+set_multicycle_path -start -hold -from [get_keepers atarist_sdram:atarist|fx68k:fx68k|Ir[*]] -to [get_keepers atarist_sdram:atarist|fx68k:fx68k|nanoAddr[*]] 1
 
 # Viking 128 MHz to SDRAM 96 MHz
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2

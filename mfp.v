@@ -44,8 +44,6 @@ module mfp (
 	// serial rs223 connection from io controller
 	input            serial_strobe_in,
 	input      [7:0] serial_data_in,
-	output           serial_data_in_full,
-	input      [7:0] serial_status_in,
 
 	// inputs
 	input            clk_ext,   // external 2.457MHz
@@ -54,6 +52,7 @@ module mfp (
 );
 
 wire serial_data_out_fifo_full;
+wire serial_data_in_full;
 
 // --- mfp output fifo ---
 // filled by the CPU when writing to the mfp uart data register
