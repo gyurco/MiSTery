@@ -63,7 +63,7 @@ module atarist_sdram (
 	input wire    [23:1] data_addr,
 	input wire           data_download,
 
-	output wire          data_out_strobe,
+	input wire           data_out_strobe,
 	output wire   [15:0] data_out_reg,
 	input wire           dma_ack,
 	input wire     [7:0] dma_status,
