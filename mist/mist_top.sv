@@ -288,6 +288,9 @@ wire parallel_data_out_available;
 // extra joystick interface
 wire [15:0] joy0, joy1, joy2, joy3;
 
+// RTC
+wire [63:0] rtc;
+
 // connection between io controller and ethernet controller
 //   mac address transfer io controller -> ethernec
 wire [31:0] eth_status;
@@ -395,6 +398,7 @@ user_io user_io(
 	.scandoubler_disable         (scandoubler_disable),
 	.ypbpr                       (ypbpr),
 	.no_csync                    (no_csync),
+	.rtc                         (rtc),
 	.SWITCHES                    (switches ),
 	.CORE_TYPE                   (8'ha7)    // mist2 core id
 );
@@ -508,6 +512,9 @@ atarist_sdram atarist(
 	.joy1                ( joy1 ),
 	.joy2                ( joy2 ),
 	.joy3                ( joy3 ),
+
+	// RTC
+	.rtc                 ( rtc ),
 
 	// SDRAM pins
 	.SDRAM_DQ            ( SDRAM_DQ ),   // SDRAM Data bus 16 Bits

@@ -114,6 +114,9 @@ module atarist_sdram (
 	input wire     [15:0] joy2,
 	input wire     [15:0] joy3,
 
+	// RTC
+	input wire     [63:0] rtc,
+
 	// SDRAM
 	inout wire  [ 16-1:0] SDRAM_DQ,   // SDRAM Data bus 16 Bits
 	output wire [ 13-1:0] SDRAM_A,    // SDRAM Address bus 13 Bits
@@ -218,6 +221,7 @@ assign      cpu_din =
               mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
               !button_n ? { 12'hfff, ste_buttons } :
               !(joyrh_n & joyrl_n) ? { joyrh_n ? 8'hff : ste_joy_in[15:8], joyrl_n ? 8'hff : ste_joy_in[7:0] } :
+              !rtccs_n ? { 12'hfff, rtc_data_out }:
               mcu_dout;
 
 // Shifter signals
@@ -801,6 +805,51 @@ ste_joypad ste_joypad1 (
 	.dout     ( { ste_joy_in[15:12], ste_joy_in[7:4] } ),
 	.buttons  ( ste_buttons[3:2] )
 );
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------- Real-time clock ------------------------------ */
+/* ------------------------------------------------------------------------------ */
+
+reg [3:0] rtc_data_out;
+reg       rtc_bank;
+reg [3:0] rtc_bank1[16];
+
+// RP5C15
+always @(*) begin
+	casez ({rtc_bank, mbus_a[4:1]})
+		5'b0_0000: rtc_data_out = rtc[3:0]; // sec
+		5'b0_0001: rtc_data_out = rtc[7:4];
+		5'b0_0010: rtc_data_out = rtc[11:8]; // min
+		5'b0_0011: rtc_data_out = rtc[15:12];
+		5'b0_0100: rtc_data_out = rtc[19:16]; // hour
+		5'b0_0101: rtc_data_out = rtc[23:20];
+		5'b0_0110: rtc_data_out = rtc[48:45]; // day of week
+		5'b0_0111: rtc_data_out = rtc[27:24]; // day
+		5'b0_1000: rtc_data_out = rtc[31:28];
+		5'b0_1001: rtc_data_out = rtc[35:32]; // month
+		5'b0_1010: rtc_data_out = rtc[39:36];
+		5'b0_1011: rtc_data_out = rtc[43:40]; // year
+		5'b0_1100: rtc_data_out = rtc[47:44] + 4'd2; // GEMDOS fix: it assumes year 0 as 1980
+		5'b?_1101: rtc_data_out = {1'b1, 2'b00, rtc_bank };
+		5'b?_1110: rtc_data_out = 4'h0;
+		5'b?_1111: rtc_data_out = 4'hc;
+		5'b1_????: rtc_data_out = rtc_bank1[mbus_a[4:1]];
+		default: rtc_data_out = 4'hf;
+	endcase
+end
+
+always @(posedge clk_32) begin
+	if (peripheral_reset) begin
+		rtc_bank <= 0;
+	end else begin
+		if (!(rtccs_n | rtcwr_n)) begin
+			if (mbus_a[4:1] == 4'hd)
+				rtc_bank <= cpu_dout[0];
+			else
+				rtc_bank1[mbus_a[4:1]] <= cpu_dout[3:0];
+		end
+	end
+end
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------------- DMA ------------------------------------ */

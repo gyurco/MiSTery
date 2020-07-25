@@ -13,7 +13,10 @@ module user_io(
 		output reg [15:0] joystick_analog_1,
 
 		// status from IO controller
-		output reg [31:0]   status,
+		output reg [31:0] status,
+		// RTC data from IO controller
+		// sec, min, hour, date, month, year, day (BCD)
+		output reg [63:0] rtc,
 
 		// serial data from mfp to io controller
 		output reg       serial_strobe_out,
@@ -520,6 +523,8 @@ always @(posedge clk_sys) begin
 
 				// status, 32bit version
 				8'h1e: if(abyte_cnt<5) status[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
+
+				8'h22: if(abyte_cnt<9) rtc[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 
 				endcase
 		end
