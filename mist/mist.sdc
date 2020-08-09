@@ -114,6 +114,9 @@ set_multicycle_path -start -hold -from [get_keepers atarist_sdram:atarist|fx68k:
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 1
 
+set_multicycle_path -from {atarist_sdram:atarist|sdram:sdram|dout[*]} -to {atarist_sdram:atarist|sdram:sdram|sd_addr[*]} -setup 2
+set_multicycle_path -from {atarist_sdram:atarist|sdram:sdram|dout[*]} -to {atarist_sdram:atarist|sdram:sdram|sd_addr[*]} -hold 1
+
 # VGA
 set_multicycle_path -start -to [get_ports {VGA_*}] -setup 4
 set_multicycle_path -start -to [get_ports {VGA_*}] -hold 3
