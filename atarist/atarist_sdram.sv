@@ -160,20 +160,24 @@ wire MEM14M  = (system_ctrl[3:1] == 3'd5);
 reg         reset;
 reg         peripheral_reset;
 reg         ikbd_reset;
-reg         mcu_reset_n;
+reg         mcu_reset_n = 1'b1;
+reg   [6:0] reset_cnt = 7'h7f;
 
 always @(posedge clk_32) begin
-	reg resetD;
 
-	reset <= system_ctrl[0];
+	reset <= reset_cnt != 0;
 
-	mcu_reset_n <= 1;
-	peripheral_reset <= system_ctrl[0] | ~cpu_reset_n_o;
-	resetD <= reset;
-	if (~resetD & reset) mcu_reset_n <= 0;
+	if (system_ctrl[0]) reset_cnt <= 7'h7f;
+	if (reset_cnt != 0) reset_cnt <= reset_cnt - 1'd1;
+
+	peripheral_reset <= reset | ~cpu_reset_n_o;
+
+	// don't keep the GSTMCU in reset, because its signals are needed for the SDRAM controller
+	if (reset_cnt == 2) mcu_reset_n <= 0;
+	else if (reset_cnt == 0) mcu_reset_n <= 1;
 end
 
-always @(posedge clk_2) ikbd_reset <= system_ctrl[0] | ~cpu_reset_n_o;
+always @(posedge clk_2) ikbd_reset <= peripheral_reset;
 
 // MCU signals
 
@@ -348,7 +352,9 @@ gstmcu gstmcu (
 gstshifter gstshifter (
 	.clk32      ( clk_32 ),
 	.ste        ( ste ),
-	.resb       ( mcu_reset_n ),
+	// resb originally cmpcs_n | dcyc_n internally in shifter,
+	// but we have the luxury of having a reset pin
+	.resb       ( ~peripheral_reset ),
 
 	// CPU/RAM interface
 	.CS         ( ~cmpcs_n ),
