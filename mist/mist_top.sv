@@ -50,6 +50,7 @@ wire [1:0] fdc_wp = system_ctrl[7:6];
 // usb target port on io controller is used for redirection of
 // 0=nothing 1=rs232 2=printer 3=midi
 wire [1:0] usb_redirection = system_ctrl[27:26];
+wire blend = system_ctrl[29];
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------ Clock generation ------------------------------ */
@@ -133,6 +134,7 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFF
 	.VGA_HS     ( VGA_HS ),
 	.ce_divider ( 1'b1 ),
 	.rotate     ( 2'b00 ),
+	.blend      ( blend & ~monomode & ~viking_active ),
 	.scandoubler_disable( scandoubler_disable | monomode | viking_active ),
 	.no_csync   ( monomode | viking_active | no_csync ),
 	.scanlines  ( scanlines ),
