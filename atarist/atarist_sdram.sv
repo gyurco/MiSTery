@@ -41,6 +41,8 @@ module atarist_sdram (
 	output wire          midi_tx,
 
 	// Parallel port OUT
+	input  wire          parallel_in_strobe,
+	input  wire    [7:0] parallel_in,
 	output wire          parallel_out_strobe,
 	output wire    [7:0] parallel_out,
 	input  wire          parallel_printer_busy,
@@ -111,8 +113,6 @@ module atarist_sdram (
 	// joysticks
 	input wire     [15:0] joy0,
 	input wire     [15:0] joy1,
-	input wire     [15:0] joy2,
-	input wire     [15:0] joy3,
 
 	// RTC
 	input wire     [63:0] rtc,
@@ -639,11 +639,8 @@ always @(posedge clk_32) begin
 	cnt <= cnt + 1'd1;
 end
 
-// extra joysticks are wired to the printer port
-// using the "gauntlet2 interface", fire of
-// joystick 0 is connected to the mfp I0 (busy)
-wire [7:0] port_b_in = { ~joy2[0], ~joy2[1], ~joy2[2], ~joy2[3],~joy3[0], ~joy3[1], ~joy3[2], ~joy3[3]};
-wire [7:0] port_a_in = { 2'b11, ~joy3[4], 5'b11111 };
+wire [7:0] port_b_in = parallel_in;
+wire [7:0] port_a_in = { 2'b11, parallel_in_strobe, 5'b11111 };
 wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 wire       floppy_side = port_a_out[0];

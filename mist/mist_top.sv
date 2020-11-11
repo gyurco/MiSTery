@@ -213,6 +213,12 @@ io_fifo #(.DEPTH(4)) parallel_out_fifo (
 	.data_available ( parallel_data_out_available )
 );
 
+// extra joysticks are wired to the printer port
+// using the "gauntlet2 interface", fire of
+// joystick 0 is connected to the mfp I0 (busy)
+wire [7:0] parallel_in = { ~joy2[0], ~joy2[1], ~joy2[2], ~joy2[3],~joy3[0], ~joy3[1], ~joy3[2], ~joy3[3] };
+wire       parallel_in_strobe = ~joy3[4];
+
 /* ------------------------------------------------------------------------------ */
 /* -------------------------------- MiST data IO -------------------------------- */
 /* ------------------------------------------------------------------------------ */
@@ -447,7 +453,9 @@ atarist_sdram atarist(
 	.midi_rx             ( UART_RX ),
 	.midi_tx             ( UART_TX ),
 
-	// Parallel port OUT
+	// Parallel port IN-OUT
+	.parallel_in_strobe  ( parallel_in_strobe ),
+	.parallel_in         ( parallel_in ),
 	.parallel_out_strobe ( parallel_out_strobe ),
 	.parallel_out        ( parallel_out ),
 	.parallel_printer_busy ( parallel_printer_busy ),
@@ -512,8 +520,6 @@ atarist_sdram atarist(
 	// joysticks
 	.joy0                ( joy0 ),
 	.joy1                ( joy1 ),
-	.joy2                ( joy2 ),
-	.joy3                ( joy3 ),
 
 	// RTC
 	.rtc                 ( rtc ),
