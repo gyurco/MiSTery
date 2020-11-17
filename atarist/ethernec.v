@@ -26,19 +26,20 @@
 
 module ethernec (
 	// cpu register interface
-	input 		     clk,
+	input           clk,
+	input           clk_en,
 	input [1:0]	     sel,
 	input [14:0] 	  addr,        // cpu word address!
 	output [15:0]    dout,
 
 	// ethernet status word to be read by io controller
 	output [31:0]    status,
-	
+
 	// interface to allow the io controller to read frames from the tx buffer
 	input            tx_begin,   // rising edge before new tx byte stream is sent
 	input            tx_strobe,  // rising edge before each tx byte
 	output reg [7:0] tx_byte,    // byte from transmit buffer 
-	
+
 	// interface to allow the io controller to write frames to the tx buffer
 	input            rx_begin,   // rising edge before new rx byte stream is sent
 	input            rx_strobe,  // rising edge before each rx byte
@@ -57,7 +58,14 @@ localparam STATUS_TX_DONE    = 8'h12;
 
 reg [7:0] statusCode;
 assign status = { statusCode, 5'h00, tbcr == tx_w_cnt, isr[1:0], tbcr };
-				
+
+localparam RX_W_IDLE   = 2'b00;
+localparam RX_W_MAC    = 2'b01;
+localparam RX_W_DATA   = 2'b10;
+localparam RX_W_HEADER = 2'b11;
+
+reg [1:0] rx_w_state;
+
 // ----- bus interface signals as wired up on the ethernec/netusbee ------
 // sel[0] = 0xfa0000 -> normal read
 // sel[1] = 0xfb0000 -> write through address bus
@@ -67,6 +75,15 @@ wire [4:0] ne_addr = addr[12:8];
 wire [7:0] ne_wdata = addr[7:0];
 reg [7:0] ne_rdata;
 assign dout = { ne_rdata, 8'h00 };
+
+reg ne_readD, ne_writeD;
+always @(posedge clk) begin
+	ne_readD <= ne_read;
+	ne_writeD <= ne_write;
+end
+
+wire ne_read_en = ~ne_read & ne_readD;
+wire ne_write_en = ~ne_write & ne_writeD;
 
 // ---------- ne2000 internal registers -------------
 reg reset;
@@ -92,7 +109,7 @@ wire [1:0] ps = cr[7:6];  // register page select
 
 // ------------- rx/tx buffers ------------
 localparam FRAMESIZE = 1536;
- 
+
 reg [7:0] rx_buffer [FRAMESIZE+3:0];   // 1 ethernet frame + 4 bytes header
 reg [15:0] rx_r_cnt, rx_w_cnt;         // receive buffer byte counter
 
@@ -100,22 +117,24 @@ reg [7:0] tx_buffer [FRAMESIZE-1:0];   // 1 ethernet frame
 reg [15:0] tx_w_cnt, tx_r_cnt;         // transmit buffer byte counter
 
 // ------------- io controller read access to tx buffer ------------
-always @(posedge tx_strobe or negedge tx_begin) begin
-	if(!tx_begin)
-		tx_r_cnt <= 16'd0;
-	else begin
-		tx_byte <= tx_buffer[tx_r_cnt];
-		tx_r_cnt <= tx_r_cnt + 16'd1;
-	end
+always @(posedge clk) begin
+	tx_byte <= tx_buffer[tx_r_cnt];
+
+	if (tx_done)
+		tx_r_cnt <= 0;
+	else if (tx_strobe_r2 & ~tx_strobe_r3)
+		tx_r_cnt <= tx_r_cnt + 1'd1;
+
 end
 
-// whenver tx buffer has been read set tx irq
-reg tx_doneD, tx_doneD2;
-wire tx_done = tx_doneD && !tx_doneD2;
-always @(posedge clk) begin	
-	tx_doneD <= !tx_begin;
-	tx_doneD2 <= tx_doneD;
+reg tx_begin_r, tx_begin_r2, tx_begin_r3;
+reg tx_strobe_r, tx_strobe_r2, tx_strobe_r3;
+
+always @(posedge clk) begin
+	{tx_begin_r3, tx_begin_r2, tx_begin_r} <= {tx_begin_r2, tx_begin_r, tx_begin};
+	{tx_strobe_r3, tx_strobe_r2, tx_strobe_r} <= {tx_strobe_r2, tx_strobe_r, tx_strobe};
 end
+wire tx_done = tx_begin_r2 & !tx_begin_r3;
 
 // ------------- set local mac address ------------
 
@@ -123,10 +142,15 @@ end
 reg [7:0] mac [5:0];
 reg [2:0] mac_cnt;
 
-always @(negedge mac_strobe or posedge mac_begin) begin
-	if(mac_begin)
-		mac_cnt <= 3'd0;
-	else begin
+reg mac_strobe_r, mac_strobe_r2, mac_strobe_r3;
+reg mac_begin_r, mac_begin_r2;
+
+always @(posedge clk) begin
+	{mac_begin_r2, mac_begin_r} <= {mac_begin_r, mac_begin};
+	{mac_strobe_r3, mac_strobe_r2, mac_strobe_r} <= {mac_strobe_r2, mac_strobe_r, mac_strobe};
+	if (mac_begin_r2)
+		mac_cnt <= 0;
+	else if (mac_strobe_r3 & ~mac_strobe_r2) begin
 		if(mac_cnt < 6) begin
 			mac[mac_cnt] <= mac_byte;
 			mac_cnt <= mac_cnt + 3'd1;
@@ -135,7 +159,7 @@ always @(negedge mac_strobe or posedge mac_begin) begin
 end
 
 // cpu register read
-always @(ne_read) begin
+always @(*) begin
 	ne_rdata <= 8'd0;
 	if(ne_read) begin            // $faxxxx
 		// cr, dma and reset are always available
@@ -159,69 +183,61 @@ always @(ne_read) begin
 	end
 end
 
+reg rx_strobe_r, rx_strobe_r2, rx_strobe_r3;
+reg rx_begin_r, rx_begin_r2, rx_begin_r3;
+reg resetD;
+
 // delay internal reset signal
-reg resetD, rx_beginD, rx_beginD2;
 always @(posedge clk) begin
+	{rx_begin_r3, rx_begin_r2, rx_begin_r} <= {rx_begin_r2, rx_begin_r, rx_begin};
+	{rx_strobe_r3, rx_strobe_r2, rx_strobe_r} <= {rx_strobe_r2, rx_strobe_r, rx_strobe};
 	resetD <= reset;
-	rx_beginD <= rx_begin;
-	rx_beginD2 <= rx_beginD;
 end
 
 // generate an internal strobe signal to copy mac address and to setup header
-wire int_strobe = ((rx_w_state == 2'd1)||(rx_w_state == 2'd3))?!clk:1'b0;
+wire int_strobe_en = ((rx_w_state == RX_W_MAC)||(rx_w_state == RX_W_HEADER)) ? clk_en : 1'b0;
 
 // internal mac transfer is started at the begin of the reset, internal header
 // transfer is started at the end of the data transmission
-wire int_begin = (reset && !resetD) || header_begin;
-
-// 0=idle, 1=mac, 2=data, 3=header
-reg [1:0] rx_w_state;
+wire int_begin = (reset & !resetD) || header_begin;
 
 // Several sources can write into the rx_buffer. The user_io SPI client receiving 
 // data from the io controller or the ethernec core itself setting the mac address
 // or adding the rx header 
-wire rx_write_clk = rx_strobe || int_strobe;
-wire rx_write_begin = (rx_beginD && !rx_beginD2) || int_begin;
+
+wire rx_write_en = (!rx_strobe_r3 & rx_strobe_r2) || int_strobe_en;
+wire rx_write_begin = (!rx_begin_r3 & rx_begin_r2) || int_begin;
 
 reg rx_lastByte;
 
 // the ne2000 page size is 256 bytes. thus the page counters are increased
 // every 256 bytes when a data transfer is in progress. First page is used when
 // the first byte is written to 0x0004
-wire rx_new_page = (rx_w_state == 2'd2) && ((rx_w_cnt[7:0] == 8'h00) || (rx_w_cnt == 14'h0004));
+wire rx_new_page = (rx_w_state == RX_W_DATA) && ((rx_w_cnt[7:0] == 8'h00) || (rx_w_cnt == 14'h0004));
 reg rx_new_pageD;
-always @(negedge clk)
+always @(posedge clk)
 	rx_new_pageD <= rx_new_page;
 	
 // -------- dummy page counter ---------
 reg [7:0] rx_page_cnt;
-always @(negedge clk) begin
+always @(posedge clk) begin
 	if(rx_new_page && !rx_new_pageD)
 		rx_page_cnt <= rx_page_cnt + 8'd1;
 end
 
 // state/counter handling on one edge
-always @(posedge rx_write_clk or posedge rx_write_begin) begin
+always @(posedge clk) begin
 	if(rx_write_begin) begin
-		if(rx_w_state == 2'd1) begin
-			rx_w_cnt <= 16'd0;  // mac is written to begin of buffer
-		end else if(rx_w_state == 2'd2) begin
-			// payload starts at byte 4 (after ne2000 header). Since the address advances
-			// right before the transfer we need to set the address to 3 before
-			rx_w_cnt <= 16'd3;
-		end if(rx_w_state == 2'd3) begin
-			rx_w_cnt <= 16'd0;    // header is written to begin of buffer
+		if(rx_w_state == RX_W_MAC || rx_w_state == RX_W_HEADER) begin
+			rx_w_cnt <= 16'd0;  // mac and header is written to begin of buffer
+		end else  begin
+			// payload starts at byte 4 (after ne2000 header)
+			rx_w_cnt <= 16'd4;
 		end
 		
-	end else begin
-		if(rx_w_state == 2'd1) begin
+	end else if (rx_write_en) begin
+		if(rx_w_state != RX_W_IDLE) begin
 			// after reset the mac is written to the first 6 bytes of the rx buffer
-			rx_w_cnt <= rx_w_cnt + 16'd1;
-			
-		end else if(rx_w_state == 2'd2) begin
-			rx_w_cnt <= rx_w_cnt + 16'd1;
-					
-		end else if(rx_w_state == 2'd3) begin
 			rx_w_cnt <= rx_w_cnt + 16'd1;
 		end 
 	end
@@ -239,24 +255,20 @@ wire [7:0] header_byte =
 always @(posedge clk) begin
 	rx_lastByte <= 1'b0;
 
-	if(((rx_w_state == 2'd1) && (rx_w_cnt == 3'd5)) ||
-		((rx_w_state == 2'd3) && (rx_w_cnt == 3'd3)))
-		rx_lastByte <= 1'b1;
+	if(((rx_w_state == RX_W_MAC) && (rx_w_cnt == 3'd6)) ||
+		((rx_w_state == RX_W_HEADER) && (rx_w_cnt == 3'd4)))
+		rx_lastByte <= !rx_write_begin;
 end
 
 // data transfer on other edge
-always @(negedge rx_write_clk) begin
-
-	if(rx_w_state == 2'd1) begin
-		rx_buffer[rx_w_cnt] <= mac[rx_w_cnt];
-
-	end else if(rx_w_state == 2'd2) begin
-		// rx begin stays true over the entire transfer
-//		if(rx_begin)
-			rx_buffer[rx_w_cnt] <= rx_byte;
-				
-	end else if(rx_w_state == 2'd3) begin
-		rx_buffer[rx_w_cnt] <= header_byte;
+always @(posedge clk) begin
+	if (rx_write_en) begin
+		case (rx_w_state)
+			RX_W_MAC:    rx_buffer[rx_w_cnt] <= mac[rx_w_cnt];
+			RX_W_DATA:   rx_buffer[rx_w_cnt] <= rx_byte;
+			RX_W_HEADER: rx_buffer[rx_w_cnt] <= header_byte;
+			default: ;
+		endcase
 	end
 end
 
@@ -270,16 +282,17 @@ reg header_begin;
 always @(posedge clk) begin
 	header_begin <= 1'b0;
 
-	if(!rx_begin && rx_beginD)
+	if(rx_begin_r3 && !rx_begin_r2)
 		header_begin <= 1'b1;
 end
 
 // write counter - header size (4) = number of bytes written
-always @(negedge rx_begin)
-	rx_len <= rx_w_cnt - 16'd4;	
+always @(posedge clk)
+	if (rx_begin_r3 & !rx_begin_r2)
+		rx_len <= rx_w_cnt - 16'd4;
 		
 // cpu write via read
-always @(negedge clk) begin
+always @(posedge clk) begin
 
 	// rising edge of new page signal causes current page counter to advance
 	// make sure counter stays within the limits of pstart/pstop
@@ -291,21 +304,21 @@ always @(negedge clk) begin
 	// last byte ends a mac or header transfer and causes the
 	// receiver state machine to return to the idle state
 	if(rx_lastByte) begin
-		rx_w_state <= 2'd0;
+		rx_w_state <= RX_W_IDLE;
 		
 		// trigger rx interrupt (PRX) at end of transfer
-		if(rx_w_state == 3) 
+		if(rx_w_state == RX_W_HEADER) 
 			isr[0] <= 1'b1;
 	end
 
 	// The rising edge of rx_begin indicates the start of a data transfer
-	if(rx_beginD && !rx_beginD2)
-		rx_w_state <= 2'd2;
+	if(!rx_begin_r3 && rx_begin_r2)
+		rx_w_state <= RX_W_DATA;
 
 	// The falling edge of rx_begin marks the end of a data transfer.
 	// So we start setting up the pkt header after the end of the transfer
-	if(!rx_beginD && rx_beginD2) 
-		rx_w_state <= 2'd3;
+	if(rx_begin_r3 && !rx_begin_r2) 
+		rx_w_state <= RX_W_HEADER;
 
 	// cpu has read a byte from the rx buffer -> increase rx buffer read pointer
 	rx_inc <= 1'b0;
@@ -326,7 +339,7 @@ always @(negedge clk) begin
 	
 	// if cpu reads have internal side effects then ths is handled
 	// here (and not in the "register read" block above)
-	if(ne_read) begin
+	if(ne_read_en) begin
 		// register page 0
 		if(ps == 2'd0) begin
 		end
@@ -345,11 +358,11 @@ always @(negedge clk) begin
 			isr[7] <= 1'b1;     // set reset flag in isr
 			
 			statusCode <= STATUS_IDLE;
-			rx_w_state <= 2'd1;   // mac address copy
+			rx_w_state <= RX_W_MAC;   // mac address copy
 		end
 	end
 
-	if(ne_write) begin
+	if(ne_write_en) begin
 		if(ne_addr == 5'h00) begin	
 			cr <= ne_wdata;
 			

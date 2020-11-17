@@ -497,17 +497,17 @@ atarist_sdram atarist(
 	.sd_dout_strobe      ( sd_dout_strobe   ),
 	.LED                 ( LED              ),
 
-	// Ethernet (TODO)
-	//.eth_status          ( eth_status ),
-	//.eth_mac_begin       ( eth_mac_begin ),
-	//.eth_mac_strobe      ( eth_mac_strobe ),
-	//.eth_mac_byte        ( eth_mac_byte ),
-	//.eth_tx_read_begin   ( eth_tx_read_begin ),
-	//.eth_tx_read_strobe  ( eth_tx_read_strobe ),
-	//.eth_tx_read_byte    ( eth_tx_read_byte ),
-	//.eth_rx_write_begin  ( eth_rx_write_begin ),
-	//.eth_rx_write_strobe ( eth_rx_write_strobe ),
-	//.eth_rx_write_byte   ( eth_rx_write_byte ),
+	// Ethernet
+	.eth_status          ( eth_status ),
+	.eth_mac_begin       ( eth_mac_begin ),
+	.eth_mac_strobe      ( eth_mac_strobe ),
+	.eth_mac_byte        ( eth_mac_byte ),
+	.eth_tx_read_begin   ( eth_tx_read_begin ),
+	.eth_tx_read_strobe  ( eth_tx_read_strobe ),
+	.eth_tx_read_byte    ( eth_tx_read_byte ),
+	.eth_rx_write_begin  ( eth_rx_write_begin ),
+	.eth_rx_write_strobe ( eth_rx_write_strobe ),
+	.eth_rx_write_byte   ( eth_rx_write_byte ),
 
 	// PS2 keyboard data
 	.ps2_kbd_clk         ( ps2_kbd_clk ),

@@ -18,6 +18,8 @@
 - Serial/parallel port redirect to USB
 - Gauntlet type 4 joystick interface support
 - STe controller port support
+- RP5C15 RTC Chip
+- Ethernet on cartridge port interface (Ethernec)
 - Optional scandoubled/YPbPr video output
 
 ## Usage:
@@ -28,10 +30,7 @@ With F11, you can toggle between normal and STe joystick ports.
 ## Current issues/limitations:
 
 - Some MFP imperfections
-- Some bugs in ST mode
 - No RAM cache for Mega STe (but the cache control selects turbo bus speed)
-- Missing Ethernec support
-- No RTC
 - Only fake LMC1992
 - PAL clock only (32.084 MHz)
 - Since Jagpads have 21 buttons, not all are mapped to MiST controllers when using STe game ports

@@ -88,19 +88,20 @@ module atarist_sdram (
 
 	output wire            LED,
 
-	// Ethernet (TODO)
-	/*
-	.eth_status          ( eth_status ),
-	.eth_mac_begin       ( eth_mac_begin ),
-	.eth_mac_strobe      ( eth_mac_strobe ),
-	.eth_mac_byte        ( eth_mac_byte ),
-	.eth_tx_read_begin   ( eth_tx_read_begin ),
-	.eth_tx_read_strobe  ( eth_tx_read_strobe ),
-	.eth_tx_read_byte    ( eth_tx_read_byte ),
-	.eth_rx_write_begin  ( eth_rx_write_begin ),
-	.eth_rx_write_strobe ( eth_rx_write_strobe ),
-	.eth_rx_write_byte   ( eth_rx_write_byte ),
-	*/
+	// Ethernet interface
+	output          [31:0] eth_status,
+
+	input                  eth_mac_begin,
+	input                  eth_mac_strobe,
+	input            [7:0] eth_mac_byte,
+
+	input                  eth_tx_read_begin,
+	input                  eth_tx_read_strobe,
+	output           [7:0] eth_tx_read_byte,
+
+	input                  eth_rx_write_begin,
+	input                  eth_rx_write_strobe,
+	input            [7:0] eth_rx_write_byte,
 
 	// PS2 keyboard data
 	input wire             ps2_kbd_clk,
@@ -219,6 +220,7 @@ assign      cpu_din =
               blitter_sel ? blitter_data_out :
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
+              |eth_sel ? eth_data_out :
               !rom_n   ? rom_data_out :
               n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
@@ -950,6 +952,35 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 	.sd_dout        ( sd_dout          ),
 	.sd_din         ( sd_din           ),
 	.sd_dout_strobe ( sd_dout_strobe   )
+);
+
+/* ------------------------------------------------------------------------------ */
+/* --------------------- Ethernet on Cartridge Port (ETHERNEC) ------------------ */
+/* ------------------------------------------------------------------------------ */
+
+wire  [1:0] eth_sel = { ~rom3_n & ethernec_present, ~rom4_n & ethernec_present };
+wire [15:0] eth_data_out;
+
+ethernec ethernec (
+	.clk        (clk_32      ),
+	.clk_en     (mhz8_en1    ),
+	.sel        (eth_sel     ),
+	.addr       (mbus_a[15:1]),
+	.dout       (eth_data_out),
+
+	.status     (eth_status),
+
+	.mac_begin  (eth_mac_begin),
+	.mac_strobe (eth_mac_strobe),
+	.mac_byte   (eth_mac_byte),
+
+	.tx_begin   (eth_tx_read_begin),
+	.tx_strobe  (eth_tx_read_strobe),
+	.tx_byte    (eth_tx_read_byte),
+
+	.rx_begin   (eth_rx_write_begin),
+	.rx_strobe  (eth_rx_write_strobe),
+	.rx_byte    (eth_rx_write_byte)
 );
 
 /* ------------------------------------------------------------------------------ */
