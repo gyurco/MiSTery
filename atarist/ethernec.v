@@ -26,14 +26,15 @@
 
 module ethernec (
 	// cpu register interface
-	input           clk,
-	input           clk_en,
-	input [1:0]	     sel,
-	input [14:0] 	  addr,        // cpu word address!
-	output [15:0]    dout,
+	input            clk,
+	input            rd,
+	input            wr,
+	input      [4:0] addr,
+	input      [7:0] din,
+	output reg [7:0] dout,
 
 	// ethernet status word to be read by io controller
-	output [31:0]    status,
+	output    [31:0] status,
 
 	// interface to allow the io controller to read frames from the tx buffer
 	input            tx_begin,   // rising edge before new tx byte stream is sent
@@ -43,14 +44,14 @@ module ethernec (
 	// interface to allow the io controller to write frames to the tx buffer
 	input            rx_begin,   // rising edge before new rx byte stream is sent
 	input            rx_strobe,  // rising edge before each rx byte
-	input [7:0]      rx_byte,    // byte to be written to rx buffer 
+	input      [7:0] rx_byte,    // byte to be written to rx buffer 
 
 	// interface to allow mac address being set by io controller
 	input            mac_begin,   // rising edge before new mac is sent
 	input            mac_strobe,  // rising edge before each mac byte
-	input [7:0]      mac_byte     // mac address byte
+	input      [7:0] mac_byte     // mac address byte
 );
- 
+
 // some non-zero and non-all-ones bytes as status flags
 localparam STATUS_IDLE       = 8'hfe;
 localparam STATUS_TX_PENDING = 8'ha5;
@@ -69,12 +70,8 @@ reg [1:0] rx_w_state;
 // ----- bus interface signals as wired up on the ethernec/netusbee ------
 // sel[0] = 0xfa0000 -> normal read
 // sel[1] = 0xfb0000 -> write through address bus
-wire ne_read = sel[0];
-wire ne_write = sel[1];
-wire [4:0] ne_addr = addr[12:8];
-wire [7:0] ne_wdata = addr[7:0];
-reg [7:0] ne_rdata;
-assign dout = { ne_rdata, 8'h00 };
+wire ne_read = rd;
+wire ne_write = wr;
 
 reg ne_readD, ne_writeD;
 always @(posedge clk) begin
@@ -160,25 +157,25 @@ end
 
 // cpu register read
 always @(*) begin
-	ne_rdata <= 8'd0;
+	dout = 8'd0;
 	if(ne_read) begin            // $faxxxx
 		// cr, dma and reset are always available
-		if(ne_addr == 5'h00)    ne_rdata <= cr;
+		if(addr == 5'h00)   dout = cr;
 
 		// register page 0
 		if(ps == 2'd0) begin
-			if(ne_addr == 5'h04) ne_rdata <= 8'h23;   // tsr: tx ok
-			if(ne_addr == 5'h07) ne_rdata <= isr;
+			if(addr == 5'h04) dout = 8'h23;   // tsr: tx ok
+			if(addr == 5'h07) dout = isr;
 		end
 		
 		// register page 1
 		if(ps == 2'd1) begin
-			if(ne_addr == 5'h07) ne_rdata <= curr;
+			if(addr == 5'h07) dout = curr;
 		end
 
 		// read dma register $10 - $17
-		if(ne_addr[4:3] == 2'b10)
-			ne_rdata <= rx_buffer[rx_r_cnt];
+		if(addr[4:3] == 2'b10)
+			dout = rx_buffer[rx_r_cnt];
 
 	end
 end
@@ -195,7 +192,7 @@ always @(posedge clk) begin
 end
 
 // generate an internal strobe signal to copy mac address and to setup header
-wire int_strobe_en = ((rx_w_state == RX_W_MAC)||(rx_w_state == RX_W_HEADER)) ? clk_en : 1'b0;
+wire int_strobe_en = ((rx_w_state == RX_W_MAC)||(rx_w_state == RX_W_HEADER)) ? 1'b1 : 1'b0;
 
 // internal mac transfer is started at the begin of the reset, internal header
 // transfer is started at the end of the data transmission
@@ -349,11 +346,11 @@ always @(posedge clk) begin
 		end
 
 		// read dma register $10-$17
-		if(ne_addr[4:3] == 2'b10)
+		if(addr[4:3] == 2'b10)
 			rx_inc <= 1'b1;
 		
 		// read reset register $18-$1f
-		if(ne_addr[4:3] == 2'b11) begin
+		if(addr[4:3] == 2'b11) begin
 			reset <= 1'b1;      // read to reset register sets reset
 			isr[7] <= 1'b1;     // set reset flag in isr
 			
@@ -363,27 +360,27 @@ always @(posedge clk) begin
 	end
 
 	if(ne_write_en) begin
-		if(ne_addr == 5'h00) begin	
-			cr <= ne_wdata;
+		if(addr == 5'h00) begin	
+			cr <= din;
 			
 			// writing the command register may actually start things ...
 
 			// check for remote read
-			if(ne_wdata[5:3] == 3'd1) begin
+			if(din[5:3] == 3'd1) begin
 				// this sets the receive counter, so data is being
 				// read from the position specified in rsar of the buffer	
 				rx_r_cnt <= { 8'h00, rsar[7:0] };		
 			end
 
 			// check for remote write
-			if(ne_wdata[5:3] == 3'd2) begin
+			if(din[5:3] == 3'd2) begin
 				// this resets the transmit counter, so data is being
 				// written to the beginning of the buffer	
 				tx_w_cnt <= 16'h0000;
 			end
 
 			// check if TX bit was set
-			if(ne_wdata[2]) begin
+			if(din[2]) begin
 				// tx buffer is now full and its contents need to be sent to
 				// the io controller which in turn forwards it to its own nic
 
@@ -401,40 +398,43 @@ always @(posedge clk) begin
 			
 		// register page 0
 		if(ps == 2'd0) begin
-			if(ne_addr == 5'h01) pstart <= ne_wdata;
-			if(ne_addr == 5'h02) pstop <= ne_wdata;
-			if(ne_addr == 5'h03) bnry <= ne_wdata;
-			if(ne_addr == 5'h04) tpsr <= ne_wdata;
-			if(ne_addr == 5'h05) tbcr[7:0] <= ne_wdata;
-			if(ne_addr == 5'h06) tbcr[15:8] <= ne_wdata;
-			if(ne_addr == 5'h07) isr <= isr & (~ne_wdata);   // writing 1 clears bit
-			if(ne_addr == 5'h08) rsar[7:0] <= ne_wdata;
-			if(ne_addr == 5'h09) rsar[15:8] <= ne_wdata;
-			if(ne_addr == 5'h0a) rbcr[7:0] <= ne_wdata;
-			if(ne_addr == 5'h0b) rbcr[15:8] <= ne_wdata;
-			if(ne_addr == 5'h0c) rcr <= ne_wdata;
-			if(ne_addr == 5'h0d) tcr <= ne_wdata;
-			if(ne_addr == 5'h0e) dcr <= ne_wdata;
-			if(ne_addr == 5'h0f) imr <= ne_wdata;
+			case (addr)
+				5'h01: pstart <= din;
+				5'h02: pstop <= din;
+				5'h03: bnry <= din;
+				5'h04: tpsr <= din;
+				5'h05: tbcr[7:0] <= din;
+				5'h06: tbcr[15:8] <= din;
+				5'h07: isr <= isr & (~din);   // writing 1 clears bit
+				5'h08: rsar[7:0] <= din;
+				5'h09: rsar[15:8] <= din;
+				5'h0a: rbcr[7:0] <= din;
+				5'h0b: rbcr[15:8] <= din;
+				5'h0c: rcr <= din;
+				5'h0d: tcr <= din;
+				5'h0e: dcr <= din;
+				5'h0f: imr <= din;
+				default: ;
+			endcase
 		end
 		
 		// register page 1
 		if(ps == 2'd1) begin
-			if((ne_addr >= 5'h01) && (ne_addr < 5'h07)) 
-				par[ne_addr-5'd1] <= ne_wdata;
+			if((addr >= 5'h01) && (addr < 5'h07)) 
+				par[addr-5'd1] <= din;
 				
-			if(ne_addr == 5'h07) curr <= ne_wdata;
+			if(addr == 5'h07) curr <= din;
 			
-			if((ne_addr >= 5'h08) && (ne_addr < 5'h10)) 
-				mar[ne_addr-5'd8] <= ne_wdata;
+			if((addr >= 5'h08) && (addr < 5'h10)) 
+				mar[addr-5'd8] <= din;
 		end
 
 		// write to dma register $10-$17
-		if(ne_addr[4:3] == 2'b10) begin
+		if(addr[4:3] == 2'b10) begin
 			// prevent writing over end of buffer (whatever then happens ...)
 			if(tx_w_cnt < FRAMESIZE) begin
 				// store byte in buffer
-				tx_buffer[tx_w_cnt] <= ne_wdata;
+				tx_buffer[tx_w_cnt] <= din;
 			
 				// increase byte counter
 				tx_inc <= 1'b1;
@@ -442,7 +442,7 @@ always @(posedge clk) begin
 		end
 		
 		// reset register $18-$1f
-		if(ne_addr[4:3] == 2'b11)
+		if(addr[4:3] == 2'b11)
 			reset <= 1'b0; // write to reset register clears reset
 
 	end

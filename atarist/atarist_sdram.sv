@@ -220,7 +220,7 @@ assign      cpu_din =
               blitter_sel ? blitter_data_out :
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
-              |eth_sel ? eth_data_out :
+              (eth_rd | eth_wr) ? { eth_data_out, 8'h00 } :
               !rom_n   ? rom_data_out :
               n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
               sndcs    ? { snd_data_out, 8'hFF }:
@@ -958,14 +958,16 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 /* --------------------- Ethernet on Cartridge Port (ETHERNEC) ------------------ */
 /* ------------------------------------------------------------------------------ */
 
-wire  [1:0] eth_sel = { ~rom3_n & ethernec_present, ~rom4_n & ethernec_present };
-wire [15:0] eth_data_out;
+wire  [1:0] eth_rd = ~rom4_n & ethernec_present;
+wire  [1:0] eth_wr = ~rom3_n & ethernec_present;
+wire  [7:0] eth_data_out;
 
 ethernec ethernec (
 	.clk        (clk_32      ),
-	.clk_en     (mhz8_en1    ),
-	.sel        (eth_sel     ),
-	.addr       (mbus_a[15:1]),
+	.rd         (eth_rd      ),
+	.wr         (eth_wr      ),
+	.addr       (mbus_a[13:9]),
+	.din        (mbus_a[8:1] ),
 	.dout       (eth_data_out),
 
 	.status     (eth_status),
