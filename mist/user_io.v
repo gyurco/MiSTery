@@ -488,7 +488,7 @@ always @(posedge clk_sys) begin
 				8'h61: if (abyte_cnt < 5) joy1[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 				8'h62: if (abyte_cnt < 5) joy2[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 				8'h63: if (abyte_cnt < 5) joy3[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
-				8'h04: begin
+				8'h70: begin
 					// store incoming ps2 mouse bytes 
 					ps2_mouse_fifo[ps2_mouse_wptr] <= spi_byte_in;
 					ps2_mouse_wptr <= ps2_mouse_wptr + 1'd1;
