@@ -163,8 +163,11 @@ reg         peripheral_reset;
 reg         ikbd_reset;
 reg         mcu_reset_n = 1'b1;
 reg   [6:0] reset_cnt = 7'h7f;
+reg         cpu_reset_n_d;
 
 always @(posedge clk_32) begin
+
+	cpu_reset_n_d <= cpu_reset_n_o;
 
 	reset <= reset_cnt != 0;
 
@@ -174,8 +177,9 @@ always @(posedge clk_32) begin
 	peripheral_reset <= reset | ~cpu_reset_n_o;
 
 	// don't keep the GSTMCU in reset, because its signals are needed for the SDRAM controller
-	if (reset_cnt == 2) mcu_reset_n <= 0;
-	else if (reset_cnt == 0) mcu_reset_n <= 1;
+	if (reset_cnt == 10) mcu_reset_n <= 0;
+	else if (reset_cnt < 8) mcu_reset_n <= 1;
+	if (~cpu_reset_n_o & cpu_reset_n_d) mcu_reset_n <= 0;
 end
 
 always @(posedge clk_2) ikbd_reset <= peripheral_reset;
