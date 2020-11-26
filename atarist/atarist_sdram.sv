@@ -164,6 +164,7 @@ reg         ikbd_reset;
 reg         mcu_reset_n = 1'b1;
 reg   [6:0] reset_cnt = 7'h7f;
 reg         cpu_reset_n_d;
+wire        ext_reset = system_ctrl[0];
 
 always @(posedge clk_32) begin
 
@@ -171,8 +172,8 @@ always @(posedge clk_32) begin
 
 	reset <= reset_cnt != 0;
 
-	if (system_ctrl[0]) reset_cnt <= 7'h7f;
 	if (reset_cnt != 0) reset_cnt <= reset_cnt - 1'd1;
+	if (ext_reset) reset_cnt <= 7'h7f;
 
 	peripheral_reset <= reset | ~cpu_reset_n_o;
 
