@@ -10,3 +10,6 @@
 [submodule "fdc1772"]
 	path = fdc1772
 	url = https://github.com/mist-devel/fdc1772-verilator.git
+[submodule "TG68K.C"]
+	path = TG68K.C
+	url = https://github.com/TobiFlex/TG68K.C.git

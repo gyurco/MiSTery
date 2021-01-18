@@ -130,7 +130,11 @@ module atarist_sdram (
 	output wire  [ 2-1:0] SDRAM_BA    // SDRAM Bank Address
 );
 
+parameter TG68K_ENABLE = 1'b0;
+
 wire init = ~porb;
+
+wire [1:0] cpu = system_ctrl[5:4];
 
 // enable additional ste/megaste features
 wire ste = system_ctrl[23] || system_ctrl[24];
@@ -242,7 +246,7 @@ wire [ 7:0] dma_snd_l, dma_snd_r;
 
 // RAM signals
 wire [23:1] ram_a;
-wire        ram_uds, ram_lds, ram_we_n;
+wire        ram_uds, ram_lds, ram_we_n, ram_ref;
 wire [15:0] ram_din;
 
 // combined bus signals
@@ -318,6 +322,7 @@ gstmcu gstmcu (
 	.RAS1_N     ( ras1_n ),
 	.RAM_LDS    ( ram_lds ),
 	.RAM_UDS    ( ram_uds ),
+	.REF        ( ram_ref ),
 	.VPA_N      ( vpa_n ),
 	.MFPCS_N    ( mfpcs_n ),
 	.SNDIR      ( sndir ),
@@ -459,42 +464,115 @@ always @(posedge clk_32)
 		turbo_bus <= (enable_cache | steroids);
 	end
 
-wire        fx68_phi1 = use_16mhz ?  clk16_en : mhz8_en1;
-wire        fx68_phi2 = use_16mhz ? ~clk16_en : mhz8_en2;
+wire        phi1 = use_16mhz ?  clk16_en : mhz8_en1;
+wire        phi2 = use_16mhz ? ~clk16_en : mhz8_en2;
 
 wire        shifter_cycle = (turbo_bus && (bus_cycle == 0 || bus_cycle == 3)) || (!turbo_bus && bus_cycle == 2);
 wire        mcu_dtack_n_adj = (use_16mhz & ~rom_n) ? (mcu_dtack_n | shifter_cycle) : mcu_dtack_n;
 
-fx68k fx68k (
-	.clk        ( clk_32 ),
-	.extReset   ( reset ),
-	.pwrUp      ( reset ),
-	.enPhi1     ( fx68_phi1 ),
-	.enPhi2     ( fx68_phi2 ),
+wire        is68000 = cpu == 0 || !TG68K_ENABLE;
+assign      cpu_rw        = is68000 ? fx68_rw : tg68_rw;
+assign      cpu_as_n      = is68000 ? fx68_as_n : tg68_as_n;
+assign      cpu_uds_n     = is68000 ? fx68_uds_n : tg68_uds_n;
+assign      cpu_lds_n     = is68000 ? fx68_lds_n : tg68_lds_n;
+assign      cpu_E         = is68000 ? fx68_E : tg68_E;
+assign      vma_n         = is68000 ? fx68_vma_n : tg68_vma_n;
+assign      cpu_fc0       = is68000 ? fx68_fc0 : tg68_fc0;
+assign      cpu_fc1       = is68000 ? fx68_fc1 : tg68_fc1;
+assign      cpu_fc2       = is68000 ? fx68_fc2 : tg68_fc2;
+assign      cpu_a         = is68000 ? fx68_a : tg68_a[23:1];
+assign      cpu_dout      = is68000 ? fx68_dout : tg68_dout;
+assign      blitter_bg_n  = is68000 ? fx68_bg_n : tg68_bg_n;
+assign      cpu_reset_n_o = is68000 ? fx68_reset_n : tg68_reset_n;
 
-	.eRWn       ( cpu_rw ),
-	.ASn        ( cpu_as_n ),
-	.LDSn       ( cpu_lds_n ),
-	.UDSn       ( cpu_uds_n ),
-	.E          ( cpu_E ),
-	.VMAn       ( vma_n ),
-	.FC0        ( cpu_fc0 ),
-	.FC1        ( cpu_fc1 ),
-	.FC2        ( cpu_fc2 ),
-	.BGn        ( blitter_bg_n ),
-	.oRESETn    ( cpu_reset_n_o ),
+wire        fx68_rw;
+wire        fx68_as_n;
+wire        fx68_uds_n;
+wire        fx68_lds_n;
+wire        fx68_E;
+wire        fx68_vma_n;
+wire        fx68_fc0;
+wire        fx68_fc1;
+wire        fx68_fc2;
+wire        fx68_bg_n;
+wire        fx68_reset_n;
+wire [15:0] fx68_dout;
+wire [23:1] fx68_a;
+
+fx68k fx68k (
+	.clk        ( clk_32     ),
+	.extReset   ( reset      ),
+	.pwrUp      ( reset      ),
+	.enPhi1     ( phi1       ),
+	.enPhi2     ( phi2       ),
+
+	.eRWn       ( fx68_rw    ),
+	.ASn        ( fx68_as_n  ),
+	.LDSn       ( fx68_lds_n ),
+	.UDSn       ( fx68_uds_n ),
+	.E          ( fx68_E     ),
+	.VMAn       ( fx68_vma_n ),
+	.FC0        ( fx68_fc0   ),
+	.FC1        ( fx68_fc1   ),
+	.FC2        ( fx68_fc2   ),
+	.BGn        ( fx68_bg_n  ),
+	.oRESETn    ( fx68_reset_n ),
 	.oHALTEDn   (),
-	.DTACKn     ( dtack_n ),
-	.VPAn       ( vpa_n ),
-	.BERRn      ( berr_n ),
+	.DTACKn     ( dtack_n    ),
+	.VPAn       ( vpa_n      ),
+	.BERRn      ( berr_n     ),
 	.BRn        ( blitter_br_n & mcu_br_n ),
 	.BGACKn     ( blitter_bgack_n ),
-	.IPL0n      ( ipl0_n ),
-	.IPL1n      ( ipl1_n ),
-	.IPL2n      ( ipl2_n ),
-	.iEdb       ( cpu_din ),
-	.oEdb       ( cpu_dout ),
-	.eab        ( cpu_a )
+	.IPL0n      ( ipl0_n     ),
+	.IPL1n      ( ipl1_n     ),
+	.IPL2n      ( ipl2_n     ),
+	.iEdb       ( cpu_din    ),
+	.oEdb       ( fx68_dout  ),
+	.eab        ( fx68_a     )
+);
+
+wire        tg68_rw;
+wire        tg68_as_n;
+wire        tg68_uds_n;
+wire        tg68_lds_n;
+wire        tg68_E;
+wire        tg68_vma_n;
+wire        tg68_fc0;
+wire        tg68_fc1;
+wire        tg68_fc2;
+wire        tg68_bg_n;
+wire        tg68_reset_n;
+wire [15:0] tg68_dout;
+wire [23:0] tg68_a;
+
+tg68k tg68k (
+	.clk       ( clk_32 ),
+	.reset     ( reset  ),
+	.phi1      ( phi1   ),
+	.phi2      ( phi2   ),
+	.cpu       ( 2'b11  ),
+
+	.dtack_n   ( dtack_n ),
+	.rw_n      ( tg68_rw ),
+	.as_n      ( tg68_as_n ),
+	.uds_n     ( tg68_uds_n ),
+	.lds_n     ( tg68_lds_n ),
+	.fc        ( { tg68_fc2, tg68_fc1, tg68_fc0 } ),
+	.reset_n   ( tg68_reset_n ),
+
+	.E         ( tg68_E ),
+	.vma_n     ( tg68_vma_n ),
+	.vpa_n     ( vpa_n ),
+
+	.br_n      ( blitter_br_n & mcu_br_n ),
+	.bg_n      ( tg68_bg_n ),
+	.bgack_n   ( blitter_bgack_n ),
+
+	.ipl       ( { ipl2_n, ipl1_n, ipl0_n } ),
+	.berr      ( ~berr_n ),
+	.din       ( cpu_din ),
+	.dout      ( tg68_dout ),
+	.addr      ( tg68_a )
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -1001,7 +1079,7 @@ wire viking_precycle = (bus_cycle == 3 && !turbo_bus) || (bus_cycle == 1 && turb
 
 reg ras_n_d;
 reg data_wr;
-wire ram_req = ras_n_d & ~ras_n & |ram_a; // RAS_N going low and not refresh
+wire ram_req = ras_n_d & ~ras_n & ~ram_ref; // RAS_N going low and not refresh
 wire ram_we = ~ram_we_n;
 
 // TOS/cartridge upload via data_io
