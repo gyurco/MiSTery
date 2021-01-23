@@ -655,9 +655,14 @@ module bltScore( input blt_clks Clks, input [15:0] SEL, input [15:0] iDBUS,
 	// Updated at the write cycle. Required before the actual cycle by the control machine state.
 	// So we predict the state at the previous write cycle.
 	// And at the middle of the write cycle because forceDestRd is pipelined
+	reg changeEna;
 	always_ff @(posedge Clks.clk) begin
+		if( Clks.pwrUp) changeEna <= 1'b0;
+		else if (rBltReset) changeEna <= 1'b1;
+		else if (updDst & enIas) changeEna <= 1'b0;
+
 		if( Clks.pwrUp)			forceDestRd <= 1'b0;
-		else if( Clks.enPhi1 & rBltReset)
+		else if( Clks.enPhi1 & changeEna & !(updDst & enIas)/*rBltReset*/)
 			// For start of blit
 			forceDestRd <= !(& lEndMask);
 		else if( updDst & enIas) begin
