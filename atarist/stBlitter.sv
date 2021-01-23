@@ -1,9 +1,24 @@
 //
 // FX ST Blitter
-// Copyright (c) 2019 by Jorge Cwik
+// Copyright (c) 2019,2021 by Jorge Cwik
 //
 
 `timescale 1 ns / 1 ns
+
+// `define BLIT_TEST
+
+typedef struct {
+	logic clk;
+	logic aRESETn;		// Async neg reset on FPGA reset	
+	logic sReset;		// Sync reset on emulated system
+	logic extReset;		// Only external	
+	logic pwrUp;		// Asserted together with sReset on coldstart
+	
+	logic enPhi1, enPhi2;	// Clock enables. Next cycle is PHI1 or PHI2
+	logic anyPhi;			// Next cycle is either PHI1 or PHI2. Might be always true if clock 2x
+	logic phi1, phi2;		// In PHI1 or PHI2 phase
+} blt_clks;
+
 
 localparam REG_00 = 0;
 localparam REG_02 = 2/2;
@@ -21,17 +36,6 @@ localparam REG_18 = 24/2;
 localparam REG_1A = 26/2;
 localparam REG_1C = 28/2;
 
-typedef struct {
-	logic clk;
-	logic aRESETn;		// Async neg reset on FPGA reset	
-	logic sReset;		// Sync reset on emulated system
-	logic extReset;		// Only external	
-	logic pwrUp;		// Asserted together with sReset on coldstart
-	
-	logic enPhi1, enPhi2;	// Clock enables. Next cycle is PHI1 or PHI2
-	logic anyPhi;			// Next cycle is either PHI1 or PHI2. Might be always true if clock 2x
-	logic phi1, phi2;		// In PHI1 or PHI2 phase
-} blt_clks;
 
 module stBlitter( input blt_clks Clks, input ASn, RWn, LDSn, UDSn,
 			input FC0, FC1, FC2,
@@ -166,6 +170,13 @@ module stBlitter( input blt_clks Clks, input ASn, RWn, LDSn, UDSn,
 		end
 	end		
 		
+	// Update force dest read logic if endmask changed.
+	reg maskChanged;
+	always_ff @(posedge Clks.clk) begin
+		if( Clks.enPhi1)
+			maskChanged <= wrWordSel & (SEL[REG_08] | SEL[REG_0A] | SEL[REG_0C]);
+	end
+	
 	//
 	// Misc user registers
 	//
@@ -277,7 +288,7 @@ module stBlitter( input blt_clks Clks, input ASn, RWn, LDSn, UDSn,
 		.XC1, .XC2, .XYZ, .rBltReset, .Direction, .IncSign, .iDBUS, .oABUS);
 
 	bltScore bltScore( .Clks, .SEL, .iDBUS, .OP, .HOP, .destBuf, .srcbuf( skewed), 
-			.rBltReset, .updCycle, .updDst, .busOwned, .enIas, .XC1, .XC2, .wrWordSel,
+			.rBltReset, .updCycle, .updDst, .busOwned, .enIas, .XC1, .XC2, .wrWordSel, .maskChanged,
 			.lEndMask, .cEndMask, .rEndMask,			
 			.ramSel, .ramWrSel, .ramSelIdx( iABUS[4:1]), .ramIdx,
 			.ramOut,
@@ -622,7 +633,7 @@ endmodule
 
 // Blitter core operation
 module bltScore( input blt_clks Clks, input [15:0] SEL, input [15:0] iDBUS,
-				input rBltReset, updCycle, updDst, busOwned, enIas, XC1, XC2, wrWordSel,
+				input rBltReset, updCycle, updDst, busOwned, enIas, XC1, XC2, wrWordSel, maskChanged,
 				
 				input ramSel, ramWrSel, input [3:0] ramSelIdx, input [3:0] ramIdx,
 				output logic [15:0] ramOut,
@@ -652,24 +663,52 @@ module bltScore( input blt_clks Clks, input [15:0] SEL, input [15:0] iDBUS,
 	end
 	
 	// Force destination read according to relevant endmask
-	// Updated at the write cycle. Required before the actual cycle by the control machine state.
+	// Updated at the write cycle. Required before the actual blit cycle by the control machine state.
 	// So we predict the state at the previous write cycle.
-	// And at the middle of the write cycle because forceDestRd is pipelined
+	// And we do it at the middle of the write cycle because forceDestRd is pipelined
+	
+	// The endmask selection (right, center, or left) is performed at a specific single point.
+	// But the actual content of the selected endmask can be modified anytime.
+	//
+	// Original logic is almost fully asynchronous
+	
+	reg [1:0] nxtMask;			// Holds the selected endmask for next blit cycle
+
 	always_ff @(posedge Clks.clk) begin
-		if( Clks.pwrUp)			forceDestRd <= 1'b0;
-		else if( Clks.enPhi1 & rBltReset)
-			// For start of blit
+		if( Clks.pwrUp) begin
+			forceDestRd <= 1'b0;
+			nxtMask <= '0;
+		end
+		
+		else if( Clks.enPhi1 & maskChanged) begin
+			case( nxtMask)
+			2'b00:			forceDestRd <= !(& lEndMask);
+			2'b01:			forceDestRd <= !(& rEndMask);
+			2'b10:			forceDestRd <= !(& cEndMask);
+			endcase
+		end
+		else if( Clks.enPhi1 & rBltReset) begin
 			forceDestRd <= !(& lEndMask);
+			nxtMask <= 2'b00;
+		end
 		else if( updDst & enIas) begin
 			// This is the correct priority in case line lenght is one or two words!
 			
-			if( XC1)			forceDestRd <= !(& lEndMask);		// If last cycle on line, next is new line (use left endmask)
-			else if( XC2)		forceDestRd <= !(& rEndMask);		// If next cycle would be last on line, use right endmask
-			else				forceDestRd <= !(& cEndMask);		// Otherwise it would be center
+			if( XC1) begin
+				forceDestRd <= !(& lEndMask);		// If last cycle on line, next is new line (use left endmask)
+				nxtMask <= 2'b00;
+			end else if( XC2) begin
+				forceDestRd <= !(& rEndMask);		// If next cycle would be last on line, use right endmask
+				nxtMask <= 2'b01;
+			end
+			else begin
+				forceDestRd <= !(& cEndMask);		// Otherwise it would be center
+				nxtMask <= 2'b10;
+			end
 		end
 	end
 	
-	
+
 	//
 	// Halftone RAM
 	//
@@ -707,3 +746,83 @@ module bltScore( input blt_clks Clks, input [15:0] SEL, input [15:0] iDBUS,
 	end
 
 endmodule
+
+//
+// Test
+//
+
+`ifdef BLIT_TEST
+
+module stBlitter_tst( input clk32, input reset_n,
+
+	// Control signals from the CPU
+	input ASn, RWn, LDSn, UDSn,
+	input FC2,FC1,FC0,
+	input DTACKn, BERRn,
+	
+	input BRn,			// Other bus master is requesting the bus
+	input iBGACKn,		// Other bus master ack
+	input BGn,			// CPU grants the bus
+	
+	output oBRn, blitBGACKn,	// We request/ack the bus
+	output BGOn,				// Grant the bus to other bus master
+	output [2:0] oFc,
+	output INTn,
+
+	// Separated DMA input might benefit some cores.
+	// If using the same input data bus, then, assign dmaInput = iDBUS
+	input [15:0] dmaInput,
+
+	// Input/output address bus
+	input [23:1] iABUS, output [23:1] oABUS,
+
+	// Input/output data bus
+	input [15:0] iDBUS, output [15:0] oDBUS);
+
+	// Clock must be at least twice the desired frequency. A 32 MHz clock means a maximum 16 MHz effective frequency.
+	// In this example we divide the clock by 4. Resulting on an 8 MHz effective frequency.
+	
+	reg [1:0] clkDivisor = '0;
+	always @( posedge clk32) begin
+		clkDivisor <= clkDivisor + 1'b1;
+	end
+
+	blt_clks Clks;
+		
+	/*
+	These two signals must be a single cycle pulse. They don't need to be registered.
+	Same signal can't be asserted twice in a row. Other than that there are no restrictions.
+	There can be any number of cycles, or none, even variable non constant cycles, between each pulse.
+	*/
+	
+	assign Clks.enPhi1 = (clkDivisor == 2'b11);
+	assign Clks.enPhi2 = (clkDivisor == 2'b01);
+	
+	assign Clks.clk = clk32;
+	assign Clks.aRESETn = reset_n;
+	assign Clks.sReset = !reset_n;
+	assign Clks.pwrUp = !reset_n;
+	assign Clks.anyPhi = Clks.enPhi2 | Clks.enPhi1;
+	assign { Clks.extReset, Clks.phi1, Clks.phi2} = '0;
+
+	wire ctrlOe;		// Blitter is bus master and outputs below control signals
+	wire oASn, oDSn, oRWn, oDTACKn;
+	wire dataOe;		// Bliter output data bus is valid
+	wire selected;		// Blitter internal chip select
+
+	assign oFc = 3'b101;
+	wire oBGACKn;
+	assign blitBGACKn = oBGACKn & iBGACKn;		// This really happens inside Blitter
+
+	stBlitter stBlitter( .Clks, .ASn, .RWn, .LDSn, .UDSn,
+			.FC0,.FC1,.FC2, .BERRn, .iDTACKn( DTACKn),
+			.ctrlOe, .dataOe, .oASn, .oDSn, .oRWn, .oDTACKn,
+			.selected,
+			.iBRn( BRn), .BGIn( BGn), .iBGACKn,
+			.oBRn, .oBGACKn, .INTn, .BGOn,
+			.dmaInput,
+			.iABUS, .oABUS, .iDBUS, .oDBUS);
+
+endmodule
+
+`endif
