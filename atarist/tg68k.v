@@ -91,6 +91,7 @@ always @(posedge clk) begin
 						lds_n_r <= tg68_lds_n;
 					end
 				end
+				7: rw_r <= 1;
 				default :;
 			endcase
 
@@ -105,7 +106,6 @@ always @(posedge clk) begin
 
 				6: begin
 					tg68_din_r <= tg68_din;
-					rw_r <= 1;
 					uds_n_r <= 1;
 					lds_n_r <= 1;
 					as_n_r <= 1;
