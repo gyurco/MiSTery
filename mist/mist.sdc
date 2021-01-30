@@ -110,12 +110,16 @@ set_multicycle_path -start -hold -from [get_keepers atarist_sdram:atarist|fx68k:
 set_multicycle_path -start -setup -from [get_keepers atarist_sdram:atarist|fx68k:fx68k|Ir[*]] -to [get_keepers atarist_sdram:atarist|fx68k:fx68k|nanoAddr[*]] 2
 set_multicycle_path -start -hold -from [get_keepers atarist_sdram:atarist|fx68k:fx68k|Ir[*]] -to [get_keepers atarist_sdram:atarist|fx68k:fx68k|nanoAddr[*]] 1
 
+# TG68K
+set_multicycle_path -from {atarist_sdram:atarist|tg68k:tg68k|TG68KdotC_Kernel:tg68k|*} -setup 2
+set_multicycle_path -from {atarist_sdram:atarist|tg68k:tg68k|TG68KdotC_Kernel:tg68k|*} -hold 1
+
 # Viking 128 MHz to SDRAM 96 MHz
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -setup 2
 set_multicycle_path -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}] -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[0]}] -hold 1
 
-set_multicycle_path -from {atarist_sdram:atarist|sdram:sdram|dout[*]} -to {atarist_sdram:atarist|sdram:sdram|sd_addr[*]} -setup 2
-set_multicycle_path -from {atarist_sdram:atarist|sdram:sdram|dout[*]} -to {atarist_sdram:atarist|sdram:sdram|sd_addr[*]} -hold 1
+set_multicycle_path -from {atarist_sdram:atarist|sdram:sdram|dout[*]} -to {atarist_sdram:atarist|sdram:sdram|*} -setup 2
+set_multicycle_path -from {atarist_sdram:atarist|sdram:sdram|dout[*]} -to {atarist_sdram:atarist|sdram:sdram|*} -hold 1
 
 # VGA
 set_multicycle_path -start -to [get_ports {VGA_*}] -setup 4
