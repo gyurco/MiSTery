@@ -414,8 +414,13 @@ user_io user_io(
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------ The ATARI ST ---------------------------------- */
 /* ------------------------------------------------------------------------------ */
+`ifdef NO_TG68K
+localparam TG68K_ENABLE = 1'b0;
+`else
+localparam TG68K_ENABLE = 1'b1;
+`endif
 
-atarist_sdram atarist(
+atarist_sdram #(TG68K_ENABLE) atarist(
 	// System clocks / reset / settings
 	.clk_96              ( clk_96 ),
 	.clk_32              ( clk_32 ),
