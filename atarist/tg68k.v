@@ -190,7 +190,7 @@ always @(posedge clk) begin
 	end
 end
 
-TG68KdotC_Kernel #(2,2,2,2,2,2,2,1) tg68k (
+TG68KdotC_Kernel #(2,2,2,2,2,2,1,1) tg68k (
 	.clk            ( clk           ),
 	.nReset         ( ~reset        ),
 	.clkena_in      ( tg68_clkena   ),
