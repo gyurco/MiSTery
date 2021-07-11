@@ -521,6 +521,7 @@ fx68k fx68k (
 	.DTACKn     ( dtack_n    ),
 	.VPAn       ( vpa_n      ),
 	.BERRn      ( berr_n     ),
+	.HALTn      ( 1'b1       ),
 	.BRn        ( blitter_br_n & mcu_br_n ),
 	.BGACKn     ( blitter_bgack_n ),
 	.IPL0n      ( ipl0_n     ),
@@ -1004,7 +1005,7 @@ wire [7:0] fdc_dout;
 // but we can simply map all such broken accesses to drive A only
 wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
 
-fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
+fdc1772 #(.IMG_TYPE(1)) fdc1772 (
 	.clkcpu         ( clk_32           ), // system cpu clock.
 	.clk8m_en       ( mhz8_en1         ),
 

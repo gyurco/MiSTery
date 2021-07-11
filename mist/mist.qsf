@@ -119,7 +119,7 @@ set_location_assignment PIN_43 -to SDRAM_CLK
 set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE BALANCED
 set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name ENABLE_SIGNALTAP OFF
-set_global_assignment -name USE_SIGNALTAP_FILE out/tg68k.stp
+set_global_assignment -name USE_SIGNALTAP_FILE out/fdc.stp
 set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT NORMAL
@@ -136,7 +136,7 @@ set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
 set_global_assignment -name AUTO_RAM_TO_LCELL_CONVERSION OFF
 set_global_assignment -name AUTO_RAM_RECOGNITION ON
 set_global_assignment -name AUTO_ROM_RECOGNITION ON
-set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING OFF
 set_global_assignment -name LL_ROOT_REGION ON -section_id "Root Region"
 set_global_assignment -name LL_MEMBER_STATE LOCKED -section_id "Root Region"
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
@@ -308,6 +308,7 @@ set_location_assignment PLL_1 -to clock|altpll_component|auto_generated|pll1
 set_global_assignment -name SEED 1
 set_global_assignment -name ALLOW_ANY_ROM_SIZE_FOR_RECOGNITION OFF
 set_global_assignment -name ENABLE_DRC_SETTINGS OFF
+set_global_assignment -name VERILOG_SHOW_LMF_MAPPING_MESSAGES OFF
 set_global_assignment -name SYSTEMVERILOG_FILE mist_top.sv
 set_global_assignment -name QIP_FILE vidclkcntrl.qip
 set_global_assignment -name QIP_FILE pll_mfp1.qip
@@ -343,6 +344,7 @@ set_global_assignment -name VERILOG_FILE ../gstmcu/hdl/clockgen.v
 set_global_assignment -name SYSTEMVERILOG_FILE ../fx68k/uaddrPla.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../fx68k/fx68kAlu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../fx68k/fx68k.sv
+set_global_assignment -name VERILOG_FILE ../fx68k/altera_regs.v
 set_global_assignment -name VHDL_FILE ../TG68K.C/TG68KdotC_Kernel.vhd
 set_global_assignment -name VHDL_FILE ../TG68K.C/TG68K_Pack.vhd
 set_global_assignment -name VHDL_FILE ../TG68K.C/TG68K_ALU.vhd
@@ -360,4 +362,6 @@ set_global_assignment -name VERILOG_FILE ../ikbd/rom/MCU_BIROM.v
 set_global_assignment -name SIGNALTAP_FILE out/eth.stp
 set_global_assignment -name VERILOG_FILE ../atarist/tg68k.v
 set_global_assignment -name SIGNALTAP_FILE out/tg68k.stp
+set_global_assignment -name DSP_BLOCK_BALANCING "DSP BLOCKS"
+set_global_assignment -name VERILOG_MACRO "FX68K_ALTERA_REGS=<None>"
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

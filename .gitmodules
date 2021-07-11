@@ -1,6 +1,6 @@
 [submodule "fx68k"]
 	path = fx68k
-	url = https://github.com/ijor/fx68k.git
+	url = https://github.com/mist-devel/fx68k.git
 [submodule "gstmcu"]
 	path = gstmcu
 	url = https://github.com/gyurco/gstmcu
