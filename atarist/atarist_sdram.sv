@@ -726,7 +726,7 @@ always @(posedge clk_32) begin
 end
 
 wire [7:0] port_b_in = parallel_in;
-wire [7:0] port_a_in = { 2'b11, parallel_in_strobe, 5'b11111 };
+wire [7:0] port_a_in = { port_a_out[7:6], parallel_in_strobe, port_a_out[4:0] };
 wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 wire       floppy_side = port_a_out[0];
