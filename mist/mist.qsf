@@ -26,7 +26,7 @@ set_global_assignment -name DEVICE EP3C25E144C8
 set_global_assignment -name TOP_LEVEL_ENTITY mist_top
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 7.2
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:27:29  OCTOBER 30, 2007"
-set_global_assignment -name LAST_QUARTUS_VERSION "13.1 SP4.26"
+set_global_assignment -name LAST_QUARTUS_VERSION 13.1
 set_global_assignment -name USE_GENERATED_PHYSICAL_CONSTRAINTS OFF -section_id eda_palace
 set_global_assignment -name DEVICE_FILTER_PIN_COUNT 144
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "NO HEAT SINK WITH STILL AIR"
@@ -42,8 +42,6 @@ set_global_assignment -name FORCE_CONFIGURATION_VCCIO ON
 set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVTTL"
 
 set_location_assignment PIN_7 -to LED
-set_location_assignment PIN_54 -to CLOCK_27[0]
-set_location_assignment PIN_55 -to CLOCK_27[1]
 set_location_assignment PIN_144 -to VGA_R[5]
 set_location_assignment PIN_143 -to VGA_R[4]
 set_location_assignment PIN_142 -to VGA_R[3]
@@ -120,8 +118,8 @@ set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE BALANCED
 set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name ENABLE_SIGNALTAP OFF
 set_global_assignment -name USE_SIGNALTAP_FILE out/fdc.stp
-set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
-set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF
 set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT NORMAL
 set_global_assignment -name FMAX_REQUIREMENT "114 MHz"
 set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
@@ -144,8 +142,8 @@ set_global_assignment -name PARTITION_COLOR 2147039 -section_id Top
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
 
 set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING OFF
-set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC_FOR_AREA ON
-set_global_assignment -name PHYSICAL_SYNTHESIS_MAP_LOGIC_TO_MEMORY_FOR_AREA ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC_FOR_AREA OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_MAP_LOGIC_TO_MEMORY_FOR_AREA OFF
 
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY out
 set_global_assignment -name PLACEMENT_EFFORT_MULTIPLIER 4.0
@@ -364,4 +362,5 @@ set_global_assignment -name VERILOG_FILE ../atarist/tg68k.v
 set_global_assignment -name SIGNALTAP_FILE out/tg68k.stp
 set_global_assignment -name DSP_BLOCK_BALANCING "DSP BLOCKS"
 set_global_assignment -name VERILOG_MACRO "FX68K_ALTERA_REGS=<None>"
+set_location_assignment PIN_54 -to CLOCK_27
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

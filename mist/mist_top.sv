@@ -4,7 +4,7 @@
 
 module mist_top ( 
 	// clock inputs
-	input wire   [ 2-1:0] CLOCK_27,   // 27 MHz
+	input wire            CLOCK_27,   // 27 MHz
 	// LED outputs
 	output wire           LED,        // LED Yellow
 	// UART
@@ -65,8 +65,8 @@ wire clk_128;
 // 32.084 MHz base clock
 wire mainclock;
 clock32 clock32 (
-	.inclk0     (CLOCK_27[0]),
-	.c0         (mainclock  )
+	.inclk0     ( CLOCK_27  ),
+	.c0         ( mainclock )
 );
 
 clock clock (
@@ -85,8 +85,8 @@ assign SDRAM_CKE = 1'b1;
 // required: 2.4576 MHz
 wire clk_mfp;
 pll_mfp1 pll_mfp1 (
-  .inclk0       (CLOCK_27[0]), // input clock (27MHz)
-  .c0           (clk_mfp    )  // output clock c0 (2.4576MHz)
+  .inclk0       ( CLOCK_27 ), // input clock (27MHz)
+  .c0           ( clk_mfp  )  // output clock c0 (2.4576MHz)
 );
 
 /* ------------------------------------------------------------------------------ */
