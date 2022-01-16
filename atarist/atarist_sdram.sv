@@ -925,6 +925,8 @@ always @(*) begin
 		5'b1_????: rtc_data_out = rtc_bank1[mbus_a[4:1]];
 		default: rtc_data_out = 4'hf;
 	endcase
+	// make the RTC invisible if no valid RTC data arrives from the IO Controller
+	if (rtc == 0) rtc_data_out = 4'hf;
 end
 
 always @(posedge clk_32) begin
