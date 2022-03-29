@@ -143,7 +143,8 @@ wire steroids = system_ctrl[23] && system_ctrl[24];  // a STE on steroids
 
 // ethernec is enabled by the io controller whenever a USB 
 // ethernet interface is detected
-wire ethernec_present = system_ctrl[25];
+wire       ethernec_present = system_ctrl[25];
+wire       cubase_enable = system_ctrl[30];
 
 wire       psg_stereo = system_ctrl[22];
 
@@ -229,6 +230,7 @@ assign      cpu_din =
               blitter_sel ? blitter_data_out :
               !rdat_n  ? shifter_dout :
               !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
+              (!rom3_n & cubase_enable) ? {7'h7f, cubase_d8, 8'hff } :
               (eth_rd | eth_wr) ? { eth_data_out, 8'h00 } :
               !rom_n   ? rom_data_out :
               n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
@@ -1069,6 +1071,19 @@ ethernec ethernec (
 	.rx_begin   (eth_rx_write_begin),
 	.rx_strobe  (eth_rx_write_strobe),
 	.rx_byte    (eth_rx_write_byte)
+);
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------- Cubase dongle  ------------------------------- */
+/* ------------------------------------------------------------------------------ */
+wire cubase_d8;
+
+cubase_dongle cubase_dongle (
+	.clk        ( clk_32    ),
+	.reset      ( peripheral_reset ),
+	.rom3_n     ( rom3_n    ),
+	.a8         ( mbus_a[8] ),
+	.d8         ( cubase_d8 )
 );
 
 /* ------------------------------------------------------------------------------ */
