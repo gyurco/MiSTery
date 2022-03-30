@@ -1,4 +1,4 @@
-module cubase_dongle (
+module cubase3_dongle (
 	input clk,
 	input reset, // POR actually
 	input rom3_n,
