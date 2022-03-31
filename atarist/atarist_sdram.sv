@@ -1080,10 +1080,17 @@ wire        cubase3_d8;
 wire  [7:0] cubase2_dout;
 wire  [7:0] cubase_dout = cubase_sel ? cubase2_dout : {7'hfe, cubase3_d8};
 reg         cubase_sel; // Cubase3/2 dongle
+reg         cubase_lock;
 
 always @(posedge clk_32) begin
-	if (peripheral_reset) cubase_sel <= 0;
-	else if (cubase_enable & !rom3_n & !cubase_sel) cubase_sel <= |mbus_a[7:1];
+	if (peripheral_reset) begin
+		cubase_sel <= 0;
+		cubase_lock <= 0;
+	end
+	else if (cubase_enable & !rom3_n & !cubase_lock) begin
+		cubase_sel <= |mbus_a[7:1];
+		cubase_lock <= 1;
+	end
 end
 
 cubase2_dongle cubase2_dongle (
