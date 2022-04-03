@@ -225,7 +225,7 @@ wire        cpu_reset_n_o;
 wire [15:0] cpu_din, cpu_dout;
 wire [23:1] cpu_a;
 
-wire        rom_n = rom0_n & rom1_n & rom2_n & rom3_n & rom4_n & rom5_n & rom6_n & romp_n;
+wire        rom_n = rom0_n & rom1_n & rom2_n & ((rom3_n & rom4_n) | cubase_enable | eth_rd) & rom5_n & rom6_n & romp_n;
 assign      cpu_din = 
               ((~fcs_n & rw) ? dma_data_out : 16'hffff) &
               (blitter_sel ? blitter_data_out : 16'hffff) &
