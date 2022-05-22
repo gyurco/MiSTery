@@ -1014,7 +1014,7 @@ wire [7:0] fdc_dout;
 // but we can simply map all such broken accesses to drive A only
 wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
 
-fdc1772 #(.IMG_TYPE(1)) fdc1772 (
+fdc1772 fdc1772 (
 	.clkcpu         ( clk_32           ), // system cpu clock.
 	.clk8m_en       ( mhz8_en1         ),
 
@@ -1034,6 +1034,7 @@ fdc1772 #(.IMG_TYPE(1)) fdc1772 (
 	.cpu_dout       ( fdc_dout         ),
 
 	// place any signals that need to be passed up to the top after here.
+	.img_type       ( 3'd1             ),
 	.img_mounted    ( img_mounted      ), // signaling that new image has been mounted
 	.img_wp         ( img_wp           ), // write protect
 	.img_size       ( img_size         ), // size of image in bytes
