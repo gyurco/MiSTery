@@ -1,4 +1,4 @@
-# MiSTery - An Atari ST/STe core for the [MiST board](https://github.com/mist-devel/mist-board/wiki)
+# MiSTery - An Atari ST/STe core for FPGAs
 
 ## Features:
 
@@ -23,8 +23,9 @@
 - Ethernet interface in cartridge port (Ethernec) support
 - [USB-RTC](https://github.com/mist-devel/mist-board/wiki/UsbRtc) support
 - Optional scandoubled/YPbPr video output
+- Currently it runs on the [MiST board](https://github.com/mist-devel/mist-board/wiki), but the code is modular, so it's possible to add other boards
 
-## Usage:
+## Usage for [MiST](https://github.com/mist-devel/mist-board/wiki):
 
 Put the core.rbf and the TOS as tos.img to the SD-Card. TOS/hard disc/floppy images are selectable in the OSD (F12).
 With F11, you can toggle between normal and STe joystick ports.
