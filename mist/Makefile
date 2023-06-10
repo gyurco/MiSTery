@@ -1,11 +1,12 @@
+QUARTUS_DIR=$(HOME)/altera/13.1/quartus/bin
 ### programs ###
-MAP=quartus_map
-FIT=quartus_fit
-ASM=quartus_asm
-PGM=quartus_pgm
+MAP=$(QUARTUS_DIR)/quartus_map
+FIT=$(QUARTUS_DIR)/quartus_fit
+ASM=$(QUARTUS_DIR)/quartus_asm
+PGM=$(QUARTUS_DIR)/quartus_pgm
 
 ### project ###
-PROJECT=mist
+PROJECT=`pwd`/mist
 
 TODAY = `date +"%m/%d/%y"`
 
@@ -30,19 +31,9 @@ asm:
 	@echo Running assembler ...
 	@$(ASM) $(PROJECT)
 
-run: 
-	@$(PGM) -c USB-Blaster -m jtag -o "p;./out/$(PROJECT).sof"
-
-run2: 
-	@$(PGM) -c USB-Blaster\(Altera\) -m jtag -o "p;./out/$(PROJECT).sof"
-
 # clean
 clean:
 	@echo clean
 	@rm -rf ./out/
 	@rm -rf ./db/
 	@rm -rf ./incremental_db/
-
-release:
-	make
-	cd ./out; cp mist.rbf ../../../bin/cores/mist/core.rbf
