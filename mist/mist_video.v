@@ -15,8 +15,9 @@ module mist_video
 	// scanlines (00-none 01-25% 10-50% 11-75%)
 	input  [1:0] scanlines,
 
-	// non-scandoubled pixel clock divider 0 - clk_sys/4, 1 - clk_sys/2
-	input        ce_divider,
+	// non-scandoubled pixel clock divider:
+	// 0 - clk_sys/4, 1 - clk_sys/2, 2 - clk_sys/3, 3 - clk_sys/4, etc
+	input  [2:0] ce_divider,
 
 	// 0 = HVSync 31KHz, 1 = CSync 15KHz
 	input        scandoubler_disable,
@@ -34,13 +35,15 @@ module mist_video
 	input  [COLOR_DEPTH-1:0] G,
 	input  [COLOR_DEPTH-1:0] B,
 
+	input        HBlank,
+	input        VBlank,
 	input        HSync,
 	input        VSync,
 
 	// MiST video output signals
-	output reg [5:0] VGA_R,
-	output reg [5:0] VGA_G,
-	output reg [5:0] VGA_B,
+	output reg [OUT_COLOR_DEPTH-1:0] VGA_R,
+	output reg [OUT_COLOR_DEPTH-1:0] VGA_G,
+	output reg [OUT_COLOR_DEPTH-1:0] VGA_B,
 	output reg       VGA_VS,
 	output reg       VGA_HS
 );
@@ -52,27 +55,36 @@ parameter SD_HCNT_WIDTH = 9;
 parameter COLOR_DEPTH = 6; // 1-6
 parameter OSD_AUTO_CE = 1'b1;
 parameter SYNC_AND = 1'b0; // 0 - XOR, 1 - AND
+parameter USE_BLANKS = 1'b0; // Honor H/VBlank signals?
+parameter SD_HSCNT_WIDTH = 12;
+parameter OUT_COLOR_DEPTH = 6;
 
-wire [5:0] SD_R_O;
-wire [5:0] SD_G_O;
-wire [5:0] SD_B_O;
+wire [OUT_COLOR_DEPTH-1:0] SD_R_O;
+wire [OUT_COLOR_DEPTH-1:0] SD_G_O;
+wire [OUT_COLOR_DEPTH-1:0] SD_B_O;
 wire       SD_HS_O;
 wire       SD_VS_O;
+wire       SD_HB_O;
+wire       SD_VB_O;
 
-wire pixel_ena;
+wire       pixel_ena;
 
-scandoubler #(SD_HCNT_WIDTH, COLOR_DEPTH) scandoubler
+scandoubler #(SD_HCNT_WIDTH, COLOR_DEPTH, SD_HSCNT_WIDTH, OUT_COLOR_DEPTH) scandoubler
 (
 	.clk_sys    ( clk_sys    ),
 	.bypass     ( scandoubler_disable ),
 	.ce_divider ( ce_divider ),
 	.scanlines  ( scanlines  ),
 	.pixel_ena  ( pixel_ena  ),
+	.hb_in      ( HBlank     ),
+	.vb_in      ( VBlank     ),
 	.hs_in      ( HSync      ),
 	.vs_in      ( VSync      ),
 	.r_in       ( R          ),
 	.g_in       ( G          ),
 	.b_in       ( B          ),
+	.hb_out     ( SD_HB_O    ),
+	.vb_out     ( SD_VB_O    ),
 	.hs_out     ( SD_HS_O    ),
 	.vs_out     ( SD_VS_O    ),
 	.r_out      ( SD_R_O     ),
@@ -80,11 +92,11 @@ scandoubler #(SD_HCNT_WIDTH, COLOR_DEPTH) scandoubler
 	.b_out      ( SD_B_O     )
 );
 
-wire [5:0] osd_r_o;
-wire [5:0] osd_g_o;
-wire [5:0] osd_b_o;
+wire [OUT_COLOR_DEPTH-1:0] osd_r_o;
+wire [OUT_COLOR_DEPTH-1:0] osd_g_o;
+wire [OUT_COLOR_DEPTH-1:0] osd_b_o;
 
-osd #(OSD_X_OFFSET, OSD_Y_OFFSET, OSD_COLOR, OSD_AUTO_CE) osd
+osd #(OSD_X_OFFSET, OSD_Y_OFFSET, OSD_COLOR, OSD_AUTO_CE, USE_BLANKS, OUT_COLOR_DEPTH) osd
 (
 	.clk_sys ( clk_sys ),
 	.rotate  ( rotate  ),
@@ -95,6 +107,8 @@ osd #(OSD_X_OFFSET, OSD_Y_OFFSET, OSD_COLOR, OSD_AUTO_CE) osd
 	.R_in    ( SD_R_O ),
 	.G_in    ( SD_G_O ),
 	.B_in    ( SD_B_O ),
+	.HBlank  ( SD_HB_O ),
+	.VBlank  ( SD_VB_O ),
 	.HSync   ( SD_HS_O ),
 	.VSync   ( SD_VS_O ),
 	.R_out   ( osd_r_o ),
@@ -102,14 +116,14 @@ osd #(OSD_X_OFFSET, OSD_Y_OFFSET, OSD_COLOR, OSD_AUTO_CE) osd
 	.B_out   ( osd_b_o )
 );
 
-wire [5:0] cofi_r, cofi_g, cofi_b;
+wire [OUT_COLOR_DEPTH-1:0] cofi_r, cofi_g, cofi_b;
 wire       cofi_hs, cofi_vs;
 
-cofi #(6) cofi (
+cofi #(OUT_COLOR_DEPTH) cofi (
 	.clk     ( clk_sys ),
 	.pix_ce  ( pixel_ena ),
 	.enable  ( blend   ),
-	.hblank  ( ~SD_HS_O ),
+	.hblank  ( USE_BLANKS ? SD_HB_O : ~SD_HS_O ),
 	.hs      ( SD_HS_O ),
 	.vs      ( SD_VS_O ),
 	.red     ( osd_r_o ),
@@ -123,9 +137,9 @@ cofi #(6) cofi (
 );
 
 wire       hs, vs, cs;
-wire [5:0] r,g,b;
+wire [OUT_COLOR_DEPTH-1:0] r,g,b;
 
-RGBtoYPbPr #(6) rgb2ypbpr
+RGBtoYPbPr #(OUT_COLOR_DEPTH) rgb2ypbpr
 (
 	.clk       ( clk_sys ),
 	.ena       ( ypbpr   ),

@@ -239,7 +239,7 @@ assign      cpu_din =
               {8'hff, (mste_ctrl_sel & rw) ? mste_ctrl_data_out : 8'hff} &
               {12'hfff, button_n ? 4'hf : ste_buttons} &
               {joyrh_n ? 8'hff : ste_joy_in[15:8], joyrl_n ? 8'hff : ste_joy_in[7:0]} &
-              {12'hfff, (rtccs_n & rw) ? 4'hf : rtc_data_out} &
+              {12'hfff, (~rtccs_n & rw) ? rtc_data_out : 4'hf} &
               {mcu_oe_h ? mcu_dout[15:8] : 8'hff, mcu_oe_l ? mcu_dout[7:0] : 8'hff};
 
 // Shifter signals

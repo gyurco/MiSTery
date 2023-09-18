@@ -13,9 +13,9 @@ module mist_top (
 	// VGA
 	output wire           VGA_HS,     // VGA H_SYNC
 	output wire           VGA_VS,     // VGA V_SYNC
-	output wire  [ 6-1:0] VGA_R,      // VGA Red[5:0]
-	output wire  [ 6-1:0] VGA_G,      // VGA Green[5:0]
-	output wire  [ 6-1:0] VGA_B,      // VGA Blue[5:0]
+	output wire  [VGA_BITS-1:0] VGA_R,      // VGA Red[5:0]
+	output wire  [VGA_BITS-1:0] VGA_G,      // VGA Green[5:0]
+	output wire  [VGA_BITS-1:0] VGA_B,      // VGA Blue[5:0]
 	// SDRAM
 	inout wire  [ 16-1:0] SDRAM_DQ,   // SDRAM Data bus 16 Bits
 	output wire [ 13-1:0] SDRAM_A,    // SDRAM Address bus 13 Bits
@@ -31,19 +31,41 @@ module mist_top (
 	// AUDIO
 	output wire           AUDIO_L,    // sigma-delta DAC output left
 	output wire           AUDIO_R,    // sigma-delta DAC output right
+`ifdef I2S_AUDIO
+	output wire           I2S_BCK,
+	output wire           I2S_LRCK,
+	output wire           I2S_DATA,
+`endif
 	// SPI
 	inout wire            SPI_DO,
 	input wire            SPI_DI,
 	input wire            SPI_SCK,
 	input wire            SPI_SS2,    // fpga
 	input wire            SPI_SS3,    // OSD
+`ifndef NO_DIRECT_UPLOAD
 	input wire            SPI_SS4,    // "sniff" mode
+`endif
 	input wire            CONF_DATA0  // SPI_SS for user_io
 );
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------- System settings ------------------------------ */
 /* ------------------------------------------------------------------------------ */
+`ifdef NO_DIRECT_UPLOAD
+wire SPI_SS4 = 1;
+`endif
+
+`ifdef VGA_8BIT
+localparam VGA_BITS = 8;
+`else
+localparam VGA_BITS = 6;
+`endif
+
+`ifdef NO_TG68K
+localparam TG68K_ENABLE = 1'b0;
+`else
+localparam TG68K_ENABLE = 1'b1;
+`endif
 
 wire reset = system_ctrl[0];
 wire [1:0] fdc_wp = system_ctrl[7:6];
@@ -117,7 +139,7 @@ wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
 wire       stvid_hs  = viking_active?viking_hs:hsync_n;
 wire       stvid_vs  = viking_active?viking_vs:vsync_n;
 
-mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFFSET(10'd10)) mist_video(
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFFSET(10'd10), .OUT_COLOR_DEPTH(VGA_BITS)) mist_video(
 	.clk_sys    ( video_clk ),
 	.SPI_SCK    ( SPI_SCK ),
 	.SPI_SS3    ( SPI_SS3 ),
@@ -414,12 +436,6 @@ user_io user_io(
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------ The ATARI ST ---------------------------------- */
 /* ------------------------------------------------------------------------------ */
-`ifdef NO_TG68K
-localparam TG68K_ENABLE = 1'b0;
-`else
-localparam TG68K_ENABLE = 1'b1;
-`endif
-
 atarist_sdram #(TG68K_ENABLE) atarist(
 	// System clocks / reset / settings
 	.clk_96              ( clk_96 ),
