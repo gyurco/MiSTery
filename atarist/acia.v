@@ -18,8 +18,6 @@ module acia (
 	output dout_strobe
 );
 
-parameter TX_DELAY = 8'd16; // delay from writing to the TDR to really write the data from the buffer to the shift register
-
 reg E_d;
 always @(posedge clk) E_d <= E;
 wire clk_en = ~E_d & E;
@@ -151,36 +149,36 @@ always @(posedge clk) begin
 end
 
 // --------------------------- serial transmitter -----------------------------
+assign tx = serial_tx_empty ? 1'b1: serial_tx_shift_reg[0];
 reg serial_tx_empty;
 reg [7:0] serial_tx_cnt;
 reg [7:0] serial_tx_data;
 reg serial_tx_data_valid;
-reg [9:0] serial_tx_shift_reg = 10'b1111111111;
-reg [7:0] serial_tx_data_dly;
-assign tx = serial_tx_shift_reg[0];
+reg [10:0] serial_tx_shift_reg;
 
 always @(posedge clk) begin
 
 	// 16 times serial clock
-	if(serial_clk_en) begin
-		if(serial_tx_data_dly != 0) serial_tx_data_dly <= serial_tx_data_dly - 1'd1;
+	if(serial_clk_en)
+	begin
+		if(serial_tx_cnt[3:0] == 4'h0) begin
+			// shift down one bit, fill with 1 bits
+			serial_tx_shift_reg <= { 1'b1, serial_tx_shift_reg[10:1] };
+		end
 
-		// start transmission if a byte is in the buffer
-		if(serial_tx_cnt == 0) begin
-			if(serial_tx_data_valid && serial_tx_data_dly == 0) begin
-				serial_tx_shift_reg <= { 1'b1, serial_tx_data, 1'b0 };  // 8N1, lsb first
-				serial_tx_cnt <= { 4'd9, 4'hf };   // 10 bits to go
-				serial_tx_data_valid <= 1'b0;
-				serial_tx_empty <= 1'b1;
-			end
-		end else begin
-			if(serial_tx_cnt[3:0] == 4'h0) begin
-				// shift down one bit, fill with 1 bits
-				serial_tx_shift_reg <= { 1'b1, serial_tx_shift_reg[9:1] };
-			end
-
-			// decrease transmit counter
+		// decrease transmit counter
+		if(serial_tx_cnt != 8'd0) begin
 			serial_tx_cnt <= serial_tx_cnt - 8'd1;
+			if(serial_tx_cnt == 1)
+				serial_tx_empty <= 1'b1;
+		end
+
+		// restart immediately if another byte is in tx buffer 
+		if((serial_tx_cnt == 8'd1) && serial_tx_data_valid) begin
+			serial_tx_shift_reg <= { 1'b1, serial_tx_data, 1'b0, 1'b1 };  // 8N1, lsb first
+			serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
+			serial_tx_data_valid <= 1'b0;
+			serial_tx_empty <= 1'b0;
 		end
 	end
 
@@ -188,9 +186,7 @@ always @(posedge clk) begin
 		serial_tx_cnt <= 8'd0;
 		serial_tx_empty <= 1'b1;
 		serial_tx_data_valid <= 1'b0;
-		serial_tx_shift_reg <= 10'b1111111111;
-		serial_tx_data_dly <= 8'd0;
-		serial_cr <= 8'd3;
+		serial_tx_shift_reg[0] <= 1'b1;
 	end else if(clk_en && sel && ~rw) begin
 
 		// write to serial control register
@@ -200,17 +196,22 @@ always @(posedge clk) begin
 				serial_tx_cnt <= 8'd0;
 				serial_tx_empty <= 1'b1;
 				serial_tx_data_valid <= 1'b0;
-				serial_tx_shift_reg <= 10'b1111111111;
-				serial_tx_data_dly <= 8'd0;
+				serial_tx_shift_reg[0] <= 1'b1;
 			end
 		end
 
 		// write to serial data register
 		if(rs) begin
-			serial_tx_data <= din;
-			serial_tx_data_dly <= TX_DELAY;
-			serial_tx_data_valid <= 1'b1;
-			serial_tx_empty <= 1'b0;
+			if(serial_tx_cnt == 8'd0) begin
+				// transmitter idle? start immediately ...
+				serial_tx_shift_reg <= { 1'b1, din, 1'b0, 1'b1 };  // 8N1, lsb first
+				serial_tx_cnt <= { 4'd10, 4'd1 };   // 10 bits to go
+				serial_tx_empty <= 1'b0;
+			end else begin
+				// ... otherwise store in data buffer
+				serial_tx_data <= din;
+				serial_tx_data_valid <= 1'b1;
+			end
 		end
 	end
 end
