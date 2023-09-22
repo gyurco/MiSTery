@@ -92,6 +92,9 @@ set_false_path -to [get_ports {AUDIO_L}]
 set_false_path -to [get_ports {AUDIO_R}]
 set_false_path -to [get_ports {LED}]
 
+set_false_path -from {mist_video:mist_video|scandoubler:scandoubler|*} -to [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}]
+set_false_path -to {mist_video:mist_video|scandoubler:scandoubler|*} -from [get_clocks {clock|altpll_component|auto_generated|pll1|clk[2]}]
+
 #**************************************************************
 # Set Multicycle Path
 #**************************************************************
