@@ -18,6 +18,8 @@ module atarist_sdram (
 	output wire    [3:0] b,
 	output wire          hsync_n,
 	output wire          vsync_n,
+	output wire          hblank_n,
+	output wire          vblank_n,
 	output reg           monomode,
 	output wire          blank_n,
 
@@ -27,6 +29,8 @@ module atarist_sdram (
 	output wire    [3:0] viking_b,
 	output wire          viking_hs,
 	output wire          viking_vs,
+	output wire          viking_hb,
+	output wire          viking_vb,
 
 	// Sound output
 	output wire    [14:0] audio_mix_l,
@@ -342,6 +346,8 @@ gstmcu gstmcu (
 	.VSYNC_N    ( vsync_n ),
 	.DE         ( de ),
 	.BLANK_N    ( blank_n ),
+	.BLANK_H_N  ( hblank_n ),
+	.BLANK_V_N  ( vblank_n ),
 	.RDAT_N     ( rdat_n ),
 	.WE_N       ( ram_we_n ),
 	.WDAT_N     ( wdat_n ),
@@ -445,6 +451,8 @@ viking viking (
 	// video output
 	.hs        ( viking_hs       ),
 	.vs        ( viking_vs       ),
+	.hb        ( viking_hb       ),
+	.vb        ( viking_vb       ),
 	.r         ( viking_r        ),
 	.g         ( viking_g        ),
 	.b         ( viking_b        )

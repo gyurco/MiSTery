@@ -83,7 +83,7 @@ wire ne_read_en = ~ne_read & ne_readD;
 wire ne_write_en = ~ne_write & ne_writeD;
 
 // ---------- ne2000 internal registers -------------
-reg reset;
+reg reset = 0;
 reg [7:0]  cr;             // ne command register
 reg [7:0]  isr;            // ne interrupt service register
 reg [7:0]  imr;            // interrupt mask register
@@ -126,10 +126,12 @@ end
 
 reg tx_begin_r, tx_begin_r2, tx_begin_r3;
 reg tx_strobe_r, tx_strobe_r2, tx_strobe_r3;
+reg rx_begin_d;
 
 always @(posedge clk) begin
 	{tx_begin_r3, tx_begin_r2, tx_begin_r} <= {tx_begin_r2, tx_begin_r, tx_begin};
 	{tx_strobe_r3, tx_strobe_r2, tx_strobe_r} <= {tx_strobe_r2, tx_strobe_r, tx_strobe};
+	rx_begin_d <= rx_begin;
 end
 wire tx_done = tx_begin_r2 & !tx_begin_r3;
 
@@ -139,15 +141,10 @@ wire tx_done = tx_begin_r2 & !tx_begin_r3;
 reg [7:0] mac [5:0];
 reg [2:0] mac_cnt;
 
-reg mac_strobe_r, mac_strobe_r2, mac_strobe_r3;
-reg mac_begin_r, mac_begin_r2;
-
 always @(posedge clk) begin
-	{mac_begin_r2, mac_begin_r} <= {mac_begin_r, mac_begin};
-	{mac_strobe_r3, mac_strobe_r2, mac_strobe_r} <= {mac_strobe_r2, mac_strobe_r, mac_strobe};
-	if (mac_begin_r2)
+	if (mac_begin)
 		mac_cnt <= 0;
-	else if (mac_strobe_r3 & ~mac_strobe_r2) begin
+	else if (mac_strobe) begin
 		if(mac_cnt < 6) begin
 			mac[mac_cnt] <= mac_byte;
 			mac_cnt <= mac_cnt + 3'd1;
@@ -180,16 +177,10 @@ always @(*) begin
 	end
 end
 
-reg rx_strobe_r, rx_strobe_r2, rx_strobe_r3;
-reg rx_begin_r, rx_begin_r2, rx_begin_r3;
 reg resetD;
 
 // delay internal reset signal
-always @(posedge clk) begin
-	{rx_begin_r3, rx_begin_r2, rx_begin_r} <= {rx_begin_r2, rx_begin_r, rx_begin};
-	{rx_strobe_r3, rx_strobe_r2, rx_strobe_r} <= {rx_strobe_r2, rx_strobe_r, rx_strobe};
-	resetD <= reset;
-end
+always @(posedge clk) resetD <= reset;
 
 // generate an internal strobe signal to copy mac address and to setup header
 wire int_strobe_en = ((rx_w_state == RX_W_MAC)||(rx_w_state == RX_W_HEADER)) ? 1'b1 : 1'b0;
@@ -202,8 +193,8 @@ wire int_begin = (reset & !resetD) || header_begin;
 // data from the io controller or the ethernec core itself setting the mac address
 // or adding the rx header 
 
-wire rx_write_en = (!rx_strobe_r3 & rx_strobe_r2) || int_strobe_en;
-wire rx_write_begin = (!rx_begin_r3 & rx_begin_r2) || int_begin;
+wire rx_write_en = rx_strobe || int_strobe_en;
+wire rx_write_begin = (!rx_begin_d & rx_begin) || int_begin;
 
 reg rx_lastByte;
 
@@ -279,13 +270,13 @@ reg header_begin;
 always @(posedge clk) begin
 	header_begin <= 1'b0;
 
-	if(rx_begin_r3 && !rx_begin_r2)
+	if(rx_begin_d & !rx_begin)
 		header_begin <= 1'b1;
 end
 
 // write counter - header size (4) = number of bytes written
 always @(posedge clk)
-	if (rx_begin_r3 & !rx_begin_r2)
+	if (rx_begin_d & !rx_begin)
 		rx_len <= rx_w_cnt - 16'd4;
 		
 // cpu write via read
@@ -309,12 +300,12 @@ always @(posedge clk) begin
 	end
 
 	// The rising edge of rx_begin indicates the start of a data transfer
-	if(!rx_begin_r3 && rx_begin_r2)
+	if(!rx_begin_d && rx_begin)
 		rx_w_state <= RX_W_DATA;
 
 	// The falling edge of rx_begin marks the end of a data transfer.
 	// So we start setting up the pkt header after the end of the transfer
-	if(rx_begin_r3 && !rx_begin_r2) 
+	if(rx_begin_d && !rx_begin) 
 		rx_w_state <= RX_W_HEADER;
 
 	// cpu has read a byte from the rx buffer -> increase rx buffer read pointer

@@ -24,22 +24,24 @@
 // it on screen.
 
 module viking (
-	   input 				pclk,     	// 128 MHz pixel clock
+	input pclk,                   // 128 MHz pixel clock
 
-		// memory interface
-		input 				himem,      // use memory behind rom
-		input 				clk_8_en,     	// 8 MHz bus clock
-		input [1:0] 		bus_cycle,	// bus-cycle for bus access sync
-		output reg [22:0]	addr,   		// video word address
-		output          	read,    	// video read cycle
-		input [63:0]    	data,    	// video data read
-		
-		// VGA output (multiplexed with sm124 output in top level)
-	   output 				hs,
-	   output 				vs,
-	   output [3:0] 		r,
-	   output [3:0] 		g,
-	   output [3:0] 		b
+	// memory interface
+	input             himem,      // use memory behind rom
+	input             clk_8_en,   // 8 MHz bus clock
+	input [1:0]       bus_cycle,  // bus-cycle for bus access sync
+	output reg [22:0] addr,       // video word address
+	output            read,       // video read cycle
+	input [63:0]      data,       // video data read
+
+	// VGA output (multiplexed with sm124 output in top level)
+	output         hs,
+	output         vs,
+	output         hb,
+	output         vb,
+	output [3:0]   r,
+	output [3:0]   g,
+	output [3:0]   b
 );
 
 localparam BASE    = 23'h600000;   // c00000
@@ -138,9 +140,13 @@ always@(posedge pclk) begin
 end
  
 // memory enable (data is being read from memory)
-wire me	= (v_cnt < V)&&(h_cnt < H);	
+wire me	= (v_cnt < V)&&(h_cnt < H);
 // display enable (data is being displayed)
-wire de	= (v_cnt < V)&&(h_cnt >= HBP1)&&(h_cnt < HBP1+H);	
+wire hde = (h_cnt >= HBP1)&&(h_cnt < HBP1+H);
+wire vde = v_cnt < V;
+wire de  = hde | vde;
+assign hb = ~hde;
+assign vb = ~vde;
 
 wire pix = de?(!shift_register[63]):1'b0;
 

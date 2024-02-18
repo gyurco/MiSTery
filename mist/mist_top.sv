@@ -10,12 +10,29 @@ module mist_top (
 	// UART
 	output wire           UART_TX,    // UART Transmitter (MIDI out)
 	input wire            UART_RX,    // UART Receiver (MIDI in)
+`ifdef USE_MIDI_PINS
+	output wire           MIDI_OUT,
+	input wire            MIDI_IN,
+`endif
 	// VGA
 	output wire           VGA_HS,     // VGA H_SYNC
 	output wire           VGA_VS,     // VGA V_SYNC
 	output wire  [VGA_BITS-1:0] VGA_R,      // VGA Red[5:0]
 	output wire  [VGA_BITS-1:0] VGA_G,      // VGA Green[5:0]
 	output wire  [VGA_BITS-1:0] VGA_B,      // VGA Blue[5:0]
+`ifdef USE_HDMI
+	output                HDMI_RST,
+	output          [7:0] HDMI_R,
+	output          [7:0] HDMI_G,
+	output          [7:0] HDMI_B,
+	output                HDMI_HS,
+	output                HDMI_VS,
+	output                HDMI_PCLK,
+	output                HDMI_DE,
+	inout                 HDMI_SDA,
+	inout                 HDMI_SCL,
+	input                 HDMI_INT,
+`endif
 	// SDRAM
 	inout wire  [ 16-1:0] SDRAM_DQ,   // SDRAM Data bus 16 Bits
 	output wire [ 13-1:0] SDRAM_A,    // SDRAM Address bus 13 Bits
@@ -28,6 +45,19 @@ module mist_top (
 	output wire  [ 2-1:0] SDRAM_BA,   // SDRAM Bank Address
 	output wire           SDRAM_CLK,  // SDRAM Clock
 	output wire           SDRAM_CKE,  // SDRAM Clock Enable
+`ifdef DUAL_SDRAM
+	inout wire  [ 16-1:0] SDRAM2_DQ,  // SDRAM Data bus 16 Bits
+	output wire [ 13-1:0] SDRAM2_A,   // SDRAM Address bus 13 Bits
+	output wire           SDRAM2_DQML,// SDRAM Low-byte Data Mask
+	output wire           SDRAM2_DQMH,// SDRAM High-byte Data Mask
+	output wire           SDRAM2_nWE, // SDRAM Write Enable
+	output wire           SDRAM2_nCAS,// SDRAM Column Address Strobe
+	output wire           SDRAM2_nRAS,// SDRAM Row Address Strobe
+	output wire           SDRAM2_nCS, // SDRAM Chip Select
+	output wire  [ 2-1:0] SDRAM2_BA,  // SDRAM Bank Address
+	output wire           SDRAM2_CLK, // SDRAM Clock
+	output wire           SDRAM2_CKE, // SDRAM Clock Enable
+`endif
 	// AUDIO
 	output wire           AUDIO_L,    // sigma-delta DAC output left
 	output wire           AUDIO_R,    // sigma-delta DAC output right
@@ -35,6 +65,15 @@ module mist_top (
 	output wire           I2S_BCK,
 	output wire           I2S_LRCK,
 	output wire           I2S_DATA,
+`endif
+`ifdef I2S_AUDIO_HDMI
+	output                HDMI_MCLK,
+	output                HDMI_BCK,
+	output                HDMI_LRCK,
+	output                HDMI_SDATA,
+`endif
+`ifdef SPDIF_AUDIO
+	output                SPDIF,
 `endif
 	// SPI
 	inout wire            SPI_DO,
@@ -61,10 +100,32 @@ localparam VGA_BITS = 8;
 localparam VGA_BITS = 6;
 `endif
 
+`ifdef USE_HDMI
+localparam bit HDMI = 1;
+assign HDMI_RST = 1'b1;
+`else
+localparam bit HDMI = 0;
+`endif
+
 `ifdef NO_TG68K
 localparam TG68K_ENABLE = 1'b0;
 `else
 localparam TG68K_ENABLE = 1'b1;
+`endif
+
+// remove this if the 2nd chip is actually used
+`ifdef DUAL_SDRAM
+assign SDRAM2_A = 13'hZZZZ;
+assign SDRAM2_BA = 0;
+assign SDRAM2_DQML = 1;
+assign SDRAM2_DQMH = 1;
+assign SDRAM2_CKE = 0;
+assign SDRAM2_CLK = 0;
+assign SDRAM2_nCS = 1;
+assign SDRAM2_DQ = 16'hZZZZ;
+assign SDRAM2_nCAS = 1;
+assign SDRAM2_nRAS = 1;
+assign SDRAM2_nWE = 1;
 `endif
 
 wire reset = system_ctrl[0];
@@ -118,10 +179,12 @@ pll_mfp1 pll_mfp1 (
 wire        video_clk;
 wire        viking_active;
 wire        viking_hs, viking_vs;
+wire        viking_hb, viking_vb;
 wire  [3:0] viking_r, viking_g, viking_b;
 wire        monomode;
 wire  [3:0] r, g, b;
 wire        hsync_n, vsync_n;
+wire        hblank_n, vblank_n;
 wire        blank_n;
 
 wire  [1:0] scanlines = system_ctrl[21:20];
@@ -138,6 +201,8 @@ wire [3:0] stvid_g   = viking_active?viking_g:(blank_n | monomode) ? g : 4'h0;
 wire [3:0] stvid_b   = viking_active?viking_b:(blank_n | monomode) ? b : 4'h0;
 wire       stvid_hs  = viking_active?viking_hs:hsync_n;
 wire       stvid_vs  = viking_active?viking_vs:vsync_n;
+wire       stvid_hb  = viking_active?viking_hb:!hblank_n;
+wire       stvid_vb  = viking_active?viking_vb:!vblank_n;
 
 mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFFSET(10'd10), .OUT_COLOR_DEPTH(VGA_BITS)) mist_video(
 	.clk_sys    ( video_clk ),
@@ -162,6 +227,88 @@ mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFF
 	.scanlines  ( scanlines ),
 	.ypbpr      ( ypbpr )
 );
+
+`ifdef USE_HDMI
+i2c_master #(32_000_000) i2c_master (
+	.CLK         (clk_32),
+	.I2C_START   (i2c_start),
+	.I2C_READ    (i2c_read),
+	.I2C_ADDR    (i2c_addr),
+	.I2C_SUBADDR (i2c_subaddr),
+	.I2C_WDATA   (i2c_dout),
+	.I2C_RDATA   (i2c_din),
+	.I2C_END     (i2c_end),
+	.I2C_ACK     (i2c_ack),
+
+	//I2C bus
+	.I2C_SCL     (HDMI_SCL),
+	.I2C_SDA     (HDMI_SDA)
+);
+
+mist_video #(.OSD_COLOR(3'b010), .COLOR_DEPTH(4), .SD_HCNT_WIDTH(10), .OSD_X_OFFSET(10'd10), .OUT_COLOR_DEPTH(8), .USE_BLANKS(1), .VIDEO_CLEANER(1)) hdmi_video(
+	.clk_sys    ( video_clk ),
+	.SPI_SCK    ( SPI_SCK ),
+	.SPI_SS3    ( SPI_SS3 ),
+	.SPI_DI     ( SPI_DI ),
+	.R          ( stvid_r ),
+	.G          ( stvid_g ),
+	.B          ( stvid_b ),
+	.HSync      ( stvid_hs ),
+	.VSync      ( stvid_vs ),
+	.HBlank     ( stvid_hb ),
+	.VBlank     ( stvid_vb ),
+	.VGA_R      ( HDMI_R ),
+	.VGA_G      ( HDMI_G ),
+	.VGA_B      ( HDMI_B ),
+	.VGA_VS     ( HDMI_VS ),
+	.VGA_HS     ( HDMI_HS ),
+	.VGA_DE     ( HDMI_DE ),
+	.ce_divider ( 3'd1 ),
+	.rotate     ( 2'b00 ),
+	.blend      ( blend & ~monomode & ~viking_active ),
+	.scandoubler_disable( monomode | viking_active ),
+	.no_csync   ( 1'b1 ),
+	.scanlines  ( scanlines ),
+	.ypbpr      ( 1'b0 )
+);
+
+assign HDMI_PCLK = video_clk;
+
+`endif
+
+`ifdef I2S_AUDIO
+i2s i2s (
+	.reset(1'b0),
+	.clk(clk_32),
+	.clk_rate(32'd32_084_999),
+
+	.sclk(I2S_BCK),
+	.lrclk(I2S_LRCK),
+	.sdata(I2S_DATA),
+
+	.left_chan({audio_mix_l[14], audio_mix_l}),
+	.right_chan({audio_mix_r[14], audio_mix_r})
+);
+`ifdef I2S_AUDIO_HDMI
+assign HDMI_MCLK = 0;
+always @(posedge clk_32) begin
+	HDMI_BCK <= I2S_BCK;
+	HDMI_LRCK <= I2S_LRCK;
+	HDMI_SDATA <= I2S_DATA;
+end
+`endif
+`endif
+
+`ifdef SPDIF_AUDIO
+spdif spdif
+(
+	.clk_i(clk_32),
+	.rst_i(1'b0),
+	.clk_rate_i(32'd32_084_999),
+	.spdif_o(SPDIF),
+	.sample_i({audio_mix_r[14], audio_mix_r, audio_mix_l[14], audio_mix_l})
+);
+`endif
 
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------- Sigma-delta DAC ------------------------------ */
@@ -357,6 +504,17 @@ wire  [8:0] sd_buff_addr;
 wire  [1:0] img_mounted;
 wire [31:0] img_size;
 
+`ifdef USE_HDMI
+wire        i2c_start;
+wire        i2c_read;
+wire  [6:0] i2c_addr;
+wire  [7:0] i2c_subaddr;
+wire  [7:0] i2c_dout;
+wire  [7:0] i2c_din;
+wire        i2c_ack;
+wire        i2c_end;
+`endif
+
 //// user io has an extra spi channel outside minimig core ////
 user_io user_io(
 	.clk_sys                     (clk_32),
@@ -408,7 +566,17 @@ user_io user_io(
 	// PS2 mouse data
 	.ps2_mouse_clk               (ps2_mouse_clk),
 	.ps2_mouse_data              (ps2_mouse_data),
-
+`ifdef USE_HDMI
+	.i2c_start                   (i2c_start     ),
+	.i2c_read                    (i2c_read      ),
+	.i2c_addr                    (i2c_addr      ),
+	.i2c_subaddr                 (i2c_subaddr   ),
+	.i2c_dout                    (i2c_dout      ),
+	.i2c_din                     (i2c_din       ),
+	.i2c_ack                     (i2c_ack       ),
+	.i2c_end                     (i2c_end       ),
+	.hdmi_hiclk                  (viking_active ),
+`endif
 	// sd-card IO
 	.sd_lba                      (sd_lba        ),
 	.sd_rd                       (sd_rd         ),
@@ -454,6 +622,8 @@ atarist_sdram #(TG68K_ENABLE) atarist(
 	.vsync_n             ( vsync_n ),
 	.monomode            ( monomode ),
 	.blank_n             ( blank_n ),
+	.hblank_n            ( hblank_n ),
+	.vblank_n            ( vblank_n ),
 
 	.viking_active       ( viking_active ),
 	.viking_r            ( viking_r ),
@@ -461,6 +631,8 @@ atarist_sdram #(TG68K_ENABLE) atarist(
 	.viking_b            ( viking_b ),
 	.viking_hs           ( viking_hs ),
 	.viking_vs           ( viking_vs ),
+	.viking_hb           ( viking_hb ),
+	.viking_vb           ( viking_vb ),
 
 	// Sound output
 	.audio_mix_l         ( audio_mix_l ),
@@ -471,8 +643,13 @@ atarist_sdram #(TG68K_ENABLE) atarist(
 	.midi_out            ( midi_out ),
 
 	// MIDI UART
+`ifdef USE_MIDI_PINS
+	.midi_rx             ( MIDI_IN ),
+	.midi_tx             ( MIDI_OUT ),
+`else
 	.midi_rx             ( UART_RX ),
 	.midi_tx             ( UART_TX ),
+`endif
 
 	// Parallel port IN-OUT
 	.parallel_in_strobe  ( parallel_in_strobe ),

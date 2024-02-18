@@ -16,8 +16,6 @@
 // You should have received a copy of the GNU General Public License 
 // along with this program.  If not, see <http://www.gnu.org/licenses/>. 
 
-// TODO: Delay vsync one line
-
 // AMR - generates and output a pixel clock with a reliable phase relationship with
 // with the scandoubled hsync pulse.  Allows the incoming data to be sampled more
 // sparsely, reducing block RAM usage.  ce_x1/x2 are replaced with a ce_divider
@@ -113,7 +111,7 @@ wire [6:0] scanline_coeff = scanline_bypass ?
 always @(posedge clk_sys) begin
 	if(ce_x2) begin
 		hs_o <= hs_sd;
-		vs_o <= vs_in;
+		vs_o <= vs_sd;
 		hb_o <= hb_sd;
 		vb_o <= vb_sd;
 
@@ -145,14 +143,14 @@ assign vs_out = bypass ? vs_in : vs_o;
 
 
 // scan doubler output register
-reg [3+COLOR_DEPTH*3-1:0] sd_out;
+reg [COLOR_DEPTH*3-1:0] sd_out;
 
 // ==================================================================
 // ======================== the line buffers ========================
 // ==================================================================
 
 // 2 lines of 2**HCNT_WIDTH pixels 3*COLOR_DEPTH bit RGB
-(* ramstyle = "no_rw_check" *) reg [3+COLOR_DEPTH*3-1:0] sd_buffer[2*2**HCNT_WIDTH];
+(* ramstyle = "no_rw_check" *) reg [COLOR_DEPTH*3-1:0] sd_buffer[2*2**HCNT_WIDTH];
 
 // use alternating sd_buffers when storing/reading data   
 reg        line_toggle;
@@ -161,6 +159,10 @@ reg        line_toggle;
 reg  [HCNT_WIDTH-1:0] hcnt;
 reg  [HSCNT_WIDTH:0] hs_max;
 reg  [HSCNT_WIDTH:0] hs_rise;
+reg  [HCNT_WIDTH-1:0] hb_fall[2];
+reg  [HCNT_WIDTH-1:0] hb_rise[2];
+reg  [HCNT_WIDTH+1:0] vb_event[2];
+reg  [HCNT_WIDTH+1:0] vs_event[2];
 reg  [HSCNT_WIDTH:0] synccnt;
 
 // Input pixel clock, aligned with input sync:
@@ -174,12 +176,21 @@ wire ce_x1 = (i_div == ce_divider_in);
 always @(posedge clk_sys) begin
 	reg hsD, vsD;
 	reg vbD;
+	reg hbD;
 
 	// Pixel logic on x1 clkena
 	if(ce_x1) begin
 		hcnt <= hcnt + 1'd1;
+		vsD <= vs_in;
 		vbD <= vb_in;
-		sd_buffer[{line_toggle, hcnt}] <= {vbD & ~vb_in, ~vbD & vb_in, hb_in, r_in, g_in, b_in};
+
+		sd_buffer[{line_toggle, hcnt}] <= {r_in, g_in, b_in};
+		if (vbD ^ vb_in) vb_event[line_toggle] <= {1'b1, vb_in, hcnt};
+		if (vsD ^ vs_in) vs_event[line_toggle] <= {1'b1, vs_in, hcnt};
+		// save position of hblank
+		hbD <= hb_in;
+		if(!hbD &&  hb_in) hb_rise[line_toggle] <= hcnt;
+		if( hbD && !hb_in) hb_fall[line_toggle] <= hcnt;
 	end
 
 	// Generate pixel clock
@@ -205,10 +216,11 @@ always @(posedge clk_sys) begin
 	if(!hsD && hs_in) hs_rise <= {1'b0,synccnt[HSCNT_WIDTH:1]};
 
 	// begin of incoming hsync
-	if(hsD && !hs_in) line_toggle <= !line_toggle;
-
-	vsD <= vs_in;
-	if(vsD != vs_in) line_toggle <= 0;
+	if(hsD && !hs_in) begin
+		line_toggle <= !line_toggle;
+		vb_event[!line_toggle] <= 0;
+		vs_event[!line_toggle] <= 0;
+	end
 
 end
 
@@ -219,10 +231,9 @@ end
 reg  [HSCNT_WIDTH:0] sd_synccnt;
 reg  [HCNT_WIDTH-1:0] sd_hcnt;
 reg vb_sd = 0;
-wire vb_on = sd_out[COLOR_DEPTH*3+1];
-wire vb_off = sd_out[COLOR_DEPTH*3+2];
 reg hb_sd = 0;
 reg hs_sd = 0;
+reg vs_sd = 0;
 
 // Output pixel clock, aligned with output sync:
 reg [2:0] sd_i_div;
@@ -240,9 +251,13 @@ always @(posedge clk_sys) begin
 		// read data from line sd_buffer
 		sd_out <= sd_buffer[{~line_toggle, sd_hcnt}];
 
-		if (vb_on) vb_sd <= 1;
-		if (vb_off) vb_sd <= 0;
-		hb_sd <= sd_out[COLOR_DEPTH*3];
+		// Handle VBlank event
+		if(vb_event[~line_toggle][HCNT_WIDTH+1] && sd_hcnt == vb_event[~line_toggle][HCNT_WIDTH-1:0]) vb_sd <= vb_event[~line_toggle][HCNT_WIDTH];
+		// Handle VSync event
+		if(vs_event[~line_toggle][HCNT_WIDTH+1] && sd_hcnt == vs_event[~line_toggle][HCNT_WIDTH-1:0]) vs_sd <= vs_event[~line_toggle][HCNT_WIDTH];
+		// Handle HBlank events
+		if(sd_hcnt == hb_rise[~line_toggle]) hb_sd <= 1;
+		if(sd_hcnt == hb_fall[~line_toggle]) hb_sd <= 0;
 	end
 
 	sd_i_div <= sd_i_div + 1'd1;

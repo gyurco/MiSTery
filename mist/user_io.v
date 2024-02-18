@@ -64,11 +64,22 @@ module user_io(
 		output reg       ps2_mouse_data,
 
 		// on-board buttons and dip switches
-		output [1:0] 	  BUTTONS,
+		output [1:0]     BUTTONS,
 		output [1:0]     SWITCHES,
 		output           scandoubler_disable,
 		output           ypbpr,
 		output           no_csync,
+
+		// i2c bridge
+		output reg       i2c_start,
+		output reg       i2c_read,
+		output reg [6:0] i2c_addr,
+		output reg [7:0] i2c_subaddr,
+		output reg [7:0] i2c_dout,
+		input      [7:0] i2c_din,
+		input            i2c_ack,
+		input            i2c_end,
+		input            hdmi_hiclk, // HDMI PCLK > 80 MHz
 
 		// connection to sd card emulation
 		input     [31:0] sd_lba,
@@ -268,10 +279,10 @@ wire [63+8:0] serial_status_out_x = { 8'ha5, serial_status_out };
 wire drive_sel = sd_rd[1] | sd_wr[1];
 
 always@(negedge spi_sck) begin
-    reg [31:0] sd_lba_r;
-    reg  [7:0] drive_sel_r;
-    reg  [7:0] sd_cmd;
-    reg  [7:0] sd_din_r;
+	reg [31:0] sd_lba_r;
+	reg  [7:0] drive_sel_r;
+	reg  [7:0] sd_cmd;
+	reg  [7:0] sd_din_r;
 
 	sd_cmd <= { 4'h6, sd_conf, sd_sdhc, sd_wr[drive_sel], sd_rd[drive_sel] };
 	if(&bit_cnt[2:0]) sd_din_r <= sd_din;
@@ -329,6 +340,12 @@ always@(negedge spi_sck) begin
 
 			// reading sd card write data
 			if(cmd == 8'h18) SPI_MISO <= sd_din_r[tx_bit];
+
+			if(cmd == 8'h31) begin
+				if (byte_cnt == 0) SPI_MISO <= tx_bit == 0 ? i2c_end : tx_bit == 1 ? i2c_ack : tx_bit == 2 ? hdmi_hiclk : 1'b0;
+				else SPI_MISO <= i2c_din[tx_bit];
+			end
+
 	end
 end
 
@@ -339,118 +356,66 @@ reg       spi_transfer_end_r = 1;
 reg [7:0] spi_byte_in;
 
 always@(posedge spi_sck, posedge SPI_SS_IO) begin
-		if(SPI_SS_IO == 1) begin
-        bit_cnt <= 4'd0;
-		  byte_cnt <= 4'd0;
-		  
-		  // USB redirection ports (serial/parallel/midi)
-		  serial_strobe_out <= 1'b0;
-		  parallel_strobe_out <= 1'b0;
-		  midi_strobe_out <= 1'b0;
-		  
-		  // ethernet
-		  eth_mac_begin <= 1'b0;
-		  eth_mac_strobe <= 1'b0;
-		  eth_tx_read_begin <= 1'b0;
-		  eth_tx_read_strobe <= 1'b0;
-		  eth_rx_write_begin <= 1'b0;
-		  eth_rx_write_strobe <= 1'b0;
+	if(SPI_SS_IO == 1) begin
+		bit_cnt <= 4'd0;
+		byte_cnt <= 4'd0;
 
-		  spi_transfer_end_r <= 1;
-		  
-		end else begin
-			spi_transfer_end_r <= 0;
+		// ethernet
+		eth_tx_read_begin <= 1'b0;
+		eth_tx_read_strobe <= 1'b0;
 
-			// finished reading a byte, prepare to transfer to clk_sys
-			if(bit_cnt == 4'd7 || bit_cnt == 4'd15) begin
-				spi_byte_in <= { sbuf, SPI_MOSI};
-				spi_receiver_strobe_r <= ~spi_receiver_strobe_r;
-			end
+		spi_transfer_end_r <= 1;
 
-			sbuf[6:1] <= sbuf[5:0];
-			sbuf[0] <= SPI_MOSI;
+	end else begin
+		spi_transfer_end_r <= 0;
 
-			// count 0-7 8-15 8-15 8-15
-			if(bit_cnt != 4'd15)
-				bit_cnt <= bit_cnt + 4'd1;
-			else begin
-				bit_cnt <= 4'd8;
-				byte_cnt <= byte_cnt + 4'd1;
-			end
-
-			// command byte finished
-	      if(bit_cnt == 7) begin
-			   cmd[7:1] <= sbuf; 
-				cmd[0] <= SPI_MOSI;
-				
-				// just finished the mac command byte? -> set begin flag
-				if( { sbuf, SPI_MOSI} == 8'h09 )
-					eth_mac_begin <= 1'b1;
-					
-				if( { sbuf, SPI_MOSI} == 8'h0b ) begin
-					eth_tx_read_begin <= 1'b1;
-					eth_tx_read_strobe <= 1'b1;
-				end
-				
-				if( { sbuf, SPI_MOSI} == 8'h0c )
-					eth_rx_write_begin <= 1'b1;
-		   end	
-
-			if(bit_cnt == 9) begin
-				serial_strobe_in <= 1'b0;
-				serial_strobe_out <= 1'b0;
-				parallel_strobe_out <= 1'b0;
-				midi_strobe_out <= 1'b0;
-				
-				eth_mac_strobe <= 1'b0;
-				eth_tx_read_strobe <= 1'b0;
-				eth_rx_write_strobe <= 1'b0;
-			end
-			
-			// payload byte finished
-	      if(bit_cnt == 15) begin
-				eth_mac_begin <= 1'b0;
-
-				// send serial byte to mfp
-			   if(cmd == 8'h20) begin
-					 serial_data_in <= { sbuf, SPI_MOSI }; 
-					 serial_strobe_in <= 1'b1;
-				end
-				
-				// give strobe after second serial byte (byte_cnt[0]==1)
-			   if((cmd == 8'h1b) && byte_cnt[0])
-					 serial_strobe_out <= 1'b1;
-					 
-				// give strobe after second parallel byte (byte_cnt[0]==1)
-			   if((cmd == 6) && byte_cnt[0])
-					 parallel_strobe_out <= 1'b1;
-					 
-				// give strobe after second midi byte (byte_cnt[0]==1)
-			   if((cmd == 8) && byte_cnt[0])
-					 midi_strobe_out <= 1'b1;
-					 
-				// send mac address byte to ethernet controller
-			   if(cmd == 9) begin
-					 eth_mac_byte <= { sbuf, SPI_MOSI }; 
-					 eth_mac_strobe <= 1'b1;
-				end
-				  
-				// give strobe after each eth byte read
-			   if(cmd == 8'h0b)
-					 eth_tx_read_strobe <= 1'b1;
-					 
-				// give strobe after each eth byte written
-			   if(cmd == 8'h0c) begin
-					 eth_rx_write_byte <= { sbuf, SPI_MOSI }; 
-					 eth_rx_write_strobe <= 1'b1;
-				end
-
-				// serial_status from io controller
-			   if((cmd == 8'h0d) && (byte_cnt == 1))
-					 serial_status_in <= { sbuf, SPI_MOSI }; 
-
-			 end
+		// finished reading a byte, prepare to transfer to clk_sys
+		if(bit_cnt == 4'd7 || bit_cnt == 4'd15) begin
+			spi_byte_in <= { sbuf, SPI_MOSI};
+			spi_receiver_strobe_r <= ~spi_receiver_strobe_r;
 		end
+
+		sbuf[6:1] <= sbuf[5:0];
+		sbuf[0] <= SPI_MOSI;
+
+		// count 0-7 8-15 8-15 8-15
+		if(bit_cnt != 4'd15)
+			bit_cnt <= bit_cnt + 4'd1;
+		else begin
+			bit_cnt <= 4'd8;
+			byte_cnt <= byte_cnt + 4'd1;
+		end
+
+		// command byte finished
+		if(bit_cnt == 7) begin
+			cmd[7:1] <= sbuf; 
+			cmd[0] <= SPI_MOSI;
+
+			// just finished the mac command byte? -> set begin flag
+			if( { sbuf, SPI_MOSI} == 8'h0b ) begin
+				eth_tx_read_begin <= 1'b1;
+				eth_tx_read_strobe <= 1'b1;
+			end
+
+		end
+
+		if(bit_cnt == 9) begin
+			eth_tx_read_strobe <= 1'b0;
+		end
+
+		// payload byte finished
+		if(bit_cnt == 15) begin
+
+			// give strobe after each eth byte read
+			if(cmd == 8'h0b)
+				eth_tx_read_strobe <= 1'b1;
+
+			// serial_status from io controller
+			if((cmd == 8'h0d) && (byte_cnt == 1))
+				serial_status_in <= { sbuf, SPI_MOSI };
+
+		end
+	end
 end
 
 // Process bytes from SPI at the clk_sys domain
@@ -465,6 +430,15 @@ always @(posedge clk_sys) begin
 
 	reg [2:0] stick_idx;
 
+	i2c_start <= 0;
+	eth_mac_begin <= 0;
+	eth_mac_strobe <= 0;
+	eth_rx_write_strobe <= 0;
+	serial_strobe_out <= 0;
+	parallel_strobe_out <= 0;
+	midi_strobe_out <= 0;
+	serial_strobe_in <= 0;
+
 	//synchronize between SPI and sys clock domains
 	spi_receiver_strobeD <= spi_receiver_strobe_r;
 	spi_receiver_strobe <= spi_receiver_strobeD;
@@ -473,13 +447,18 @@ always @(posedge clk_sys) begin
 
 	if (spi_transfer_end) begin
 		abyte_cnt <= 8'd0;
+		eth_rx_write_begin <= 0;
 	end else if (spi_receiver_strobeD ^ spi_receiver_strobe) begin
 
 		if(~&abyte_cnt) 
 			abyte_cnt <= abyte_cnt + 8'd1;
+		else
+			abyte_cnt[0] <= ~abyte_cnt[0];
 
 		if(abyte_cnt == 0) begin
 			acmd <= spi_byte_in;
+			if (spi_byte_in == 8'h09) eth_mac_begin <= 1;
+			if (spi_byte_in == 8'h0c)	eth_rx_write_begin <= 1;
 		end else begin
 			case(acmd)
 				// buttons and switches
@@ -497,6 +476,18 @@ always @(posedge clk_sys) begin
 					// store incoming ps2 keyboard bytes 
 					ps2_kbd_fifo[ps2_kbd_wptr] <= spi_byte_in;
 					ps2_kbd_wptr <= ps2_kbd_wptr + 1'd1;
+				end
+
+				// send mac address byte to ethernet controller
+				8'h09: begin
+					eth_mac_byte <= spi_byte_in;
+					eth_mac_strobe <= 1;
+				end
+
+				// give strobe after each eth byte written
+				8'h0c: begin
+					eth_rx_write_byte <= spi_byte_in;
+					eth_rx_write_strobe <= 1;
 				end
 
 				// joystick analog
@@ -519,14 +510,28 @@ always @(posedge clk_sys) begin
 					end
 				end
 
+				8'h1b: if (!abyte_cnt[0]) serial_strobe_out <= 1;
+				8'h06: if (!abyte_cnt[0])	parallel_strobe_out <= 1;
+				8'h08: if (!abyte_cnt[0])	midi_strobe_out <= 1;
+
 				8'h15: status <= spi_byte_in;
 
 				// status, 32bit version
 				8'h1e: if(abyte_cnt<5) status[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 
+				8'h20: begin
+					serial_data_in <= spi_byte_in; 
+					serial_strobe_in <= 1;
+				end
+
+				// RTC
 				8'h22: if(abyte_cnt<9) rtc[(abyte_cnt-1)<<3 +:8] <= spi_byte_in;
 
-				endcase
+				// I2C bridge
+				8'h30: if(abyte_cnt == 1) {i2c_addr, i2c_read} <= spi_byte_in;
+				       else if (abyte_cnt == 2) i2c_subaddr <= spi_byte_in;
+				       else if (abyte_cnt == 3) begin i2c_dout <= spi_byte_in; i2c_start <= 1; end
+			endcase
 		end
 	end
 end
@@ -540,7 +545,7 @@ always @(posedge clk_sys) begin
 	reg       spi_transfer_endD;
 	reg [1:0] sd_wrD;
 	reg [7:0] acmd;
-	reg [7:0] abyte_cnt;   // counts bytes
+	reg [4:0] abyte_cnt;   // counts bytes
 
 	//synchronize between SPI and sd clock domains
 	spi_receiver_strobeD <= spi_receiver_strobe_r;
@@ -564,7 +569,7 @@ always @(posedge clk_sys) begin
 	img_mounted <= 0;
 
 	if (spi_transfer_end) begin
-		abyte_cnt <= 8'd0;
+		abyte_cnt <= 0;
 		sd_ack <= 1'b0;
 		sd_ack_conf <= 1'b0;
 		sd_dout_strobe <= 1'b0;
