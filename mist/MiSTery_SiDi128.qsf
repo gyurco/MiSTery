@@ -392,7 +392,6 @@ set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -
 # -----------------------------
 # start ENTITY(MiSTery_MiST)
 
-set_location_assignment PLL_1 -to pll_mfp1|altpll_component|auto_generated|pll1
 set_location_assignment PLL_4 -to clock|altpll_component|auto_generated|pll1
 set_location_assignment PLL_2 -to clock32|altpll_component|auto_generated|pll1
 
@@ -426,14 +425,15 @@ set_global_assignment -name VERILOG_MACRO "SPDIF_AUDIO=1"
 set_global_assignment -name VERILOG_MACRO "USE_HDMI=1"
 set_global_assignment -name VERILOG_MACRO "DUAL_SDRAM=1"
 set_global_assignment -name VERILOG_MACRO "USE_MIDI_PINS=1"
+set_global_assignment -name VERILOG_MACRO "USE_CLOCK_50=1"
 set_global_assignment -name AUTO_MERGE_PLLS OFF
+set_global_assignment -name SDC_FILE MiSTery_SiDi128.sdc
 set_global_assignment -name SDC_FILE mist.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE mist_top.sv
-set_global_assignment -name QIP_FILE vidclkcntrl.qip
-set_global_assignment -name QIP_FILE pll_mfp1.qip
+set_global_assignment -name QIP_FILE cyc10/vidclkcntrl/synthesis/vidclkcntrl.qip
 set_global_assignment -name QIP_FILE mist.qip
-set_global_assignment -name QIP_FILE clock32.qip
-set_global_assignment -name QIP_FILE clock.qip
+set_global_assignment -name QIP_FILE cyc10/clock32.qip
+set_global_assignment -name QIP_FILE cyc10/clock.qip
 set_global_assignment -name VERILOG_FILE sigma_delta_dac.v
 set_global_assignment -name QIP_FILE ../atarist/atarist.qip
 

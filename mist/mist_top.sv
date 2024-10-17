@@ -5,6 +5,9 @@
 module mist_top ( 
 	// clock inputs
 	input wire            CLOCK_27,   // 27 MHz
+`ifdef USE_CLOCK_50
+	input wire            CLOCK_50,   // 50 MHz
+`endif
 	// LED outputs
 	output wire           LED,        // LED Yellow
 	// UART
@@ -148,7 +151,11 @@ wire clk_128;
 // 32.084 MHz base clock
 wire mainclock;
 clock32 clock32 (
+`ifdef USE_CLOCK_50
+	.inclk0     ( CLOCK_50  ),
+`else
 	.inclk0     ( CLOCK_27  ),
+`endif
 	.c0         ( mainclock )
 );
 
@@ -164,14 +171,28 @@ clock clock (
 assign SDRAM_CLK = clk_96;
 assign SDRAM_CKE = 1'b1;
 
-// MFP clock
-// required: 2.4576 MHz
-wire clk_mfp;
-pll_mfp1 pll_mfp1 (
-  .inclk0       ( CLOCK_27 ), // input clock (27MHz)
-  .c0           ( clk_mfp  )  // output clock c0 (2.4576MHz)
-);
+// generate 2.4576MHz MFP clock
+reg [31:0] clk_cnt_mfp;
+reg        clk_mfp_en;
 
+localparam SYSTEM_CLOCK = 32'd32_084_988;
+localparam MFP_CLOCK    =  32'd2_457_600;
+
+always @(posedge clk_32) begin
+	if(reset) begin
+		clk_cnt_mfp <= 32'd0;
+		clk_mfp_en <= 1'b0;
+	end else begin
+		clk_mfp_en <= 1'b0;
+
+		if(clk_cnt_mfp < SYSTEM_CLOCK)
+			clk_cnt_mfp <= clk_cnt_mfp + MFP_CLOCK;
+		else begin
+			clk_cnt_mfp <= clk_cnt_mfp - SYSTEM_CLOCK + MFP_CLOCK;
+			clk_mfp_en <= 1'b1;
+		end
+	end
+end
 /* ------------------------------------------------------------------------------ */
 /* -------------------------------- Video output -------------------------------- */
 /* ------------------------------------------------------------------------------ */
@@ -604,13 +625,13 @@ user_io user_io(
 /* ------------------------------------------------------------------------------ */
 /* ------------------------------ The ATARI ST ---------------------------------- */
 /* ------------------------------------------------------------------------------ */
-atarist_sdram #(TG68K_ENABLE) atarist(
+atarist_sdram #(TG68K_ENABLE, 1'b1) atarist(
 	// System clocks / reset / settings
 	.clk_96              ( clk_96 ),
 	.clk_32              ( clk_32 ),
 	.clk_128             ( clk_128 ),
 	.clk_2               ( clk_2 ),
-	.clk_mfp             ( clk_mfp ),
+	.clk_mfp             ( clk_mfp_en ),
 	.porb                ( pll_locked ),
 	.system_ctrl         ( system_ctrl ),
 
