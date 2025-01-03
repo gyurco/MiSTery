@@ -135,6 +135,7 @@ module atarist_sdram (
 );
 
 parameter TG68K_ENABLE = 1'b0;
+parameter MFP_CEN = 1'b1; // mfp clock is a clock enable
 
 wire init = ~porb;
 
@@ -618,7 +619,7 @@ wire        mfp_dtack;
 wire        mfp_int, mfp_iack = ~mfpiack_n;
 assign      mfpint_n = ~mfp_int;
 
-mfp mfp (
+mfp #(MFP_CEN) mfp (
 	// cpu register interface
 	.clk      ( clk_32        ),
 	.clk_en   ( mhz4_en       ),

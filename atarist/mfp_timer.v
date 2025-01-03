@@ -49,6 +49,8 @@ module mfp_timer(
 	output [7:0] SET_DATA_OUT
 );
 
+parameter MFP_CEN = 0;
+
 assign SET_DATA_OUT = data;
 
 reg [7:0] data, down_counter, cur_counter;
@@ -75,11 +77,12 @@ reg xclk, xclk_r, xclk_r2;
 // generate xclk_en from async clock input
 always @(posedge XCLK_I) xclk <= ~xclk;
 
-wire xclk_en = xclk_r2 ^ xclk_r;
 always @(posedge CLK) begin
 	xclk_r <= xclk;
 	xclk_r2 <= xclk_r;
 end
+
+wire xclk_en = MFP_CEN ? XCLK_I : xclk_r2 ^ xclk_r;
 
 // from datasheet: 
 // read value when the DS pin last gone high prior to the current read cycle

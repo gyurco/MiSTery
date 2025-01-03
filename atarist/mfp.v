@@ -51,6 +51,8 @@ module mfp (
 	input      [7:0] i     // input port
 );
 
+parameter MFP_CEN = 0; // clk_ext is a clock enable?
+
 wire serial_data_out_fifo_full;
 wire serial_data_in_full;
 
@@ -150,7 +152,7 @@ wire timera_done;
 wire [7:0] timera_dat_o;
 wire [3:0] timera_ctrl_o;
 
-mfp_timer timer_a (
+mfp_timer #(MFP_CEN) timer_a (
 	.CLK        ( clk                      ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
@@ -171,7 +173,7 @@ wire timerb_done;
 wire [7:0] timerb_dat_o;
 wire [3:0] timerb_ctrl_o;
 
-mfp_timer timer_b (
+mfp_timer #(MFP_CEN) timer_b (
 	.CLK        ( clk                      ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
@@ -192,7 +194,7 @@ wire timerc_done;
 wire [7:0] timerc_dat_o;
 wire [3:0] timerc_ctrl_o;
 
-mfp_timer timer_c (
+mfp_timer #(MFP_CEN) timer_c (
 	.CLK        ( clk                      ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
@@ -211,7 +213,7 @@ wire [7:0] timerd_dat_o;
 wire [3:0] timerd_ctrl_o;
 wire [7:0] timerd_set_data;
 
-mfp_timer timer_d (
+mfp_timer #(MFP_CEN) timer_d (
 	.CLK        ( clk                      ),
 	.DS         ( ds                       ),
 	.XCLK_I     ( clk_ext                  ),
