@@ -255,8 +255,9 @@ end
 
 // 32 byte dma fifo (actually a 2x8 word fifo)
 reg [15:0] fifo [15:0];
-reg [3:0] fifo_wptr;         // word pointers
-reg [3:0] fifo_rptr;
+reg  [3:0] fifo_wptr;         // word pointers
+reg  [3:0] fifo_rptr;
+wire [3:0] fifo_fill = fifo_wptr - fifo_rptr;
 
 // Reset fifo via the dma mode direction bit toggling
 wire fifo_reset = cpu_dma_mode_direction_toggle;
@@ -274,7 +275,7 @@ end
 // ============= FIFO WRITE ENGINE ==================
 // Fill the FIFO from RAM in 8 word chunks
 wire fifo_write_start = dma_in_progress && dma_direction_out && !fifo_write_in_progress &&
-     (fifo_wptr - fifo_rptr < 4'd8);
+     fifo_fill < 4'd8;
 wire fifo_write_stop = dma_direction_out && fifo_write_in_progress &&
      (ram_access_strobe && (fifo_wptr == 4'd7 || fifo_wptr == 4'd15));
 
@@ -304,8 +305,8 @@ end
 // ============= FIFO READ ENGINE ==================
 // start condition for fifo read
 // allow to fill 8 words by the FDC/HDD, then transfer them to the CPU
-wire fifo_read_start = dma_in_progress && !dma_direction_out && !fifo_read_in_progress &&
-     ((fifo_rptr == 4'd0 && fifo_wptr == 4'd8) || (fifo_rptr == 4'd8 && fifo_wptr == 4'd0));
+wire fifo_read_start = dma_in_progress && !dma_direction_out && !fifo_read_in_progress && fifo_fill >= 8;
+
 wire fifo_read_stop = !dma_direction_out && fifo_read_in_progress &&
      ram_access_strobe && (fifo_rptr == 4'd7 || fifo_rptr == 4'd15);
 
