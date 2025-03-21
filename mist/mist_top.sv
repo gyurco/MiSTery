@@ -13,6 +13,12 @@ module mist_top (
 	// UART
 	output wire           UART_TX,    // UART Transmitter (MIDI out)
 	input wire            UART_RX,    // UART Receiver (MIDI in)
+`ifdef SIDI128_EXPANSION
+	input wire            UART_CTS,
+	output wire           UART_RTS,
+	inout wire            EXP7,
+	inout wire            MOTOR_CTRL,
+`endif
 `ifdef USE_MIDI_PINS
 	output wire           MIDI_OUT,
 	input wire            MIDI_IN,
@@ -665,13 +671,23 @@ atarist_sdram #(TG68K_ENABLE, 1'b1) atarist(
 
 	// MIDI UART
 `ifdef USE_MIDI_PINS
+	.serial_redirect     ( usb_redirection == 1 ), // rs232 redirection to USB
 	.midi_rx             ( MIDI_IN ),
 	.midi_tx             ( MIDI_OUT ),
+	.uart_rx             ( UART_RX ),
+	.uart_tx             ( UART_TX ),
 `else
+	.serial_redirect     ( 1'b1 ),
 	.midi_rx             ( UART_RX ),
 	.midi_tx             ( UART_TX ),
 `endif
-
+`ifdef SIDI128_EXPANSION
+	.uart_rtsb           ( UART_RTS ),
+	.uart_ctsb           ( UART_CTS ),
+`else
+	.uart_rtsb           ( ),
+	.uart_ctsb           ( 1'b0 ),
+`endif
 	// Parallel port IN-OUT
 	.parallel_in_strobe  ( parallel_in_strobe ),
 	.parallel_in         ( parallel_in ),
@@ -754,5 +770,10 @@ atarist_sdram #(TG68K_ENABLE, 1'b1) atarist(
 	.SDRAM_BA            ( SDRAM_BA   ), // SDRAM Bank Address
 	.SDRAM_nCS           ( SDRAM_nCS  )  // SDRAM Chip Select
 );
+
+`ifdef SIDI128_EXPANSION
+	assign EXP7 = 1'bZ;
+	assign MOTOR_CTRL = 1'bZ;
+`endif
 
 endmodule

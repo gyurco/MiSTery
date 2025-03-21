@@ -35,6 +35,7 @@ module mfp (
 	input            iack,
 	output           dtack,
 
+	input            serial_redirect,
 	// serial rs232 connection to io controller
 	output           serial_data_out_available,
 	input            serial_strobe_out,
@@ -47,8 +48,12 @@ module mfp (
 
 	// inputs
 	input            clk_ext,   // external 2.457MHz
-	input      [1:0] t_i,  // timer input
-	input      [7:0] i     // input port
+	input      [1:0] t_i,       // timer input
+	input      [7:0] i,         // input port
+
+	// uart
+	input            uart_rx,
+	output           uart_tx
 );
 
 parameter MFP_CEN = 0; // clk_ext is a clock enable?
@@ -208,7 +213,7 @@ mfp_timer #(MFP_CEN) timer_c (
 	.T_O_PULSE  ( timerc_done              )
 );
 
-wire timerd_done;
+wire timerd_out, timerd_done;
 wire [7:0] timerd_dat_o;
 wire [3:0] timerd_ctrl_o;
 wire [7:0] timerd_set_data;
@@ -224,6 +229,7 @@ mfp_timer #(MFP_CEN) timer_d (
 	.DAT_I      ( din                      ),
 	.DAT_O      ( timerd_dat_o             ),
 	.DAT_WE     ( (addr == 5'h12) && write ),
+	.T_O        ( timerd_out               ),
 	.T_O_PULSE  ( timerd_done              ),
 	.SET_DATA_OUT ( timerd_set_data        )
 );
@@ -320,6 +326,15 @@ reg [3:0] uart_tx_ctrl;
 reg [6:0] uart_ctrl;
 reg [7:0] uart_sync_chr;
 
+// 'real' uart transimitter
+reg  [7:0] uart_tdr;
+reg        uart_tdr_full;
+wire       uart_tx_busy;
+reg        uart_tx_start;
+
+wire [7:0] uart_rx_data;
+wire       uart_rx_full;
+
 // cpu read interface
 always @(*) begin
 
@@ -351,9 +366,9 @@ always @(*) begin
 		// uart: report "tx buffer empty" if fifo is not full
 		if(addr == 5'h13) dout = uart_sync_chr; 
 		if(addr == 5'h14) dout = { uart_ctrl, 1'b0 }; 
-		if(addr == 5'h15) dout = {  serial_data_in_available, 5'b00000 , uart_rx_ctrl}; 
-		if(addr == 5'h16) dout = { !serial_data_out_fifo_full, 3'b000 , uart_tx_ctrl}; 
-		if(addr == 5'h17) dout = serial_data_in_cpu;
+		if(addr == 5'h15) dout = { serial_redirect ? serial_data_in_available : uart_rx_full, 5'b00000 , uart_rx_ctrl };
+		if(addr == 5'h16) dout = { serial_redirect ? !serial_data_out_fifo_full : !uart_tdr_full, 3'b000 , uart_tx_ctrl };
+		if(addr == 5'h17) dout = serial_redirect ? serial_data_in_cpu : uart_rx_data;
 
 	end else if(iack) begin
 		dout = irq_vec;
@@ -385,11 +400,11 @@ reg [15:0] ipr_reset;
 // the cpu reading data clears rx irq. It may raise again immediately if there's more
 // data in the input fifo. Use a delayed cpu read signal to make sure the fifo finishes
 // removing the byte before
-wire uart_rx_irq = serial_data_in_available && !serial_cpu_data_readD;
+wire uart_rx_irq = serial_redirect ? (serial_data_in_available && !serial_cpu_data_readD) : uart_rx_full;
 
 // the io controller reading data clears tx irq. It may raus again immediately if 
 // there's more data in the output fifo
-wire uart_tx_irq = !serial_data_out_fifo_full && !serial_strobe_out;
+wire uart_tx_irq = serial_redirect ? (!serial_data_out_fifo_full && !serial_strobe_out) : !uart_tdr_full;
 
 // map the 16 interrupt sources onto the 16 interrupt register bits
 wire [15:0] ipr_set = {
@@ -425,6 +440,8 @@ always @(posedge clk) begin
 	isr_reset <= 0;
 	isr_set <= 0;
 
+	uart_tx_start <= 0;
+
 	if(reset) begin
 		ipr_reset <= 16'hffff;
 		isr_reset <= 16'hffff;
@@ -432,6 +449,7 @@ always @(posedge clk) begin
 		imr <= 16'h0000;
 		isr_set <= 16'h0000;
 		iack_ack <= 1'b0;
+		uart_tdr_full <= 0;
 	end else begin 
 		// remove active bit from ipr and set it in isr
 		if(iack_sel) begin
@@ -477,10 +495,52 @@ always @(posedge clk) begin
 			if(addr == 5'h14) uart_ctrl     <= din[7:1];
 			if(addr == 5'h15) uart_rx_ctrl  <= din[1:0];
 			if(addr == 5'h16) uart_tx_ctrl  <= din[3:0];
-
-			// write to addr == 5'h17 is handled by the output fifo
+			if(addr == 5'h17) begin
+				uart_tdr      <= din;
+				uart_tdr_full <= 1;
+			end
+			// write to addr == 5'h17 is also handled by the output fifo
+		end // write
+		else
+		begin
+			if (uart_tx_ctrl[0] & uart_tdr_full & !uart_tx_busy) begin
+				uart_tx_start <= 1;
+				uart_tdr_full <= 0;
+			end
 		end
 	end
 end
+
+gen_uart_rx gen_uart_rx(
+	.reset       ( reset ),
+	.reset_flags ( bus_sel && rw && addr == 5'h17 ),
+	.clk         ( clk ),
+	.clk_en      ( ~timerd_out & timerd_done ),
+	.clk_mult    ( {1'b0, uart_ctrl[6]} ), // 0 - 1x, 1 - 16x, 2 - 64x
+	.wordlen     ( uart_ctrl[5:4] ), // 8,7,6,5
+	.parity_en   ( uart_ctrl[1] ),
+	.parity_ctrl ( {1'b0, uart_ctrl[0] } ), // odd, even, mark, space
+	.rx_data     ( uart_rx_data ),
+	.rx          ( uart_rx ),
+	.rx_echo     (),
+	.fe          (),
+	.pe          (),
+	.ovr         (),
+	.full        ( uart_rx_full )
+);
+
+gen_uart_tx tx(
+	.reset       ( reset ),
+	.clk         ( clk   ),
+	.clk_en      ( ~timerd_out & timerd_done ),
+	.clk_mult    ( {1'b0, uart_ctrl[6]} ), // 0 - 1x, 1 - 16x, 2 - 64x
+	.wordlen     ( uart_ctrl[5:4] ), // 8,7,6,5
+	.parity_en   ( uart_ctrl[1] ),
+	.parity_ctrl ( {1'b0, uart_ctrl[0] } ), // odd, even, mark, space
+	.tx_data     ( uart_tdr ),
+	.start       ( uart_tx_start ),
+	.busy        ( uart_tx_busy ),
+	.tx          ( uart_tx )
+);
 
 endmodule

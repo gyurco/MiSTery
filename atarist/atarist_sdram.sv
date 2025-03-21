@@ -52,6 +52,8 @@ module atarist_sdram (
 	input  wire          parallel_printer_busy,
 
 	// Serial port IN/OUT
+	input  wire          serial_redirect,
+
 	// serial rs232 connection to io controller
 	output               serial_data_out_available,
 	input                serial_strobe_out,
@@ -61,6 +63,11 @@ module atarist_sdram (
 	// serial rs223 connection from io controller
 	input                serial_strobe_in,
 	input          [7:0] serial_data_in,
+
+	input                uart_ctsb,
+	output               uart_rtsb,
+	input                uart_rx,
+	output               uart_tx,
 
 	// ROM/CART download / ACSI
 	input wire           data_in_strobe_rom,
@@ -613,7 +620,7 @@ wire xsint_delayed = xsint_delay[7];
 wire mfp_io7 = mono_monitor ^ (ste?xsint:1'b0);
 
 // inputs 1,2 and 6 are outputs from an MC1489 serial receiver
-wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b1, !(acsi_irq | fdc_irq), !acia_irq, blitter_irq_n, 2'b11, !parallel_printer_busy};
+wire  [7:0] mfp_gpio_in = {mfp_io7, 1'b0, !(acsi_irq | fdc_irq), !acia_irq, blitter_irq_n, 1'b0, uart_ctsb, !parallel_printer_busy};
 wire  [1:0] mfp_timer_in = {de, ste?xsint_delayed:!parallel_printer_busy};
 wire  [7:0] mfp_data_out;
 wire        mfp_dtack;
@@ -637,6 +644,8 @@ mfp #(MFP_CEN) mfp (
 	.dtack    ( mfp_dtack     ),
 
 	// serial/rs232 interface io-controller<->mfp
+	.serial_redirect           (serial_redirect),
+
 	.serial_data_out_available (serial_data_out_available),
 	.serial_strobe_out         (serial_strobe_out),
 	.serial_data_out           (serial_data_out),
@@ -648,7 +657,10 @@ mfp #(MFP_CEN) mfp (
 	// input signals
 	.clk_ext  ( clk_mfp       ),  // 2.457MHz clock
 	.t_i      ( mfp_timer_in  ),  // timer a/b inputs
-	.i        ( mfp_gpio_in   )   // gpio-in
+	.i        ( mfp_gpio_in   ),  // gpio-in
+
+	.uart_rx  ( uart_rx       ),
+	.uart_tx  ( uart_tx       )
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -750,6 +762,7 @@ wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 wire       floppy_side = port_a_out[0];
 wire [1:0] floppy_sel = port_a_out[2:1];
+assign     uart_rtsb = port_a_out[3];
 
 assign     parallel_out_strobe = port_a_out[5];
 assign     parallel_out = port_b_out;
