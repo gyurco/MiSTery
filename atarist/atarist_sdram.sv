@@ -196,8 +196,8 @@ end
 always @(posedge clk_2) ikbd_reset <= peripheral_reset;
 
 // MCU signals
-
-wire        mhz4, mhz4_en, clk16, clk16_en = ~clk16;
+wire        mhz4, mhz4_en, clk16, khz500_en;
+wire        clk16_en = ~clk16;
 wire        mcu_dtack_n;
 wire        rom0_n, rom1_n, rom2_n, rom3_n, rom4_n, rom5_n, rom6_n, romp_n;
 wire        ras0_n, ras1_n;
@@ -305,6 +305,8 @@ gstmcu gstmcu (
 	.MHZ8_EN2   ( mhz8_en2 ),
 	.MHZ4       ( mhz4 ),
 	.MHZ4_EN    ( mhz4_en ),
+	.KHZ500     ( ),
+	.KHZ500_EN  ( khz500_en ),
 	.RDY_N_I    ( rdy_o ),
 	.RDY_N_O    ( rdy_i ),
 	.BG_N       ( mcu_bg_n ),
@@ -594,7 +596,7 @@ tg68k tg68k (
 /* ------------------------------------ MFP ------------------------------------- */
 /* ------------------------------------------------------------------------------ */
 
-wire acia_irq = kbd_acia_irq || midi_acia_irq;
+wire acia_irq = ~kbd_acia_irq_n || ~midi_acia_irq_n;
 
 // the STE delays the xsirq by 1/250000 second before feeding it into timer_a
 // 74ls164
@@ -676,19 +678,20 @@ ikbd ikbd (
 /* ------------------------------------------------------------------------------ */
 
 wire [7:0] kbd_acia_data_out;
-wire       kbd_acia_irq;
+wire       kbd_acia_irq_n;
 
-acia kbd_acia (
+gen_uart_mc_6850 kbd_acia (
 	// cpu interface
 	.clk      ( clk_32             ),
-	.E        ( cpu_E              ),
+	.rx_clk_en( khz500_en          ),
+	.tx_clk_en( khz500_en          ),
 	.reset    ( reset              ),
 	.din      ( mbus_dout[15:8]    ),
-	.sel      ( n6850 & ~mbus_a[2] ),
+	.cs       ( n6850 & ~mbus_a[2] ),
 	.rs       ( mbus_a[1]          ),
-	.rw       ( rw                 ),
+	.rnw      ( rw                 ),
 	.dout     ( kbd_acia_data_out  ),
-	.irq      ( kbd_acia_irq       ),
+	.irq_n    ( kbd_acia_irq_n     ),
 
 	.rx       ( ikbd_tx            ),
 	.tx       ( ikbd_rx            )
@@ -699,27 +702,28 @@ acia kbd_acia (
 /* ------------------------------------------------------------------------------ */
 
 wire [7:0] midi_acia_data_out;
-wire       midi_acia_irq;
+wire       midi_acia_irq_n;
 
+reg E_d;
+always @(posedge clk_32) E_d <= fx68_E;
+assign     midi_out_strobe = ~E_d & fx68_E & n6850 & mbus_a[2] & ~rw & mbus_a[1];
 assign     midi_out = mbus_dout[15:8];
 
-acia midi_acia (
+gen_uart_mc_6850 midi_acia (
 	// cpu interface
 	.clk      ( clk_32             ),
-	.E        ( cpu_E              ),
+	.rx_clk_en( khz500_en          ),
+	.tx_clk_en( khz500_en          ),
 	.reset    ( reset              ),
 	.din      ( mbus_dout[15:8]    ),
-	.sel      ( n6850 & mbus_a[2]  ),
+	.cs       ( n6850 & mbus_a[2]  ),
 	.rs       ( mbus_a[1]          ),
-	.rw       ( rw                 ),
+	.rnw      ( rw                 ),
 	.dout     ( midi_acia_data_out ),
-	.irq      ( midi_acia_irq      ),
+	.irq_n    ( midi_acia_irq_n    ),
 
 	.rx       ( midi_rx            ),
-	.tx       ( midi_tx            ),
-
-	// redirected midi interface
-	.dout_strobe ( midi_out_strobe )
+	.tx       ( midi_tx            )
 );
 
 /* ------------------------------------------------------------------------------ */

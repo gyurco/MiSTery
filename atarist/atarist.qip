@@ -14,7 +14,7 @@ set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atar
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atarist/dma.v]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ../atarist/atarist_sdram.sv]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atarist/acsi.v]
-set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atarist/acia.v]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atarist/gen_uart.v]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atarist/cubase3_dongle.v]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../atarist/cubase2_dongle.v]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) ../gstmcu/hdl/shifter_video.v]

@@ -356,7 +356,7 @@ sigma_delta_dac sigma_delta_dac (
 wire        midi_out_strobe;
 wire  [7:0] midi_out;
 
-io_fifo serial_out_fifo (
+io_fifo midi_out_fifo (
 	.reset        ( reset ),
 
 	.in_clk       ( clk_32 ),
